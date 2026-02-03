@@ -906,10 +906,19 @@ export class ContainerService {
         if (includeMetrics && container.status === 'running') {
           try {
             const fullMetrics = await metricsService.getContainerMetrics(container.dockerId);
+
+            // Calculate disk percentage based on configured limit (not filesystem limit)
+            // The df command returns host filesystem size, not container quota
+            const configuredDiskLimitMB = container.diskLimit ?? 10240;
+            const diskUsageMB = fullMetrics.disk.usage; // This is actual usage in MB
+            const diskPercentage = configuredDiskLimitMB > 0
+              ? (diskUsageMB / configuredDiskLimitMB) * 100
+              : 0;
+
             simpleMetrics = {
               cpu: fullMetrics.cpu.usage,
               memory: fullMetrics.memory.percentage,
-              disk: fullMetrics.disk.percentage,
+              disk: Number(diskPercentage.toFixed(2)),
             };
             activeAgentsCount = fullMetrics.activeAgents?.length ?? 0;
           } catch (error) {
@@ -977,10 +986,18 @@ export class ContainerService {
     if (container.status === 'running') {
       try {
         const fullMetrics = await metricsService.getContainerMetrics(container.dockerId);
+
+        // Calculate disk percentage based on configured limit (not filesystem limit)
+        const configuredDiskLimitMB = container.diskLimit ?? 10240;
+        const diskUsageMB = fullMetrics.disk.usage;
+        const diskPercentage = configuredDiskLimitMB > 0
+          ? (diskUsageMB / configuredDiskLimitMB) * 100
+          : 0;
+
         simpleMetrics = {
           cpu: fullMetrics.cpu.usage,
           memory: fullMetrics.memory.percentage,
-          disk: fullMetrics.disk.percentage,
+          disk: Number(diskPercentage.toFixed(2)),
         };
         activeAgentsCount = fullMetrics.activeAgents?.length ?? 0;
       } catch (error) {

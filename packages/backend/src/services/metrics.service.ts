@@ -99,6 +99,7 @@ export class MetricsService {
 
   /**
    * Get disk usage for a container
+   * Uses 'du' to measure actual workspace usage (not filesystem size)
    */
   private async getDiskUsage(containerId: string): Promise<{
     usage: number;
@@ -106,48 +107,37 @@ export class MetricsService {
     percentage: number;
   }> {
     try {
-      // Execute df command inside container to get disk usage
+      // Execute du command to get actual workspace disk usage in MB
+      // Note: df shows filesystem total which includes host disk, du shows actual usage
       const result = await dockerService.executeCommand(
         containerId,
-        ['df', '-m', '/workspace'],
+        ['du', '-sm', '/workspace'],
         { user: 'root' }
       );
 
-      // Parse df output
+      // Parse du output
       // Example output:
-      // Filesystem     1M-blocks  Used Available Use% Mounted on
-      // overlay            10240  1234      8906  13% /workspace
-      const lines = result.stdout.trim().split('\n');
-      if (lines.length < 2) {
+      // 1234    /workspace
+      const output = result.stdout.trim();
+      const parts = output.split(/\s+/);
+
+      if (parts.length < 1) {
         return { usage: 0, limit: 0, percentage: 0 };
       }
 
-      const dataLine = lines[1];
-      if (!dataLine) {
+      const usedStr = parts[0];
+      if (!usedStr) {
         return { usage: 0, limit: 0, percentage: 0 };
       }
 
-      const parts = dataLine.split(/\s+/);
-
-      if (parts.length < 5) {
-        return { usage: 0, limit: 0, percentage: 0 };
-      }
-
-      const limitStr = parts[1];
-      const usedStr = parts[2];
-
-      if (!limitStr || !usedStr) {
-        return { usage: 0, limit: 0, percentage: 0 };
-      }
-
-      const limit = parseInt(limitStr, 10) || 0;
       const used = parseInt(usedStr, 10) || 0;
-      const percentage = limit > 0 ? (used / limit) * 100 : 0;
 
+      // Note: limit and percentage will be calculated in container.service
+      // based on configured disk limit (not filesystem limit)
       return {
         usage: used,
-        limit,
-        percentage: Number(percentage.toFixed(2)),
+        limit: 0, // Will be set based on container config
+        percentage: 0, // Will be calculated based on container config
       };
     } catch (error) {
       logger.warn({ error, containerId }, 'Failed to get disk usage, returning defaults');
