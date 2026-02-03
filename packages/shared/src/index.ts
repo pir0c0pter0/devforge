@@ -55,6 +55,15 @@ export type {
 
 export { PROGRESS_STAGES } from './types/progress.types'
 
+// Export all task types
+export type {
+  TaskStatus,
+  TaskType,
+  Task,
+  CreateTaskRequest,
+  TaskUpdate,
+} from './types/task.types'
+
 // Export all schemas
 export {
   containerConfigSchema,

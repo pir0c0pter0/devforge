@@ -5,11 +5,9 @@ import { useRouter } from 'next/navigation'
 import { z } from 'zod'
 import { apiClient } from '@/lib/api-client'
 import { useI18n } from '@/lib/i18n'
-import type { TemplateType, ContainerMode, RepositoryType } from '@/lib/types'
+import type { TemplateType, ContainerMode, RepositoryType, Task } from '@/lib/types'
 import { AnimatedDots } from '@/components/ui/animated-dots'
-import { useContainerProgress } from '@/hooks/use-container-progress'
-import { ProgressBar } from '@/components/ui/progress-bar'
-import { v4 as uuidv4 } from 'uuid'
+import { useTaskPolling } from '@/hooks/use-task-polling'
 import clsx from 'clsx'
 
 /**
@@ -89,7 +87,19 @@ export function CreateContainerForm() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({})
   const [generalError, setGeneralError] = useState<string | null>(null)
-  const { progress, subscribe, reset } = useContainerProgress()
+  const [taskId, setTaskId] = useState<string | null>(null)
+
+  const { task } = useTaskPolling(taskId, {
+    onComplete: (completedTask: Task) => {
+      if (completedTask.result?.containerId) {
+        router.push('/containers')
+      }
+    },
+    onError: (failedTask: Task) => {
+      setGeneralError(failedTask.error || t.createContainer.failedCreate)
+      setIsSubmitting(false)
+    },
+  })
 
   const [formData, setFormData] = useState<FormData>({
     name: '',
@@ -134,11 +144,6 @@ export function CreateContainerForm() {
       }
 
       setIsSubmitting(true)
-      reset() // Reset progress state
-
-      // Generate task ID and subscribe to progress updates
-      const taskId = uuidv4()
-      subscribe(taskId)
 
       const response = await apiClient.createContainer({
         name: validated.name,
@@ -147,13 +152,14 @@ export function CreateContainerForm() {
         repositoryType: validated.repositoryType,
         repositoryUrl: normalizedUrl,
         limits: validated.limits,
-        taskId, // Pass taskId for WebSocket progress
       })
 
-      if (response.success) {
-        router.push('/containers')
+      if (response.success && response.data?.taskId) {
+        // Start polling the task
+        setTaskId(response.data.taskId)
       } else {
         setGeneralError(response.error || t.createContainer.failedCreate)
+        setIsSubmitting(false)
       }
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -175,21 +181,8 @@ export function CreateContainerForm() {
   const getButtonText = (): React.ReactNode => {
     if (!isSubmitting) return t.createContainer.create
 
-    if (progress) {
-      // Map stage to translated message
-      const stageMessages: Record<string, string> = {
-        validating: t.createContainer.progressCreating,
-        creating: t.createContainer.progressCreating,
-        starting: t.createContainer.progressStarting,
-        cloning: t.createContainer.progressCloningRepo,
-        configuring: t.createContainer.progressCopyingConfigs,
-        stopping: t.createContainer.progressFinishing,
-        saving: t.createContainer.progressFinishing,
-        ready: t.createContainer.progressFinishing,
-        error: progress.error || t.createContainer.failedCreate,
-      }
-      const message = stageMessages[progress.stage] || t.createContainer.progressCreating
-      return <AnimatedDots text={`${message} (${progress.percentage}%)`} />
+    if (task) {
+      return <AnimatedDots text={`${task.message} (${task.progress}%)`} />
     }
 
     return <AnimatedDots text={t.createContainer.progressCreating} />
@@ -423,9 +416,20 @@ export function CreateContainerForm() {
         </div>
       </div>
 
-      {isSubmitting && progress && (
+      {isSubmitting && task && (
         <div className="pt-2">
-          <ProgressBar progress={progress} />
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-terminal-textMuted">{task.message}</span>
+              <span className="text-terminal-green font-mono">{task.progress}%</span>
+            </div>
+            <div className="w-full bg-terminal-bg border border-terminal-border rounded-full h-2 overflow-hidden">
+              <div
+                className="h-full bg-terminal-green transition-all duration-300 ease-out"
+                style={{ width: `${task.progress}%` }}
+              />
+            </div>
+          </div>
         </div>
       )}
 

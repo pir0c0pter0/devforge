@@ -13,6 +13,7 @@ import containersRouter from './api/routes/containers.routes';
 import templatesRouter from './api/routes/templates.routes';
 import diagnosticsRouter from './api/routes/diagnostics.routes';
 import settingsRouter from './api/routes/settings.routes';
+import tasksRouter from './api/routes/tasks.routes';
 import { initializeDatabase, closeDatabase, isDatabaseHealthy } from './database';
 import { runMigrations, getDatabaseStats } from './database/migrations';
 
@@ -92,6 +93,7 @@ app.use('/api/containers', containersRouter);
 app.use('/api/templates', templatesRouter);
 app.use('/api/diagnostics', diagnosticsRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/tasks', tasksRouter);
 
 /**
  * Root endpoint
@@ -105,6 +107,9 @@ app.get('/', (_req: Request, res: Response) => {
       health: '/health',
       containers: '/api/containers',
       templates: '/api/templates',
+      diagnostics: '/api/diagnostics',
+      settings: '/api/settings',
+      tasks: '/api/tasks',
     },
   });
 });

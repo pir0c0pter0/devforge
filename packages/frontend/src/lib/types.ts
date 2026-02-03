@@ -79,3 +79,20 @@ export interface ApiResponse<T> {
   error?: string
   message?: string
 }
+
+export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed'
+
+export type TaskType = 'create-container' | 'start-container' | 'clone-repo' | 'generic'
+
+export interface Task {
+  id: string
+  type: TaskType
+  status: TaskStatus
+  progress: number
+  message: string
+  result?: any
+  error?: string
+  createdAt: string
+  startedAt?: string
+  completedAt?: string
+}

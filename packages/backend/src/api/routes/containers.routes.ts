@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { containerService } from '../../services/container.service';
+import { taskService } from '../../services/task.service';
 import { validateBody, validateParams, validateQuery } from '../../utils/validation';
 import { CreateContainerRequestSchema } from '../../models/container.model';
 import { apiLogger as logger } from '../../utils/logger';
@@ -92,20 +93,33 @@ router.post(
     try {
       logger.info({ body: req.body }, 'Creating container');
 
-      // Extract taskId from body (optional)
-      const { taskId, ...containerData } = req.body;
+      // Create a task for this operation
+      const task = taskService.create('create-container');
+      logger.info({ taskId: task.id }, 'Created task for container creation');
 
-      const container = await containerService.create(containerData, taskId);
+      // Start the task
+      taskService.start(task.id, 'Iniciando criação do container...');
 
-      logger.info({ containerId: container.id }, 'Container created successfully');
+      // Extract container data (taskId is not part of container config)
+      const { taskId: _ignoredTaskId, ...containerData } = req.body;
 
-      res.status(201).json(successResponse(container, 'Container created successfully'));
+      // Create container asynchronously
+      containerService.create(containerData, task.id)
+        .then((container) => {
+          logger.info({ containerId: container.id, taskId: task.id }, 'Container created successfully');
+        })
+        .catch((error) => {
+          logger.error({ error, taskId: task.id }, 'Failed to create container');
+        });
+
+      // Return task immediately for polling
+      res.status(202).json(successResponse({ taskId: task.id }, 'Container creation started'));
     } catch (error) {
-      logger.error({ error, body: req.body }, 'Failed to create container');
+      logger.error({ error, body: req.body }, 'Failed to start container creation');
 
       res.status(500).json(
         errorResponse(
-          error instanceof Error ? error.message : 'Failed to create container',
+          error instanceof Error ? error.message : 'Failed to start container creation',
           500
         )
       );

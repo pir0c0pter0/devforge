@@ -21,6 +21,7 @@ import {
   type CreateContainerDto,
 } from '../repositories';
 import { emitContainerCreationProgress } from './websocket.service';
+import { taskService } from './task.service';
 import * as path from 'path';
 import * as os from 'os';
 
@@ -142,8 +143,9 @@ export class ContainerService {
     let dockerContainerId: string | null = null;
 
     try {
-      // Emit validating progress
+      // Update task progress - validating
       if (taskId) {
+        taskService.setProgress(taskId, 5, 'Validando configuração do container...');
         emitContainerCreationProgress(taskId, {
           taskId,
           stage: 'validating',
@@ -153,7 +155,7 @@ export class ContainerService {
         });
       }
 
-      logger.info({ config }, 'Creating new container');
+      logger.info({ config, taskId }, 'Creating new container');
 
       // Sanitize inputs for security
       const safeName = sanitizeContainerName(config.name);
@@ -204,8 +206,9 @@ export class ContainerService {
         },
       };
 
-      // Emit creating progress
+      // Update task progress - creating
       if (taskId) {
+        taskService.setProgress(taskId, 20, 'Criando container Docker...');
         emitContainerCreationProgress(taskId, {
           taskId,
           stage: 'creating',
@@ -222,8 +225,9 @@ export class ContainerService {
       // Start container temporarily for setup operations
       const needsSetup = config.repoType === 'clone' && config.repoUrl;
       if (needsSetup) {
-        // Emit starting progress
+        // Update task progress - starting
         if (taskId) {
+          taskService.setProgress(taskId, 35, 'Iniciando container para configuração...');
           emitContainerCreationProgress(taskId, {
             taskId,
             containerId,
@@ -241,8 +245,27 @@ export class ContainerService {
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
 
-      // Emit configuring progress
+      // Clone repository if specified (before copying configs)
+      if (config.repoType === 'clone' && config.repoUrl) {
+        // Update task progress - cloning
+        if (taskId) {
+          taskService.setProgress(taskId, 55, 'Clonando repositório...');
+          emitContainerCreationProgress(taskId, {
+            taskId,
+            containerId,
+            stage: 'cloning',
+            percentage: 55,
+            message: 'Cloning repository...',
+            timestamp: new Date()
+          });
+        }
+
+        await this.cloneRepository(dockerContainer.id, config.repoUrl, config.sshKeyPath);
+      }
+
+      // Update task progress - configuring
       if (taskId) {
+        taskService.setProgress(taskId, 75, 'Copiando configurações do Claude...');
         emitContainerCreationProgress(taskId, {
           taskId,
           containerId,
@@ -256,24 +279,11 @@ export class ContainerService {
       // Copy Claude configs from host to container
       await this.copyClaudeConfigs(dockerContainer.id);
 
-      // Clone repository if specified
-      if (config.repoType === 'clone' && config.repoUrl) {
-        // Emit cloning progress
+      // Stop container after setup if it was started
+      if (needsSetup) {
+        // Update task progress - stopping
         if (taskId) {
-          emitContainerCreationProgress(taskId, {
-            taskId,
-            containerId,
-            stage: 'cloning',
-            percentage: 55,
-            message: 'Cloning repository...',
-            timestamp: new Date()
-          });
-        }
-
-        await this.cloneRepository(dockerContainer.id, config.repoUrl, config.sshKeyPath);
-
-        // Emit stopping progress
-        if (taskId) {
+          taskService.setProgress(taskId, 85, 'Parando container após configuração...');
           emitContainerCreationProgress(taskId, {
             taskId,
             containerId,
@@ -289,8 +299,9 @@ export class ContainerService {
         await dockerService.stopContainer(dockerContainer.id);
       }
 
-      // Emit saving progress
+      // Update task progress - saving
       if (taskId) {
+        taskService.setProgress(taskId, 95, 'Salvando container no banco de dados...');
         emitContainerCreationProgress(taskId, {
           taskId,
           containerId,
@@ -321,8 +332,9 @@ export class ContainerService {
       // Update in-memory cache
       this.containers.set(container.id, container);
 
-      // Emit ready progress
+      // Update task progress - ready
       if (taskId) {
+        taskService.complete(taskId, { containerId: container.id });
         emitContainerCreationProgress(taskId, {
           taskId,
           containerId: container.id,
@@ -336,19 +348,22 @@ export class ContainerService {
       logger.info({
         containerId: container.id,
         dockerId: dockerContainer.id,
-        name: config.name
+        name: config.name,
+        taskId
       }, 'Container created successfully');
 
       return container;
     } catch (error) {
-      // Emit error progress
+      // Update task progress - error
       if (taskId) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        taskService.fail(taskId, errorMessage);
         emitContainerCreationProgress(taskId, {
           taskId,
           stage: 'error',
           percentage: 0,
           message: 'Container creation failed',
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: errorMessage,
           timestamp: new Date()
         });
       }

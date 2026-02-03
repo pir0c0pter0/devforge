@@ -4,6 +4,7 @@ import type {
   Metrics,
   QueueItem,
   ApiResponse,
+  Task,
 } from './types'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -54,7 +55,7 @@ class ApiClient {
 
   async createContainer(
     data: CreateContainerRequest
-  ): Promise<ApiResponse<Container>> {
+  ): Promise<ApiResponse<{ taskId: string }>> {
     // Convert frontend format to backend format
     const backendData = {
       name: data.name,
@@ -65,9 +66,8 @@ class ApiClient {
       cpuLimit: data.limits.cpuCores,
       memoryLimit: data.limits.memoryMB,
       diskLimit: data.limits.diskGB * 1024, // Convert GB to MB
-      taskId: data.taskId,
     }
-    return this.request<Container>('/api/containers', {
+    return this.request<{ taskId: string }>('/api/containers', {
       method: 'POST',
       body: JSON.stringify(backendData),
     })
@@ -124,6 +124,20 @@ class ApiClient {
   async openVSCode(id: string): Promise<ApiResponse<{ url: string }>> {
     return this.request<{ url: string }>(`/api/containers/${id}/vscode`, {
       method: 'POST',
+    })
+  }
+
+  async getTask(id: string): Promise<ApiResponse<Task>> {
+    return this.request<Task>(`/api/tasks/${id}`)
+  }
+
+  async listTasks(): Promise<ApiResponse<Task[]>> {
+    return this.request<Task[]>('/api/tasks')
+  }
+
+  async deleteTask(id: string): Promise<ApiResponse<void>> {
+    return this.request<void>(`/api/tasks/${id}`, {
+      method: 'DELETE',
     })
   }
 }
