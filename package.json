@@ -1,0 +1,51 @@
+{
+  "name": "claude-docker-web",
+  "version": "1.0.0",
+  "description": "Web dashboard for managing Docker containers with Claude Code + VS Code",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "pnpm --parallel -r dev",
+    "dev:backend": "pnpm --filter @claude-docker/backend dev",
+    "dev:frontend": "pnpm --filter @claude-docker/frontend dev",
+    "build": "pnpm -r build",
+    "build:shared": "pnpm --filter @claude-docker/shared build",
+    "build:backend": "pnpm --filter @claude-docker/backend build",
+    "build:frontend": "pnpm --filter @claude-docker/frontend build",
+    "start": "pnpm --parallel -r start",
+    "start:backend": "pnpm --filter @claude-docker/backend start",
+    "start:frontend": "pnpm --filter @claude-docker/frontend start",
+    "lint": "pnpm -r lint",
+    "lint:fix": "pnpm -r lint:fix",
+    "type-check": "pnpm -r type-check",
+    "test": "pnpm -r test",
+    "test:watch": "pnpm -r test:watch",
+    "clean": "pnpm -r clean && rm -rf node_modules",
+    "clean:dist": "pnpm -r exec rm -rf dist .next",
+    "docker:build": "cd docker && make build",
+    "docker:up": "cd docker && make up",
+    "docker:up-dev": "cd docker && make up-dev",
+    "docker:down": "cd docker && make down",
+    "docker:logs": "cd docker && make logs",
+    "docker:clean": "cd docker && make clean-all",
+    "prepare": "pnpm build:shared"
+  },
+  "keywords": [
+    "docker",
+    "claude-code",
+    "vscode",
+    "container-management",
+    "ai-development"
+  ],
+  "author": "claude-docker",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.4.0"
+  }
+}

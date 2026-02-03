@@ -1,0 +1,331 @@
+import { dockerService } from './docker.service';
+import { ContainerMetrics } from '../models/container.model';
+import { metricsLogger as logger } from '../utils/logger';
+
+/**
+ * Active agent process information
+ */
+interface AgentProcess {
+  pid: number;
+  command: string;
+  cpu: number;
+  memory: number;
+}
+
+/**
+ * Real-time metrics collection service
+ */
+export class MetricsService {
+  /**
+   * Collect real-time metrics for a container
+   */
+  async getContainerMetrics(containerId: string): Promise<ContainerMetrics> {
+    try {
+      logger.debug({ containerId }, 'Collecting container metrics');
+
+      // Get Docker stats
+      const stats = await dockerService.getContainerStats(containerId);
+
+      // Calculate CPU usage percentage
+      const cpuDelta = stats.cpu_stats.cpu_usage.total_usage -
+                       (stats.precpu_stats.cpu_usage?.total_usage || 0);
+      const systemDelta = stats.cpu_stats.system_cpu_usage -
+                         (stats.precpu_stats.system_cpu_usage || 0);
+      const cpuCount = stats.cpu_stats.online_cpus || 1;
+      const cpuUsage = systemDelta > 0 ? (cpuDelta / systemDelta) * cpuCount * 100 : 0;
+
+      // Calculate memory usage
+      const memoryUsage = stats.memory_stats.usage || 0;
+      const memoryLimit = stats.memory_stats.limit || 0;
+      const memoryUsageMB = memoryUsage / (1024 * 1024);
+      const memoryLimitMB = memoryLimit / (1024 * 1024);
+      const memoryPercentage = memoryLimit > 0 ? (memoryUsage / memoryLimit) * 100 : 0;
+
+      // Get network stats
+      const networks = stats.networks || {};
+      let rxBytes = 0;
+      let txBytes = 0;
+
+      Object.values(networks).forEach((net: any) => {
+        rxBytes += net.rx_bytes || 0;
+        txBytes += net.tx_bytes || 0;
+      });
+
+      // Get disk usage (approximation from blkio stats)
+      const diskUsage = await this.getDiskUsage(containerId);
+
+      // Detect active Claude agents
+      const activeAgents = await this.detectActiveAgents(containerId);
+
+      const metrics: ContainerMetrics = {
+        containerId,
+        timestamp: new Date(),
+        cpu: {
+          usage: Number(cpuUsage.toFixed(2)),
+          limit: cpuCount,
+        },
+        memory: {
+          usage: Number(memoryUsageMB.toFixed(2)),
+          limit: Number(memoryLimitMB.toFixed(2)),
+          percentage: Number(memoryPercentage.toFixed(2)),
+        },
+        disk: {
+          usage: diskUsage.usage,
+          limit: diskUsage.limit,
+          percentage: diskUsage.percentage,
+        },
+        network: {
+          rxBytes,
+          txBytes,
+        },
+        activeAgents,
+      };
+
+      logger.debug({
+        containerId,
+        metrics: {
+          cpu: metrics.cpu.usage,
+          memory: metrics.memory.usage,
+          agents: metrics.activeAgents.length
+        }
+      }, 'Container metrics collected');
+
+      return metrics;
+    } catch (error) {
+      logger.error({ error, containerId }, 'Failed to collect container metrics');
+      throw new Error(`Failed to collect metrics: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Get disk usage for a container
+   */
+  private async getDiskUsage(containerId: string): Promise<{
+    usage: number;
+    limit: number;
+    percentage: number;
+  }> {
+    try {
+      // Execute df command inside container to get disk usage
+      const result = await dockerService.executeCommand(
+        containerId,
+        ['df', '-m', '/workspace'],
+        { user: 'root' }
+      );
+
+      // Parse df output
+      // Example output:
+      // Filesystem     1M-blocks  Used Available Use% Mounted on
+      // overlay            10240  1234      8906  13% /workspace
+      const lines = result.stdout.trim().split('\n');
+      if (lines.length < 2) {
+        return { usage: 0, limit: 0, percentage: 0 };
+      }
+
+      const dataLine = lines[1];
+      if (!dataLine) {
+        return { usage: 0, limit: 0, percentage: 0 };
+      }
+
+      const parts = dataLine.split(/\s+/);
+
+      if (parts.length < 5) {
+        return { usage: 0, limit: 0, percentage: 0 };
+      }
+
+      const limitStr = parts[1];
+      const usedStr = parts[2];
+
+      if (!limitStr || !usedStr) {
+        return { usage: 0, limit: 0, percentage: 0 };
+      }
+
+      const limit = parseInt(limitStr, 10) || 0;
+      const used = parseInt(usedStr, 10) || 0;
+      const percentage = limit > 0 ? (used / limit) * 100 : 0;
+
+      return {
+        usage: used,
+        limit,
+        percentage: Number(percentage.toFixed(2)),
+      };
+    } catch (error) {
+      logger.warn({ error, containerId }, 'Failed to get disk usage, returning defaults');
+      return { usage: 0, limit: 0, percentage: 0 };
+    }
+  }
+
+  /**
+   * Detect active Claude agents by parsing ps aux inside container
+   */
+  private async detectActiveAgents(containerId: string): Promise<AgentProcess[]> {
+    try {
+      // Execute ps command to find Claude processes
+      const result = await dockerService.executeCommand(
+        containerId,
+        ['ps', 'aux'],
+        { user: 'root' }
+      );
+
+      const agents: AgentProcess[] = [];
+
+      // Parse ps aux output
+      const lines = result.stdout.trim().split('\n');
+
+      // Skip header line
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i];
+
+        if (!line) {
+          continue;
+        }
+
+        // Look for Claude-related processes
+        if (
+          line.includes('claude') ||
+          line.includes('code-server') ||
+          line.includes('vscode') ||
+          (line.includes('node') && line.includes('agent'))
+        ) {
+          const parts = line.split(/\s+/);
+
+          if (parts.length < 11) {
+            continue;
+          }
+
+          const pidStr = parts[1];
+          const cpuStr = parts[2];
+          const memStr = parts[3];
+
+          if (!pidStr || !cpuStr || !memStr) {
+            continue;
+          }
+
+          const pid = parseInt(pidStr, 10);
+          const cpu = parseFloat(cpuStr);
+          const memory = parseFloat(memStr);
+          const command = parts.slice(10).join(' ');
+
+          if (!isNaN(pid)) {
+            agents.push({
+              pid,
+              command: command.substring(0, 100), // Limit command length
+              cpu: Number(cpu.toFixed(2)),
+              memory: Number(memory.toFixed(2)),
+            });
+          }
+        }
+      }
+
+      return agents;
+    } catch (error) {
+      logger.warn({ error, containerId }, 'Failed to detect active agents, returning empty array');
+      return [];
+    }
+  }
+
+  /**
+   * Get metrics for multiple containers in parallel
+   */
+  async getMultipleContainerMetrics(containerIds: string[]): Promise<Map<string, ContainerMetrics>> {
+    const metricsMap = new Map<string, ContainerMetrics>();
+
+    const promises = containerIds.map(async (id) => {
+      try {
+        const metrics = await this.getContainerMetrics(id);
+        return { id, metrics };
+      } catch (error) {
+        logger.error({ error, containerId: id }, 'Failed to get metrics for container');
+        return null;
+      }
+    });
+
+    const results = await Promise.all(promises);
+
+    results.forEach((result) => {
+      if (result) {
+        metricsMap.set(result.id, result.metrics);
+      }
+    });
+
+    return metricsMap;
+  }
+
+  /**
+   * Calculate average metrics over a time period
+   */
+  async getAverageMetrics(
+    containerId: string,
+    sampleCount: number = 5,
+    intervalMs: number = 1000
+  ): Promise<ContainerMetrics> {
+    const samples: ContainerMetrics[] = [];
+
+    for (let i = 0; i < sampleCount; i++) {
+      try {
+        const metrics = await this.getContainerMetrics(containerId);
+        samples.push(metrics);
+
+        if (i < sampleCount - 1) {
+          await new Promise(resolve => setTimeout(resolve, intervalMs));
+        }
+      } catch (error) {
+        logger.warn({ error, containerId }, 'Failed to collect sample, skipping');
+      }
+    }
+
+    if (samples.length === 0) {
+      throw new Error('Failed to collect any metrics samples');
+    }
+
+    // Calculate averages
+    const avgCpu = samples.reduce((sum, s) => sum + s.cpu.usage, 0) / samples.length;
+    const avgMemUsage = samples.reduce((sum, s) => sum + s.memory.usage, 0) / samples.length;
+    const avgMemPercentage = samples.reduce((sum, s) => sum + s.memory.percentage, 0) / samples.length;
+    const avgDiskUsage = samples.reduce((sum, s) => sum + s.disk.usage, 0) / samples.length;
+    const avgDiskPercentage = samples.reduce((sum, s) => sum + s.disk.percentage, 0) / samples.length;
+
+    // Use last sample as base
+    const lastSample = samples[samples.length - 1]!;
+
+    return {
+      ...lastSample,
+      cpu: {
+        ...lastSample.cpu,
+        usage: Number(avgCpu.toFixed(2)),
+      },
+      memory: {
+        ...lastSample.memory,
+        usage: Number(avgMemUsage.toFixed(2)),
+        percentage: Number(avgMemPercentage.toFixed(2)),
+      },
+      disk: {
+        ...lastSample.disk,
+        usage: Number(avgDiskUsage.toFixed(2)),
+        percentage: Number(avgDiskPercentage.toFixed(2)),
+      },
+    };
+  }
+
+  /**
+   * Stream metrics continuously
+   */
+  async *streamMetrics(
+    containerId: string,
+    intervalMs: number = 2000
+  ): AsyncGenerator<ContainerMetrics> {
+    while (true) {
+      try {
+        const metrics = await this.getContainerMetrics(containerId);
+        yield metrics;
+        await new Promise(resolve => setTimeout(resolve, intervalMs));
+      } catch (error) {
+        logger.error({ error, containerId }, 'Error streaming metrics');
+        throw error;
+      }
+    }
+  }
+}
+
+// Export singleton instance
+export const metricsService = new MetricsService();

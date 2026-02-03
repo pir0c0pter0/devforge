@@ -1,0 +1,25 @@
+# VS Code Server (code-server) Configuration
+# Passwordless access configuration for development containers
+
+bind-addr: 0.0.0.0:8080
+auth: none
+# Disable password authentication for container environments
+# Security is handled at the container/network level
+
+cert: false
+# No HTTPS - use reverse proxy if needed in production
+
+disable-telemetry: true
+# Respect user privacy
+
+disable-update-check: true
+# Containers should be rebuilt for updates
+
+user-data-dir: /home/developer/.local/share/code-server
+# Store user data in home directory
+
+extensions-dir: /home/developer/.local/share/code-server/extensions
+# Extensions directory
+
+# Workspace folder (can be overridden via CLI)
+# Default: /home/developer/workspace

@@ -1,0 +1,348 @@
+import express, { Request, Response, NextFunction } from 'express';
+import { Server as SocketServer } from 'socket.io';
+import { createServer } from 'http';
+import cors from 'cors';
+import helmet from 'helmet';
+import compression from 'compression';
+import dotenv from 'dotenv';
+import { httpLogger, logger } from './utils/logger';
+import { containerService } from './services/container.service';
+import { metricsService } from './services/metrics.service';
+import { dockerService } from './services/docker.service';
+import containersRouter from './api/routes/containers.routes';
+import templatesRouter from './api/routes/templates.routes';
+import { initializeDatabase, closeDatabase, isDatabaseHealthy } from './database';
+import { runMigrations, getDatabaseStats } from './database/migrations';
+
+// Load environment variables
+dotenv.config();
+
+// Configuration
+const PORT = process.env['PORT'] ? parseInt(process.env['PORT'], 10) : 3000;
+const HOST = process.env['HOST'] || '0.0.0.0';
+const CORS_ORIGIN = process.env['CORS_ORIGIN'] || '*';
+const NODE_ENV = process.env['NODE_ENV'] || 'development';
+
+/**
+ * Initialize Express application
+ */
+const app: express.Application = express();
+const httpServer = createServer(app);
+
+/**
+ * Initialize Socket.io
+ */
+const io = new SocketServer(httpServer, {
+  cors: {
+    origin: CORS_ORIGIN,
+    methods: ['GET', 'POST'],
+  },
+});
+
+/**
+ * Middleware
+ */
+app.use(helmet({
+  contentSecurityPolicy: NODE_ENV === 'production',
+}));
+
+app.use(cors({
+  origin: CORS_ORIGIN,
+  credentials: true,
+}));
+
+app.use(compression());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(httpLogger);
+
+/**
+ * Health check endpoint
+ */
+app.get('/health', async (_req: Request, res: Response) => {
+  try {
+    const dockerHealthy = await dockerService.ping();
+    const databaseHealthy = isDatabaseHealthy();
+    const allHealthy = dockerHealthy && databaseHealthy;
+
+    res.json({
+      status: allHealthy ? 'healthy' : 'degraded',
+      timestamp: new Date().toISOString(),
+      services: {
+        docker: dockerHealthy,
+        database: databaseHealthy,
+        api: true,
+      },
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'unhealthy',
+      timestamp: new Date().toISOString(),
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * API routes
+ */
+app.use('/api/containers', containersRouter);
+app.use('/api/templates', templatesRouter);
+
+/**
+ * Root endpoint
+ */
+app.get('/', (_req: Request, res: Response) => {
+  res.json({
+    name: 'Claude Docker Backend API',
+    version: '1.0.0',
+    description: 'Docker container management API with Claude Code integration',
+    endpoints: {
+      health: '/health',
+      containers: '/api/containers',
+      templates: '/api/templates',
+    },
+  });
+});
+
+/**
+ * 404 handler
+ */
+app.use((req: Request, res: Response) => {
+  res.status(404).json({
+    success: false,
+    error: 'Not found',
+    path: req.path,
+  });
+});
+
+/**
+ * Global error handler
+ */
+app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
+  logger.error({ error: err, path: req.path, method: req.method }, 'Unhandled error');
+
+  res.status(500).json({
+    success: false,
+    error: NODE_ENV === 'production' ? 'Internal server error' : err.message,
+    ...(NODE_ENV !== 'production' && { stack: err.stack }),
+  });
+});
+
+/**
+ * Socket.io connection handling
+ */
+io.on('connection', (socket) => {
+  logger.info({ socketId: socket.id }, 'Client connected to WebSocket');
+
+  /**
+   * Subscribe to container metrics
+   */
+  socket.on('subscribe:metrics', async (data: { containerId: string; interval?: number }) => {
+    const { containerId, interval = 2000 } = data;
+
+    logger.info({ socketId: socket.id, containerId, interval }, 'Client subscribed to metrics');
+
+    const metricsInterval = setInterval(async () => {
+      try {
+        const metrics = await metricsService.getContainerMetrics(containerId);
+
+        socket.emit('metrics:update', {
+          containerId,
+          metrics,
+        });
+      } catch (error) {
+        logger.error({ error, containerId }, 'Failed to emit metrics');
+
+        socket.emit('metrics:error', {
+          containerId,
+          error: error instanceof Error ? error.message : 'Failed to get metrics',
+        });
+      }
+    }, interval);
+
+    // Store interval ID for cleanup
+    socket.data.metricsInterval = metricsInterval;
+
+    // Clean up on disconnect
+    socket.on('disconnect', () => {
+      clearInterval(metricsInterval);
+      logger.info({ socketId: socket.id, containerId }, 'Client unsubscribed from metrics');
+    });
+  });
+
+  /**
+   * Unsubscribe from container metrics
+   */
+  socket.on('unsubscribe:metrics', () => {
+    if (socket.data.metricsInterval) {
+      clearInterval(socket.data.metricsInterval);
+      socket.data.metricsInterval = null;
+      logger.info({ socketId: socket.id }, 'Client unsubscribed from metrics');
+    }
+  });
+
+  /**
+   * Subscribe to container logs
+   */
+  socket.on('subscribe:logs', async (data: { containerId: string }) => {
+    const { containerId } = data;
+
+    logger.info({ socketId: socket.id, containerId }, 'Client subscribed to logs');
+
+    try {
+      // Send initial logs
+      const logs = await containerService.getLogs(containerId, 100);
+
+      socket.emit('logs:initial', {
+        containerId,
+        logs,
+      });
+
+      // TODO: Implement real-time log streaming
+      // This would require Docker logs streaming API
+
+    } catch (error) {
+      logger.error({ error, containerId }, 'Failed to send initial logs');
+
+      socket.emit('logs:error', {
+        containerId,
+        error: error instanceof Error ? error.message : 'Failed to get logs',
+      });
+    }
+  });
+
+  /**
+   * Container status updates
+   */
+  socket.on('subscribe:status', (data: { containerId: string }) => {
+    const { containerId } = data;
+
+    logger.info({ socketId: socket.id, containerId }, 'Client subscribed to status updates');
+
+    // TODO: Implement container status change events
+    // This would require Docker events API
+  });
+
+  /**
+   * Handle disconnection
+   */
+  socket.on('disconnect', () => {
+    logger.info({ socketId: socket.id }, 'Client disconnected from WebSocket');
+
+    // Clean up any active intervals
+    if (socket.data.metricsInterval) {
+      clearInterval(socket.data.metricsInterval);
+    }
+  });
+
+  /**
+   * Handle errors
+   */
+  socket.on('error', (error) => {
+    logger.error({ error, socketId: socket.id }, 'WebSocket error');
+  });
+});
+
+/**
+ * Graceful shutdown handler
+ */
+const gracefulShutdown = async (signal: string) => {
+  logger.info({ signal }, 'Received shutdown signal, closing server gracefully');
+
+  // Close HTTP server
+  httpServer.close(() => {
+    logger.info('HTTP server closed');
+  });
+
+  // Close Socket.io connections
+  io.close(() => {
+    logger.info('Socket.io server closed');
+  });
+
+  // Close database connection
+  closeDatabase();
+
+  // Give time for connections to close
+  setTimeout(() => {
+    logger.info('Forcing shutdown');
+    process.exit(0);
+  }, 10000);
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+/**
+ * Start server
+ */
+const startServer = async () => {
+  try {
+    // Initialize database
+    logger.info('Initializing database');
+    initializeDatabase();
+
+    // Run database migrations
+    logger.info('Running database migrations');
+    const migrationsApplied = runMigrations();
+    if (migrationsApplied > 0) {
+      logger.info({ count: migrationsApplied }, 'Database migrations applied');
+    }
+
+    // Log database stats
+    const dbStats = getDatabaseStats();
+    logger.info({ tables: dbStats.tables.length, size: dbStats.size }, 'Database ready');
+
+    // Check Docker daemon connection
+    logger.info('Checking Docker daemon connection');
+    const dockerHealthy = await dockerService.ping();
+
+    if (!dockerHealthy) {
+      logger.error('Docker daemon is not accessible');
+      throw new Error('Docker daemon is not accessible. Please ensure Docker is running.');
+    }
+
+    logger.info('Docker daemon connection successful');
+
+    // Sync existing containers
+    logger.info('Syncing existing containers');
+    await containerService.syncContainers();
+
+    // Start HTTP server
+    httpServer.listen(PORT, HOST, () => {
+      logger.info({
+        port: PORT,
+        host: HOST,
+        nodeEnv: NODE_ENV,
+        corsOrigin: CORS_ORIGIN,
+      }, 'Server started successfully');
+
+      logger.info(`API available at http://${HOST}:${PORT}`);
+      logger.info(`WebSocket available at ws://${HOST}:${PORT}`);
+    });
+  } catch (error) {
+    logger.error({ error }, 'Failed to start server');
+    process.exit(1);
+  }
+};
+
+/**
+ * Handle unhandled rejections
+ */
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error({ reason, promise }, 'Unhandled Promise rejection');
+});
+
+/**
+ * Handle uncaught exceptions
+ */
+process.on('uncaughtException', (error) => {
+  logger.error({ error }, 'Uncaught exception');
+  process.exit(1);
+});
+
+// Start the server
+startServer();
+
+// Export for testing
+export { app, io, httpServer };

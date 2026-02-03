@@ -1,0 +1,166 @@
+version: '3.8'
+
+# Claude Docker - Development Overrides
+# Hot reload and development-specific configurations
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  # Backend Development Overrides
+  backend:
+    build:
+      context: ../packages/backend
+      dockerfile: Dockerfile
+      target: development
+
+    command: pnpm dev
+
+    volumes:
+      # Mount source code for hot reload
+      - ../packages/backend:/app:delegated
+      - /app/node_modules
+      # Keep docker socket and configs
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${HOME}/.ssh:/home/developer/.ssh:ro
+      - ${HOME}/.claude:/home/developer/.claude:ro
+
+    environment:
+      - NODE_ENV=development
+      - LOG_LEVEL=debug
+      - DEBUG=*
+      - WATCH=true
+      - HOT_RELOAD=true
+
+    ports:
+      # Expose debugger port
+      - "9229:9229"
+
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+
+    labels:
+      - "claude-docker.mode=development"
+
+  # Frontend Development Overrides
+  frontend:
+    build:
+      context: ../packages/frontend
+      dockerfile: Dockerfile
+      target: development
+
+    command: pnpm dev
+
+    volumes:
+      # Mount source code for hot reload
+      - ../packages/frontend:/app:delegated
+      - /app/node_modules
+      - /app/.next
+
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_WS_URL=ws://localhost:8000
+      - NEXT_TELEMETRY_DISABLED=1
+      - FAST_REFRESH=true
+
+    ports:
+      # Keep standard port
+      - "3000:3000"
+
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+    labels:
+      - "claude-docker.mode=development"
+
+  # Redis Development Overrides
+  redis:
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --loglevel debug
+
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+
+    labels:
+      - "claude-docker.mode=development"
+
+  # Development Tools Container
+  devtools:
+    build:
+      context: ./base-image
+      dockerfile: Dockerfile.both
+    container_name: claude-docker-devtools
+    hostname: devtools
+    restart: unless-stopped
+
+    volumes:
+      # Mount workspace for development
+      - ../:/workspace:delegated
+      # Mount Claude config
+      - ${HOME}/.claude:/home/developer/.claude
+      # Mount SSH keys
+      - ${HOME}/.ssh:/home/developer/.ssh:ro
+      # Docker socket access
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - NODE_ENV=development
+
+    ports:
+      - "8080:8080"  # VS Code Server
+      - "5173:5173"  # Vite dev server
+
+    networks:
+      - claude-docker-network
+
+    working_dir: /workspace
+
+    labels:
+      - "claude-docker.managed=true"
+      - "claude-docker.service=devtools"
+      - "claude-docker.mode=development"
+
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+
+    security_opt:
+      - no-new-privileges:true
+
+# Development-specific volumes
+volumes:
+  # Use named volumes for better performance with hot reload
+  backend_node_modules:
+    driver: local
+  frontend_node_modules:
+    driver: local
+
+networks:
+  claude-docker-network:
+    name: claude-docker-network
+    driver: bridge

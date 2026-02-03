@@ -1,0 +1,120 @@
+# Claude Code + VS Code Combined Base Image
+# Production-ready container with both Claude Code and VS Code Server
+
+FROM node:22-bookworm
+
+LABEL maintainer="claude-docker"
+LABEL description="Combined Claude Code + VS Code Server development environment"
+LABEL version="1.0.0"
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive \
+    NODE_ENV=development \
+    PNPM_HOME=/usr/local/share/pnpm \
+    PATH=/usr/local/share/pnpm:$PATH \
+    SHELL=/bin/zsh \
+    CODE_SERVER_VERSION=4.23.1
+
+# Install system dependencies and tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    wget \
+    vim \
+    nano \
+    sudo \
+    zsh \
+    jq \
+    unzip \
+    openssh-client \
+    ca-certificates \
+    gnupg \
+    lsb-release \
+    build-essential \
+    python3 \
+    python3-pip \
+    dumb-init \
+    tmux \
+    htop \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install GitHub CLI
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+    && apt-get update \
+    && apt-get install -y gh \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install code-server
+RUN curl -fsSL https://code-server.dev/install.sh | sh -s -- --version=${CODE_SERVER_VERSION}
+
+# Create non-root user with sudo privileges
+ARG USER_UID=1000
+ARG USER_GID=1000
+RUN groupadd --gid $USER_GID developer \
+    && useradd --uid $USER_UID --gid $USER_GID -m -s /bin/zsh developer \
+    && echo "developer ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/developer \
+    && chmod 0440 /etc/sudoers.d/developer
+
+# Switch to non-root user
+USER developer
+WORKDIR /home/developer
+
+# Install Oh My Zsh for better shell experience
+RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended \
+    && echo 'export PATH="$PNPM_HOME:$PATH"' >> ~/.zshrc \
+    && echo 'alias ll="ls -lah"' >> ~/.zshrc \
+    && echo 'alias claude="npx @anthropic-ai/claude-code"' >> ~/.zshrc
+
+# Enable corepack for pnpm
+USER root
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# Switch back to developer user
+USER developer
+
+# Install pnpm globally via corepack
+RUN pnpm config set store-dir /home/developer/.pnpm-store
+
+# Install Claude Code globally
+RUN pnpm add -g @anthropic-ai/claude-code
+
+# Configure code-server for passwordless access
+RUN mkdir -p /home/developer/.config/code-server
+COPY --chown=developer:developer config.yaml /home/developer/.config/code-server/config.yaml
+
+# Create .claude directory structure
+RUN mkdir -p /home/developer/.claude/agents \
+    && mkdir -p /home/developer/.claude/skills \
+    && mkdir -p /home/developer/.claude/rules \
+    && mkdir -p /home/developer/.claude/cache
+
+# Create workspace directory
+RUN mkdir -p /home/developer/workspace
+
+# Copy startup script
+USER root
+COPY startup.sh /usr/local/bin/startup.sh
+RUN chmod +x /usr/local/bin/startup.sh && chown developer:developer /usr/local/bin/startup.sh
+
+USER developer
+
+# Expose ports
+# 3000 - Frontend dev server
+# 5173 - Vite dev server
+# 8080 - VS Code Server
+EXPOSE 3000 5173 8080
+
+# Set working directory
+WORKDIR /home/developer/workspace
+
+# Health check (check both code-server and container state)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8080/healthz && pnpm --version || exit 1
+
+# Use dumb-init to handle signals properly
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
+
+# Start both services via startup script
+CMD ["/usr/local/bin/startup.sh"]
