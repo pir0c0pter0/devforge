@@ -99,11 +99,26 @@ router.post(
       // Check for duplicate name
       const existingContainer = containerRepository.findByName(req.body.name);
       if (existingContainer) {
-        logger.warn({ name: req.body.name }, 'Container name already exists');
-        res.status(409).json(
-          errorResponse(`Container com nome "${req.body.name}" já existe`, 409)
-        );
-        return;
+        // If container is in 'error' status, allow reuse by deleting the failed record
+        if (existingContainer.status === 'error') {
+          logger.info({ name: req.body.name, existingId: existingContainer.id },
+            'Removing failed container record to allow name reuse');
+          containerRepository.delete(existingContainer.id);
+        } else if (existingContainer.status === 'creating') {
+          // Container is being created - tell user to wait
+          logger.warn({ name: req.body.name, existingStatus: existingContainer.status },
+            'Container name already in use (creating)');
+          res.status(409).json(
+            errorResponse(`Container "${req.body.name}" está sendo criado. Aguarde a conclusão.`, 409)
+          );
+          return;
+        } else {
+          logger.warn({ name: req.body.name }, 'Container name already exists');
+          res.status(409).json(
+            errorResponse(`Container com nome "${req.body.name}" já existe`, 409)
+          );
+          return;
+        }
       }
 
       // Create a task for this operation
@@ -122,7 +137,10 @@ router.post(
           logger.info({ containerId: container.id, taskId: task.id }, 'Container created successfully');
         })
         .catch((error) => {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           logger.error({ error, taskId: task.id }, 'Failed to create container');
+          // CRITICAL: Mark task as failed so frontend doesn't show infinite loading
+          taskService.fail(task.id, errorMessage);
         });
 
       // Return task immediately for polling

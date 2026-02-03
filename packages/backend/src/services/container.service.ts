@@ -394,14 +394,22 @@ export class ContainerService {
         }
       }
 
-      // Update database record to error status (or delete if preferred)
+      // Delete database record on failure to allow name reuse
+      // (Previously we set status to 'error' which blocked the name)
       if (containerId) {
         try {
-          containerRepository.updateStatus(containerId, 'error');
-          logger.info({ containerId }, 'Updated container status to error');
+          containerRepository.delete(containerId);
+          this.containers.delete(containerId);
+          logger.info({ containerId }, 'Deleted failed container record to allow name reuse');
         } catch (dbError) {
-          logger.error({ error: dbError, containerId },
-            'Failed to update container status to error');
+          // If delete fails, fall back to updating status to error
+          try {
+            containerRepository.updateStatus(containerId, 'error');
+            logger.warn({ containerId }, 'Could not delete, updated container status to error');
+          } catch (statusError) {
+            logger.error({ error: statusError, containerId },
+              'Failed to update container status');
+          }
         }
       }
 
