@@ -187,6 +187,7 @@ export const ContainerListItemSchema = z.object({
   limits: ResourceLimitsSchema,
   activeAgents: z.number(),
   queueLength: z.number(),
+  taskId: z.string().optional(), // Task ID for tracking creation progress
 });
 
 export type ContainerListItem = z.infer<typeof ContainerListItemSchema>;

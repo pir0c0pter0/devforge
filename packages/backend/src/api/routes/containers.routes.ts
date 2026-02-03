@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { containerService } from '../../services/container.service';
 import { taskService } from '../../services/task.service';
+import { containerRepository } from '../../repositories';
 import { validateBody, validateParams, validateQuery } from '../../utils/validation';
 import { CreateContainerRequestSchema } from '../../models/container.model';
 import { apiLogger as logger } from '../../utils/logger';
@@ -93,6 +94,16 @@ router.post(
     try {
       logger.info({ body: req.body }, 'Creating container');
 
+      // Check for duplicate name
+      const existingContainer = containerRepository.findByName(req.body.name);
+      if (existingContainer) {
+        logger.warn({ name: req.body.name }, 'Container name already exists');
+        res.status(409).json(
+          errorResponse(`Container com nome "${req.body.name}" já existe`, 409)
+        );
+        return;
+      }
+
       // Create a task for this operation
       const task = taskService.create('create-container');
       logger.info({ taskId: task.id }, 'Created task for container creation');
@@ -103,8 +114,8 @@ router.post(
       // Extract container data (taskId is not part of container config)
       const { taskId: _ignoredTaskId, ...containerData } = req.body;
 
-      // Create container asynchronously
-      containerService.create(containerData, task.id)
+      // Create container asynchronously, passing taskId to save in container config
+      containerService.create({ ...containerData, taskId: task.id }, task.id)
         .then((container) => {
           logger.info({ containerId: container.id, taskId: task.id }, 'Container created successfully');
         })

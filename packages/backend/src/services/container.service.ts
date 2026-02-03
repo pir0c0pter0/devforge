@@ -312,7 +312,7 @@ export class ContainerService {
         });
       }
 
-      // Create container record in database
+      // Create container record in database with taskId in config
       const createDto: CreateContainerDto = {
         dockerId: dockerContainer.id,
         name: config.name,
@@ -324,6 +324,7 @@ export class ContainerService {
         cpuLimit: config.cpuLimit,
         memoryLimit: config.memoryLimit,
         diskLimit: config.diskLimit,
+        config: taskId ? { taskId } : undefined,
       };
 
       const entity = containerRepository.create(createDto);
@@ -844,6 +845,11 @@ export class ContainerService {
           diskGB: Math.round((container.diskLimit ?? 20480) / 1024),
         };
 
+        // Extract taskId from config if container is still creating
+        const taskId = entity.status === 'creating' && entity.config?.['taskId']
+          ? String(entity.config['taskId'])
+          : undefined;
+
         items.push({
           id: container.id,
           dockerId: container.dockerId,
@@ -856,6 +862,7 @@ export class ContainerService {
           limits,
           activeAgents: activeAgentsCount,
           queueLength: 0,
+          taskId,
         });
       }
 
@@ -870,18 +877,15 @@ export class ContainerService {
    * Get container by ID (returns enriched format matching getAll)
    */
   async getById(containerId: string): Promise<ContainerListItem | null> {
-    // Try cache first
-    let container = this.containers.get(containerId);
-
-    if (!container) {
-      // Fetch from database
-      const entity = containerRepository.findById(containerId);
-      if (!entity) {
-        return null;
-      }
-      container = entityToContainer(entity);
-      this.containers.set(containerId, container);
+    // Always fetch from database to get latest config (including taskId)
+    const entity = containerRepository.findById(containerId);
+    if (!entity) {
+      return null;
     }
+
+    const container = entityToContainer(entity);
+    // Update cache
+    this.containers.set(containerId, container);
 
     // Build enriched response matching getAll format
     let simpleMetrics = {
@@ -911,6 +915,11 @@ export class ContainerService {
       diskGB: Math.round((container.diskLimit ?? 20480) / 1024),
     };
 
+    // Extract taskId from config if container is still creating
+    const taskId = entity.status === 'creating' && entity.config?.['taskId']
+      ? String(entity.config['taskId'])
+      : undefined;
+
     return {
       id: container.id,
       dockerId: container.dockerId,
@@ -923,6 +932,7 @@ export class ContainerService {
       limits,
       activeAgents: activeAgentsCount,
       queueLength: 0,
+      taskId,
     };
   }
 

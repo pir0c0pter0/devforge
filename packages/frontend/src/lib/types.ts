@@ -26,6 +26,7 @@ export interface Container {
   }
   activeAgents: number
   queueLength: number
+  taskId?: string // Task ID for tracking creation progress
 }
 
 export interface CreateContainerRequest {

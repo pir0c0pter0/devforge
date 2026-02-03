@@ -5,9 +5,8 @@ import { useRouter } from 'next/navigation'
 import { z } from 'zod'
 import { apiClient } from '@/lib/api-client'
 import { useI18n } from '@/lib/i18n'
-import type { TemplateType, ContainerMode, RepositoryType, Task } from '@/lib/types'
+import type { TemplateType, ContainerMode, RepositoryType } from '@/lib/types'
 import { AnimatedDots } from '@/components/ui/animated-dots'
-import { useTaskPolling } from '@/hooks/use-task-polling'
 import clsx from 'clsx'
 
 /**
@@ -87,19 +86,6 @@ export function CreateContainerForm() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({})
   const [generalError, setGeneralError] = useState<string | null>(null)
-  const [taskId, setTaskId] = useState<string | null>(null)
-
-  const { task } = useTaskPolling(taskId, {
-    onComplete: (completedTask: Task) => {
-      if (completedTask.result?.containerId) {
-        router.push('/containers')
-      }
-    },
-    onError: (failedTask: Task) => {
-      setGeneralError(failedTask.error || t.createContainer.failedCreate)
-      setIsSubmitting(false)
-    },
-  })
 
   const [formData, setFormData] = useState<FormData>({
     name: '',
@@ -155,8 +141,8 @@ export function CreateContainerForm() {
       })
 
       if (response.success && response.data?.taskId) {
-        // Start polling the task
-        setTaskId(response.data.taskId)
+        // Redirect immediately to container list - progress will show there
+        router.push('/containers')
       } else {
         setGeneralError(response.error || t.createContainer.failedCreate)
         setIsSubmitting(false)
@@ -173,18 +159,12 @@ export function CreateContainerForm() {
       } else {
         setGeneralError(t.createContainer.unexpectedError)
       }
-    } finally {
       setIsSubmitting(false)
     }
   }
 
   const getButtonText = (): React.ReactNode => {
     if (!isSubmitting) return t.createContainer.create
-
-    if (task) {
-      return <AnimatedDots text={`${task.message} (${task.progress}%)`} />
-    }
-
     return <AnimatedDots text={t.createContainer.progressCreating} />
   }
 
@@ -415,23 +395,6 @@ export function CreateContainerForm() {
           />
         </div>
       </div>
-
-      {isSubmitting && task && (
-        <div className="pt-2">
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-terminal-textMuted">{task.message}</span>
-              <span className="text-terminal-green font-mono">{task.progress}%</span>
-            </div>
-            <div className="w-full bg-terminal-bg border border-terminal-border rounded-full h-2 overflow-hidden">
-              <div
-                className="h-full bg-terminal-green transition-all duration-300 ease-out"
-                style={{ width: `${task.progress}%` }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
 
       <div className="flex gap-4 pt-4">
         <button
