@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções
 
-## Versão Atual: 0.0.30-alpha
+## Versão Atual: 0.0.32-alpha
 
 ## Estrutura do Projeto
 
@@ -264,6 +264,95 @@ export interface ContainerMetrics {
 }
 ```
 
+## Sistema de Tasks (OBRIGATÓRIO)
+
+### Regras de Progress Granular
+
+**SEMPRE usar progress granular em operações async.** Operações rápidas (~100ms) parecem "travadas" se o progress pula muito.
+
+#### ❌ ERRADO - Progress com gaps grandes
+```typescript
+taskService.setProgress(taskId, 10, 'Verificando...');
+await dockerService.startContainer(dockerId); // Usuário vê 10% por 100ms
+taskService.setProgress(taskId, 90, 'Finalizando...');
+```
+
+#### ✅ CORRETO - Progress granular
+```typescript
+taskService.setProgress(taskId, 5, 'Verificando permissões...');
+taskService.setProgress(taskId, 10, 'Carregando configuração...');
+taskService.setProgress(taskId, 20, 'Conectando ao Docker...');
+taskService.setProgress(taskId, 30, 'Enviando comando...');
+taskService.setProgress(taskId, 35, 'Iniciando container...');
+await dockerService.startContainer(dockerId);
+taskService.setProgress(taskId, 60, 'Container iniciado!');
+taskService.setProgress(taskId, 70, 'Verificando saúde...');
+taskService.setProgress(taskId, 80, 'Atualizando banco...');
+taskService.setProgress(taskId, 90, 'Finalizando...');
+taskService.complete(taskId, result);
+```
+
+### Mínimo de Steps por Operação
+
+| Operação | Mínimo Steps | Exemplo |
+|----------|-------------|---------|
+| CREATE | 15+ steps | 5%, 10%, 15%, 20%, 25%, 30%, 35%, 55%, 65%, 75%, 85%, 90%, 95%, 100% |
+| START | 10+ steps | 5%, 10%, 15%, 20%, 25%, 30%, 35%, 60%, 70%, 80%, 90%, 95% |
+| DELETE | 12+ steps | 5%, 8%, 12%, 15%, 25%, 30%, 40%, 50%, 55%, 65%, 75%, 85%, 90%, 95% |
+| STOP | 6+ steps | 10%, 30%, 50%, 70%, 90%, 100% |
+
+### Error Handling em Operações Async (OBRIGATÓRIO)
+
+**SEMPRE chamar `taskService.fail()` no catch block de operações async.**
+
+#### ❌ ERRADO - Task fica em "running" para sempre
+```typescript
+containerService.create(config, task.id)
+  .catch((error) => {
+    logger.error({ error }, 'Failed'); // Task nunca é marcada como failed!
+  });
+```
+
+#### ✅ CORRETO - Task é marcada como failed
+```typescript
+containerService.create(config, task.id)
+  .catch((error) => {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logger.error({ error }, 'Failed');
+    taskService.fail(task.id, errorMessage); // OBRIGATÓRIO!
+  });
+```
+
+### Cleanup de Containers com Erro
+
+Quando criação falha, **DELETAR** o registro do banco (não apenas marcar como 'error'):
+
+```typescript
+// Em caso de falha na criação:
+if (containerId) {
+  containerRepository.delete(containerId);  // ✅ Permite reuso do nome
+  // NÃO usar: containerRepository.updateStatus(containerId, 'error'); // ❌ Bloqueia nome
+}
+```
+
+### Verificação de Nome com Status
+
+Ao verificar nome duplicado, considerar status:
+
+```typescript
+const existing = containerRepository.findByName(name);
+if (existing) {
+  if (existing.status === 'error') {
+    // Deletar registro com erro para permitir reuso
+    containerRepository.delete(existing.id);
+  } else if (existing.status === 'creating') {
+    return error('Container está sendo criado. Aguarde.');
+  } else {
+    return error('Nome já existe');
+  }
+}
+```
+
 ## Rate Limiting (v0.0.24+)
 
 Três níveis de rate limiting configuráveis via env:
@@ -292,6 +381,17 @@ ALLOWED_ORIGINS=https://myapp.com,https://api.myapp.com
 ```
 
 ## Histórico de Versões
+
+### v0.0.32-alpha
+- Feat: Progress granular em START (4→12 steps) e DELETE (6→15 steps)
+- Feat: Mensagens descritivas em cada etapa do progress
+- Doc: Adicionadas regras obrigatórias para Task System no CLAUDE.md
+
+### v0.0.31-alpha
+- Fix: `taskService.fail()` agora é chamado no catch block de criação
+- Fix: Containers com erro são deletados (não apenas marcados como 'error')
+- Fix: Verificação de nome considera status 'error' e 'creating'
+- Fix: Permite reuso de nome após falha de criação
 
 ### v0.0.30-alpha
 - Feat: Task de exclusão com progresso em tempo real via WebSocket
