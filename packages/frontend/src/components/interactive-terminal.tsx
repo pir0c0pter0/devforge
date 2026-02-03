@@ -53,6 +53,8 @@ export function InteractiveTerminal({ containerId, onClose, className }: Interac
         cursorBlink: true,
         fontSize: 14,
         fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+        scrollback: 5000,
+        convertEol: false, // Let the PTY handle line endings
         theme: {
           background: '#1e1e1e',
           foreground: '#d4d4d4',
@@ -125,10 +127,14 @@ export function InteractiveTerminal({ containerId, onClose, className }: Interac
       })
 
       socket.on('terminal:data', (data: { sessionId: string; data: string }) => {
-        // Decode base64 data
+        // Decode base64 data to Uint8Array for proper binary handling
         try {
-          const decoded = atob(data.data)
-          xterm.write(decoded)
+          const binaryString = atob(data.data)
+          const bytes = new Uint8Array(binaryString.length)
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i)
+          }
+          xterm.write(bytes)
         } catch (e) {
           console.error('[Terminal] Failed to decode data:', e)
         }
@@ -159,8 +165,10 @@ export function InteractiveTerminal({ containerId, onClose, className }: Interac
       // Handle user input
       xterm.onData((data: string) => {
         if (socketRef.current && sessionIdRef.current) {
-          // Encode to base64
-          const encoded = btoa(data)
+          // Encode to base64 with proper UTF-8 handling
+          const bytes = new TextEncoder().encode(data)
+          const binaryString = Array.from(bytes, byte => String.fromCharCode(byte)).join('')
+          const encoded = btoa(binaryString)
           socketRef.current.emit('terminal:input', { sessionId: sessionIdRef.current, data: encoded })
         }
       })

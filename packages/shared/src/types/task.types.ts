@@ -4,7 +4,7 @@
 
 export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed'
 
-export type TaskType = 'create-container' | 'start-container' | 'clone-repo' | 'generic'
+export type TaskType = 'create-container' | 'start-container' | 'delete-container' | 'clone-repo' | 'generic'
 
 export interface Task {
   id: string

@@ -880,6 +880,92 @@ export class ContainerService {
   }
 
   /**
+   * Delete a container with task tracking
+   */
+  async deleteWithTask(containerId: string, taskId: string, force: boolean = false): Promise<void> {
+    // Check for existing delete operation (prevent race conditions)
+    const existingLock = this.deleteLocks.get(containerId);
+    if (existingLock) {
+      logger.info({ containerId, taskId }, 'Delete already in progress, waiting...');
+      taskService.setProgress(taskId, 50, 'Aguardando exclusão em andamento...');
+      await existingLock;
+      taskService.complete(taskId, { containerId, deleted: true });
+      return;
+    }
+
+    const deletePromise = this.performDeleteWithTask(containerId, taskId, force);
+    this.deleteLocks.set(containerId, deletePromise);
+
+    try {
+      await deletePromise;
+    } finally {
+      this.deleteLocks.delete(containerId);
+    }
+  }
+
+  /**
+   * Internal delete implementation with task tracking
+   */
+  private async performDeleteWithTask(containerId: string, taskId: string, force: boolean): Promise<void> {
+    try {
+      taskService.setProgress(taskId, 10, 'Verificando container...');
+
+      // Try cache first, then database
+      let container = this.containers.get(containerId);
+      if (!container) {
+        const entity = containerRepository.findById(containerId);
+        if (entity) {
+          container = entityToContainer(entity);
+        }
+      }
+
+      if (!container) {
+        // Container not found in DB - might have been deleted already
+        logger.warn({ containerId, taskId }, 'Container not found in database, may have been already deleted');
+        taskService.complete(taskId, { containerId, deleted: true, alreadyDeleted: true });
+        return;
+      }
+
+      logger.info({ containerId, dockerId: container.dockerId, force, taskId }, 'Deleting container with task');
+
+      // Stop container first if running
+      if (container.status === 'running') {
+        taskService.setProgress(taskId, 30, 'Parando container...');
+        logger.info({ containerId, taskId }, 'Stopping container before deletion');
+        try {
+          await dockerService.stopContainer(container.dockerId);
+        } catch (stopError) {
+          logger.warn({ error: stopError, containerId, taskId }, 'Failed to stop container, trying force delete');
+          force = true;
+        }
+      }
+
+      taskService.setProgress(taskId, 50, 'Removendo container do Docker...');
+
+      // Delete from Docker (handles "not found" gracefully)
+      await dockerService.deleteContainer(container.dockerId, force);
+
+      taskService.setProgress(taskId, 80, 'Removendo do banco de dados...');
+
+      // Delete from database
+      containerRepository.delete(containerId);
+
+      // Remove from cache
+      this.containers.delete(containerId);
+
+      taskService.setProgress(taskId, 100, 'Container excluído com sucesso!');
+      taskService.complete(taskId, { containerId, deleted: true });
+
+      logger.info({ containerId, taskId }, 'Container deleted successfully with task');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      taskService.fail(taskId, errorMessage);
+      logger.error({ error, containerId, taskId }, 'Failed to delete container');
+      throw new Error(`Failed to delete container: ${errorMessage}`);
+    }
+  }
+
+  /**
    * Get all containers with metrics
    */
   async getAll(includeMetrics: boolean = false): Promise<ContainerListItem[]> {
@@ -1152,24 +1238,19 @@ export class ContainerService {
 
     // Mount Claude credentials (for browser-based auth - Personal/Max/Pro accounts)
     // This shares the host's authenticated session with containers
+    // Note: NOT read-only because Claude Code may need to refresh tokens
     const claudeCredentials = path.join(homeDir, '.claude', '.credentials.json');
     const fs = await import('fs/promises');
     try {
       await fs.access(claudeCredentials);
-      volumes.push(`${claudeCredentials}:/home/developer/.claude/.credentials.json:ro`);
+      volumes.push(`${claudeCredentials}:/home/developer/.claude/.credentials.json`);
       logger.info('Claude credentials found, will mount for authentication');
     } catch {
       logger.warn('Claude credentials not found - run "claude" on host to authenticate first');
     }
 
-    // Mount Claude settings and configs (read-only for safety)
-    const claudeSettings = path.join(homeDir, '.claude', 'settings.json');
-    try {
-      await fs.access(claudeSettings);
-      volumes.push(`${claudeSettings}:/home/developer/.claude/settings.json:ro`);
-    } catch {
-      // Settings file is optional
-    }
+    // Note: settings.json is copied via copyClaudeConfigs() instead of mounted
+    // This allows Claude Code to modify settings inside the container
 
     // Mount SSH directory for git operations
     const sshDir = path.join(homeDir, '.ssh');

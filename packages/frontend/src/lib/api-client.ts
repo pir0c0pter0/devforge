@@ -85,8 +85,8 @@ class ApiClient {
     })
   }
 
-  async deleteContainer(id: string): Promise<ApiResponse<void>> {
-    return this.request<void>(`/api/containers/${id}`, {
+  async deleteContainer(id: string): Promise<ApiResponse<{ taskId: string; containerId: string }>> {
+    return this.request<{ taskId: string; containerId: string }>(`/api/containers/${id}`, {
       method: 'DELETE',
     })
   }

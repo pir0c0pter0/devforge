@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções
 
-## Versão Atual: 0.0.29-alpha
+## Versão Atual: 0.0.30-alpha
 
 ## Estrutura do Projeto
 
@@ -292,6 +292,13 @@ ALLOWED_ORIGINS=https://myapp.com,https://api.myapp.com
 ```
 
 ## Histórico de Versões
+
+### v0.0.30-alpha
+- Feat: Task de exclusão com progresso em tempo real via WebSocket
+- Feat: TaskType `delete-container` no sistema de tarefas
+- Fix: Terminal ASCII - codificação base64/UTF-8 corrigida (Uint8Array)
+- Fix: Credenciais Claude - mount writeable para permitir refresh de tokens
+- Fix: settings.json não é mais montado (copiado para permitir escrita)
 
 ### v0.0.29-alpha
 - Feat: Terminal interativo via WebSocket + xterm.js

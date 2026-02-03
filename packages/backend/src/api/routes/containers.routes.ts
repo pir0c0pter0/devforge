@@ -296,7 +296,7 @@ router.post(
 
 /**
  * DELETE /api/containers/:id
- * Delete a container
+ * Delete a container (async with task tracking)
  */
 router.delete(
   '/:id',
@@ -309,11 +309,24 @@ router.delete(
 
       logger.info({ containerId: id, force }, 'Deleting container');
 
-      await containerService.delete(id, force);
+      // Create a task for this operation
+      const task = taskService.create('delete-container');
+      logger.info({ taskId: task.id, containerId: id }, 'Created task for container deletion');
 
-      logger.info({ containerId: id }, 'Container deleted successfully');
+      // Start the task
+      taskService.start(task.id, 'Iniciando exclusão do container...');
 
-      res.json(successResponse({ id, deleted: true }, 'Container deleted successfully'));
+      // Delete container asynchronously
+      containerService.deleteWithTask(id, task.id, force)
+        .then(() => {
+          logger.info({ containerId: id, taskId: task.id }, 'Container deleted successfully');
+        })
+        .catch((error) => {
+          logger.error({ error, containerId: id, taskId: task.id }, 'Failed to delete container');
+        });
+
+      // Return task immediately for tracking
+      res.status(202).json(successResponse({ taskId: task.id, containerId: id }, 'Container deletion started'));
     } catch (error) {
       logger.error({ error, containerId: req.params['id'] }, 'Failed to delete container');
 

@@ -5,6 +5,20 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
+## [0.0.30-alpha] - 2026-02-03
+
+### Adicionado
+- **Task de exclusão**: Exclusão de containers agora mostra progresso em tempo real via WebSocket
+- TaskType `delete-container` no sistema de tarefas
+
+### Corrigido
+- **Terminal ASCII**: Corrigida codificação base64 para UTF-8 no terminal interativo
+- **Credenciais Claude**: Mount de `.credentials.json` agora é writeable (permite refresh de tokens)
+- Mount de `settings.json` removido (copiado via docker cp para permitir escrita)
+
+### Alterado
+- API DELETE `/api/containers/:id` agora retorna `taskId` para tracking assíncrono
+
 ## [0.0.29-alpha] - 2026-02-03
 
 ### Adicionado

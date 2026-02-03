@@ -19,6 +19,7 @@ export function ContainerCard({ container }: ContainerCardProps) {
   const { t } = useI18n()
   const router = useRouter()
   const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null)
   const [isStarting, setIsStarting] = useState(false)
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
   const { updateContainer, removeContainer, setError } = useContainerStore()
@@ -26,8 +27,17 @@ export function ContainerCard({ container }: ContainerCardProps) {
   // Subscribe to real-time metrics updates for this container
   useMetrics(container.status === 'running' ? container.id : undefined)
 
-  // Handle task completion - refresh container data
-  const handleTaskComplete = useCallback(async (_task: Task) => {
+  // Handle task completion - refresh container data or remove if deleted
+  const handleTaskComplete = useCallback(async (task: Task) => {
+    // Check if this was a delete task
+    if (deleteTaskId && task.result?.deleted) {
+      removeContainer(container.id)
+      setDeleteTaskId(null)
+      setIsDeleting(false)
+      return
+    }
+
+    // Otherwise refresh container data
     try {
       const containerResponse = await apiClient.getContainer(container.id)
       if (containerResponse.success && containerResponse.data) {
@@ -38,14 +48,20 @@ export function ContainerCard({ container }: ContainerCardProps) {
     }
     setActiveTaskId(null)
     setIsStarting(false)
-  }, [container.id, updateContainer])
+  }, [container.id, updateContainer, removeContainer, deleteTaskId])
 
   // Handle task failure
   const handleTaskError = useCallback((task: Task) => {
-    setError(task.error || t.container.failedStart)
-    setActiveTaskId(null)
-    setIsStarting(false)
-  }, [setError, t.container.failedStart])
+    if (deleteTaskId) {
+      setError(task.error || t.container.failedDelete)
+      setDeleteTaskId(null)
+      setIsDeleting(false)
+    } else {
+      setError(task.error || t.container.failedStart)
+      setActiveTaskId(null)
+      setIsStarting(false)
+    }
+  }, [setError, t.container.failedStart, t.container.failedDelete, deleteTaskId])
 
   // Use WebSocket hook for task updates
   const { task: wsTask, isConnected, subscribe, unsubscribe } = useTaskWebSocket({
@@ -54,9 +70,9 @@ export function ContainerCard({ container }: ContainerCardProps) {
     enableFallback: true,
   })
 
-  // Subscribe to task when container is being created or starting
+  // Subscribe to task when container is being created, starting, or deleting
   useEffect(() => {
-    const taskId = activeTaskId || (container.status === 'creating' ? container.taskId : null)
+    const taskId = deleteTaskId || activeTaskId || (container.status === 'creating' ? container.taskId : null)
 
     if (taskId) {
       subscribe(taskId)
@@ -67,7 +83,7 @@ export function ContainerCard({ container }: ContainerCardProps) {
     return () => {
       unsubscribe()
     }
-  }, [activeTaskId, container.status, container.taskId, subscribe, unsubscribe])
+  }, [deleteTaskId, activeTaskId, container.status, container.taskId, subscribe, unsubscribe])
 
   // Sync isStarting state when container status changes
   useEffect(() => {
@@ -126,10 +142,19 @@ export function ContainerCard({ container }: ContainerCardProps) {
     setIsDeleting(true)
     const response = await apiClient.deleteContainer(container.id)
 
-    if (response.success) {
-      removeContainer(container.id)
-    } else {
+    if (!response.success) {
       setError(response.error || t.container.failedDelete)
+      setIsDeleting(false)
+      return
+    }
+
+    // API now returns taskId - subscribe to WebSocket updates
+    const taskId = response.data?.taskId
+    if (taskId) {
+      setDeleteTaskId(taskId)
+    } else {
+      // Fallback: remove immediately if no taskId (shouldn't happen)
+      removeContainer(container.id)
       setIsDeleting(false)
     }
   }
@@ -172,7 +197,7 @@ export function ContainerCard({ container }: ContainerCardProps) {
   const diskPercent = diskGB > 0 ? ((container.metrics?.disk ?? 0) / diskGB) * 100 : 0
 
   return (
-    <div className={clsx('card transition-all', isDeleting && 'opacity-50')}>
+    <div className={clsx('card transition-all', isDeleting && !deleteTaskId && 'opacity-50')}>
       <div className="p-5">
         <div className="flex items-start justify-between mb-4">
           <div className="flex-1 min-w-0">
@@ -190,8 +215,8 @@ export function ContainerCard({ container }: ContainerCardProps) {
                 {t.modes[container.mode]}
               </span>
             </div>
-            {/* Progress bar for active operations (creating or starting) - using WebSocket */}
-            {(activeTaskId || (container.status === 'creating' && container.taskId)) && (
+            {/* Progress bar for active operations (creating, starting, or deleting) - using WebSocket */}
+            {(deleteTaskId || activeTaskId || (container.status === 'creating' && container.taskId)) && (
               <div className="mt-3">
                 {wsTask ? (
                   <div className="space-y-1">
