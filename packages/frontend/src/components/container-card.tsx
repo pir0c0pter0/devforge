@@ -89,9 +89,11 @@ export function ContainerCard({ container }: ContainerCardProps) {
     autonomous: 'badge-warning',
   }
 
-  const cpuPercent = container.metrics.cpu
-  const memoryPercent = (container.metrics.memory / container.limits.memoryMB) * 100
-  const diskPercent = (container.metrics.disk / container.limits.diskGB) * 100
+  const cpuPercent = container.metrics?.cpu ?? 0
+  const memoryMB = container.limits?.memoryMB ?? 1
+  const diskGB = container.limits?.diskGB ?? 1
+  const memoryPercent = memoryMB > 0 ? ((container.metrics?.memory ?? 0) / memoryMB) * 100 : 0
+  const diskPercent = diskGB > 0 ? ((container.metrics?.disk ?? 0) / diskGB) * 100 : 0
 
   return (
     <div className={clsx('card transition-all', isDeleting && 'opacity-50')}>
@@ -126,7 +128,7 @@ export function ContainerCard({ container }: ContainerCardProps) {
           <div className="flex items-center justify-between text-sm">
             <span className="text-terminal-textMuted">{t.container.cpu}</span>
             <span className="font-medium text-terminal-text">
-              {container.metrics.cpu.toFixed(1)}% / {container.limits.cpuCores} {t.container.cores}
+              {(container.metrics?.cpu ?? 0).toFixed(1)}% / {container.limits?.cpuCores ?? 0} {t.container.cores}
             </span>
           </div>
           <div className="w-full bg-terminal-bg rounded h-1.5">
@@ -146,7 +148,7 @@ export function ContainerCard({ container }: ContainerCardProps) {
           <div className="flex items-center justify-between text-sm">
             <span className="text-terminal-textMuted">{t.container.memory}</span>
             <span className="font-medium text-terminal-text">
-              {container.metrics.memory.toFixed(0)} MB / {container.limits.memoryMB} MB
+              {(container.metrics?.memory ?? 0).toFixed(0)} MB / {container.limits?.memoryMB ?? 0} MB
             </span>
           </div>
           <div className="w-full bg-terminal-bg rounded h-1.5">
@@ -166,7 +168,7 @@ export function ContainerCard({ container }: ContainerCardProps) {
           <div className="flex items-center justify-between text-sm">
             <span className="text-terminal-textMuted">{t.container.disk}</span>
             <span className="font-medium text-terminal-text">
-              {container.metrics.disk.toFixed(2)} GB / {container.limits.diskGB} GB
+              {(container.metrics?.disk ?? 0).toFixed(2)} GB / {container.limits?.diskGB ?? 0} GB
             </span>
           </div>
           <div className="w-full bg-terminal-bg rounded h-1.5">

@@ -52,10 +52,15 @@ export class ContainerService {
   // In-memory cache for faster lookups (synced with database)
   private containers: Map<string, Container> = new Map();
 
+  // Lock for delete operations to prevent race conditions
+  private deleteLocks: Map<string, Promise<void>> = new Map();
+
   /**
    * Create a new container with configuration
    */
   async create(config: ContainerConfig): Promise<Container> {
+    let dockerContainerId: string | null = null;
+
     try {
       logger.info({ config }, 'Creating new container');
 
@@ -99,6 +104,7 @@ export class ContainerService {
 
       // Create Docker container
       const dockerContainer = await dockerService.createContainer(createOptions);
+      dockerContainerId = dockerContainer.id; // Track for rollback
 
       // Start container temporarily for setup operations
       const needsSetup = config.repoType === 'clone' && config.repoUrl;
@@ -150,6 +156,18 @@ export class ContainerService {
 
       return container;
     } catch (error) {
+      // Cleanup orphaned Docker container if it was created
+      if (dockerContainerId) {
+        try {
+          logger.warn({ dockerId: dockerContainerId }, 'Rolling back orphaned Docker container');
+          await dockerService.deleteContainer(dockerContainerId, true);
+          logger.info({ dockerId: dockerContainerId }, 'Rolled back orphaned Docker container');
+        } catch (cleanupError) {
+          logger.error({ error: cleanupError, dockerId: dockerContainerId },
+            'Failed to cleanup orphaned Docker container');
+        }
+      }
+
       logger.error({ error, config }, 'Failed to create container');
       throw new Error(`Failed to create container: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -499,6 +517,28 @@ export class ContainerService {
    * Delete a container
    */
   async delete(containerId: string, force: boolean = false): Promise<void> {
+    // Check for existing delete operation (prevent race conditions)
+    const existingLock = this.deleteLocks.get(containerId);
+    if (existingLock) {
+      logger.info({ containerId }, 'Delete already in progress, waiting...');
+      await existingLock;
+      return; // Already deleted by another request
+    }
+
+    const deletePromise = this.performDelete(containerId, force);
+    this.deleteLocks.set(containerId, deletePromise);
+
+    try {
+      await deletePromise;
+    } finally {
+      this.deleteLocks.delete(containerId);
+    }
+  }
+
+  /**
+   * Internal delete implementation
+   */
+  private async performDelete(containerId: string, force: boolean): Promise<void> {
     try {
       // Try cache first, then database
       let container = this.containers.get(containerId);
@@ -510,11 +550,25 @@ export class ContainerService {
       }
 
       if (!container) {
-        throw new Error(`Container not found: ${containerId}`);
+        // Container not found in DB - might have been deleted already
+        logger.warn({ containerId }, 'Container not found in database, may have been already deleted');
+        return;
       }
 
       logger.info({ containerId, dockerId: container.dockerId, force }, 'Deleting container');
 
+      // Stop container first if running
+      if (container.status === 'running') {
+        logger.info({ containerId }, 'Stopping container before deletion');
+        try {
+          await dockerService.stopContainer(container.dockerId);
+        } catch (stopError) {
+          logger.warn({ error: stopError, containerId }, 'Failed to stop container, trying force delete');
+          force = true;
+        }
+      }
+
+      // Delete from Docker (handles "not found" gracefully)
       await dockerService.deleteContainer(container.dockerId, force);
 
       // Delete from database
@@ -546,15 +600,34 @@ export class ContainerService {
         // Update cache
         this.containers.set(container.id, container);
 
-        let metrics: ContainerMetrics | undefined;
+        // Default simple metrics for frontend
+        let simpleMetrics = {
+          cpu: 0,
+          memory: 0,
+          disk: 0,
+        };
+        let activeAgentsCount = 0;
 
         if (includeMetrics && container.status === 'running') {
           try {
-            metrics = await metricsService.getContainerMetrics(container.dockerId);
+            const fullMetrics = await metricsService.getContainerMetrics(container.dockerId);
+            simpleMetrics = {
+              cpu: fullMetrics.cpu.usage,
+              memory: fullMetrics.memory.percentage,
+              disk: fullMetrics.disk.percentage,
+            };
+            activeAgentsCount = fullMetrics.activeAgents?.length ?? 0;
           } catch (error) {
             logger.warn({ error, containerId: container.id }, 'Failed to get metrics for container');
           }
         }
+
+        // Default limits
+        const limits = {
+          cpuCores: container.cpuLimit ?? 2,
+          memoryMB: container.memoryLimit ?? 4096,
+          diskGB: Math.round((container.diskLimit ?? 20480) / 1024),
+        };
 
         items.push({
           id: container.id,
@@ -564,7 +637,10 @@ export class ContainerService {
           mode: container.mode,
           status: container.status,
           createdAt: container.createdAt,
-          metrics,
+          metrics: simpleMetrics,
+          limits,
+          activeAgents: activeAgentsCount,
+          queueLength: 0,
         });
       }
 
@@ -576,24 +652,63 @@ export class ContainerService {
   }
 
   /**
-   * Get container by ID
+   * Get container by ID (returns enriched format matching getAll)
    */
-  async getById(containerId: string): Promise<Container | null> {
+  async getById(containerId: string): Promise<ContainerListItem | null> {
     // Try cache first
-    const cached = this.containers.get(containerId);
-    if (cached) {
-      return cached;
+    let container = this.containers.get(containerId);
+
+    if (!container) {
+      // Fetch from database
+      const entity = containerRepository.findById(containerId);
+      if (!entity) {
+        return null;
+      }
+      container = entityToContainer(entity);
+      this.containers.set(containerId, container);
     }
 
-    // Fetch from database
-    const entity = containerRepository.findById(containerId);
-    if (!entity) {
-      return null;
+    // Build enriched response matching getAll format
+    let simpleMetrics = {
+      cpu: 0,
+      memory: 0,
+      disk: 0,
+    };
+    let activeAgentsCount = 0;
+
+    if (container.status === 'running') {
+      try {
+        const fullMetrics = await metricsService.getContainerMetrics(container.dockerId);
+        simpleMetrics = {
+          cpu: fullMetrics.cpu.usage,
+          memory: fullMetrics.memory.percentage,
+          disk: fullMetrics.disk.percentage,
+        };
+        activeAgentsCount = fullMetrics.activeAgents?.length ?? 0;
+      } catch (error) {
+        logger.warn({ error, containerId: container.id }, 'Failed to get metrics for container');
+      }
     }
 
-    const container = entityToContainer(entity);
-    this.containers.set(containerId, container);
-    return container;
+    const limits = {
+      cpuCores: container.cpuLimit ?? 2,
+      memoryMB: container.memoryLimit ?? 4096,
+      diskGB: Math.round((container.diskLimit ?? 20480) / 1024),
+    };
+
+    return {
+      id: container.id,
+      dockerId: container.dockerId,
+      name: container.name,
+      template: container.template,
+      mode: container.mode,
+      status: container.status,
+      createdAt: container.createdAt,
+      metrics: simpleMetrics,
+      limits,
+      activeAgents: activeAgentsCount,
+      queueLength: 0,
+    };
   }
 
   /**
@@ -882,9 +997,14 @@ export class ContainerService {
       // Then, sync Docker state
       const dockerContainers = await dockerService.listContainers(true);
 
+      // Track Docker IDs that exist
+      const foundDockerIds = new Set<string>();
+
       for (const dockerContainer of dockerContainers) {
         const labels = dockerContainer.Labels || {};
         const claudeDockerId = labels['claude-docker.id'];
+
+        foundDockerIds.add(dockerContainer.Id);
 
         if (claudeDockerId) {
           // Check if container exists in database
@@ -921,6 +1041,16 @@ export class ContainerService {
               logger.debug({ containerId: claudeDockerId, oldStatus: existing.status, newStatus: dockerStatus }, 'Container status updated');
             }
           }
+        }
+      }
+
+      // Clean up orphaned database entries (DB records with no matching Docker container)
+      for (const entity of dbContainers) {
+        if (!foundDockerIds.has(entity.dockerId)) {
+          logger.warn({ containerId: entity.id, dockerId: entity.dockerId },
+            'Orphaned DB entry found (no Docker container), removing');
+          containerRepository.delete(entity.id);
+          this.containers.delete(entity.id);
         }
       }
 

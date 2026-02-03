@@ -352,23 +352,23 @@ export default function ContainerDetailPage() {
                 CPU Usage
               </h3>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                {container.metrics.cpu.toFixed(1)}%
+                {(container.metrics?.cpu ?? 0).toFixed(1)}%
               </p>
               <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mt-2">
                 <div
                   className={clsx(
                     'h-2 rounded-full transition-all',
-                    container.metrics.cpu > 80
+                    (container.metrics?.cpu ?? 0) > 80
                       ? 'bg-danger-600'
-                      : container.metrics.cpu > 60
+                      : (container.metrics?.cpu ?? 0) > 60
                       ? 'bg-warning-600'
                       : 'bg-success-600'
                   )}
-                  style={{ width: `${Math.min(container.metrics.cpu, 100)}%` }}
+                  style={{ width: `${Math.min(container.metrics?.cpu ?? 0, 100)}%` }}
                 />
               </div>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {container.limits.cpuCores} cores allocated
+                {container.limits?.cpuCores ?? 0} cores allocated
               </p>
             </div>
 
@@ -377,29 +377,32 @@ export default function ContainerDetailPage() {
                 Memory Usage
               </h3>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                {container.metrics.memory.toFixed(0)} MB
+                {(container.metrics?.memory ?? 0).toFixed(0)} MB
               </p>
-              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mt-2">
-                <div
-                  className={clsx(
-                    'h-2 rounded-full transition-all',
-                    (container.metrics.memory / container.limits.memoryMB) * 100 > 80
-                      ? 'bg-danger-600'
-                      : (container.metrics.memory / container.limits.memoryMB) * 100 > 60
-                      ? 'bg-warning-600'
-                      : 'bg-success-600'
-                  )}
-                  style={{
-                    width: `${Math.min(
-                      (container.metrics.memory / container.limits.memoryMB) * 100,
-                      100
-                    )}%`,
-                  }}
-                />
-              </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {container.limits.memoryMB} MB limit
-              </p>
+              {(() => {
+                const memLimit = container.limits?.memoryMB ?? 1
+                const memPercent = memLimit > 0 ? ((container.metrics?.memory ?? 0) / memLimit) * 100 : 0
+                return (
+                  <>
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mt-2">
+                      <div
+                        className={clsx(
+                          'h-2 rounded-full transition-all',
+                          memPercent > 80
+                            ? 'bg-danger-600'
+                            : memPercent > 60
+                            ? 'bg-warning-600'
+                            : 'bg-success-600'
+                        )}
+                        style={{ width: `${Math.min(memPercent, 100)}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      {container.limits?.memoryMB ?? 0} MB limit
+                    </p>
+                  </>
+                )
+              })()}
             </div>
 
             <div className="card p-6">
@@ -407,28 +410,29 @@ export default function ContainerDetailPage() {
                 Disk Usage
               </h3>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                {container.metrics.disk.toFixed(2)} GB
+                {(container.metrics?.disk ?? 0).toFixed(2)} GB
               </p>
-              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mt-2">
-                <div
-                  className={clsx(
-                    'h-2 rounded-full transition-all',
-                    (container.metrics.disk / container.limits.diskGB) * 100 > 80
-                      ? 'bg-danger-600'
-                      : (container.metrics.disk / container.limits.diskGB) * 100 > 60
-                      ? 'bg-warning-600'
-                      : 'bg-success-600'
-                  )}
-                  style={{
-                    width: `${Math.min(
-                      (container.metrics.disk / container.limits.diskGB) * 100,
-                      100
-                    )}%`,
-                  }}
-                />
-              </div>
+              {(() => {
+                const diskLimit = container.limits?.diskGB ?? 1
+                const diskPercent = diskLimit > 0 ? ((container.metrics?.disk ?? 0) / diskLimit) * 100 : 0
+                return (
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mt-2">
+                    <div
+                      className={clsx(
+                        'h-2 rounded-full transition-all',
+                        diskPercent > 80
+                          ? 'bg-danger-600'
+                          : diskPercent > 60
+                          ? 'bg-warning-600'
+                          : 'bg-success-600'
+                      )}
+                      style={{ width: `${Math.min(diskPercent, 100)}%` }}
+                    />
+                  </div>
+                )
+              })()}
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {container.limits.diskGB} GB limit
+                {container.limits?.diskGB ?? 0} GB limit
               </p>
             </div>
           </div>
@@ -526,19 +530,19 @@ export default function ContainerDetailPage() {
                 <div className="flex justify-between">
                   <dt className="text-sm text-gray-600 dark:text-gray-400">CPU Cores</dt>
                   <dd className="text-sm font-medium text-gray-900 dark:text-white">
-                    {container.limits.cpuCores}
+                    {container.limits?.cpuCores ?? 0}
                   </dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-sm text-gray-600 dark:text-gray-400">Memory</dt>
                   <dd className="text-sm font-medium text-gray-900 dark:text-white">
-                    {container.limits.memoryMB} MB
+                    {container.limits?.memoryMB ?? 0} MB
                   </dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-sm text-gray-600 dark:text-gray-400">Disk</dt>
                   <dd className="text-sm font-medium text-gray-900 dark:text-white">
-                    {container.limits.diskGB} GB
+                    {container.limits?.diskGB ?? 0} GB
                   </dd>
                 </div>
               </dl>
@@ -552,19 +556,19 @@ export default function ContainerDetailPage() {
                 <div className="flex justify-between">
                   <dt className="text-sm text-gray-600 dark:text-gray-400">CPU</dt>
                   <dd className="text-sm font-medium text-gray-900 dark:text-white">
-                    {container.metrics.cpu.toFixed(1)}%
+                    {(container.metrics?.cpu ?? 0).toFixed(1)}%
                   </dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-sm text-gray-600 dark:text-gray-400">Memory</dt>
                   <dd className="text-sm font-medium text-gray-900 dark:text-white">
-                    {container.metrics.memory.toFixed(0)} MB
+                    {(container.metrics?.memory ?? 0).toFixed(0)} MB
                   </dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-sm text-gray-600 dark:text-gray-400">Disk</dt>
                   <dd className="text-sm font-medium text-gray-900 dark:text-white">
-                    {container.metrics.disk.toFixed(2)} GB
+                    {(container.metrics?.disk ?? 0).toFixed(2)} GB
                   </dd>
                 </div>
               </dl>
@@ -578,19 +582,25 @@ export default function ContainerDetailPage() {
                 <div className="flex justify-between">
                   <dt className="text-sm text-gray-600 dark:text-gray-400">CPU</dt>
                   <dd className="text-sm font-medium text-gray-900 dark:text-white">
-                    {container.metrics.cpu.toFixed(1)}%
+                    {(container.metrics?.cpu ?? 0).toFixed(1)}%
                   </dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-sm text-gray-600 dark:text-gray-400">Memory</dt>
                   <dd className="text-sm font-medium text-gray-900 dark:text-white">
-                    {((container.metrics.memory / container.limits.memoryMB) * 100).toFixed(1)}%
+                    {(() => {
+                      const memLimit = container.limits?.memoryMB ?? 1
+                      return memLimit > 0 ? (((container.metrics?.memory ?? 0) / memLimit) * 100).toFixed(1) : '0.0'
+                    })()}%
                   </dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-sm text-gray-600 dark:text-gray-400">Disk</dt>
                   <dd className="text-sm font-medium text-gray-900 dark:text-white">
-                    {((container.metrics.disk / container.limits.diskGB) * 100).toFixed(1)}%
+                    {(() => {
+                      const diskLimit = container.limits?.diskGB ?? 1
+                      return diskLimit > 0 ? (((container.metrics?.disk ?? 0) / diskLimit) * 100).toFixed(1) : '0.0'
+                    })()}%
                   </dd>
                 </div>
               </dl>
@@ -618,8 +628,8 @@ export default function ContainerDetailPage() {
               {new Date().toISOString()} - Container {container.name} is {container.status}
             </p>
             <p className="text-gray-400">
-              {new Date().toISOString()} - CPU: {container.metrics.cpu.toFixed(1)}% | Memory:{' '}
-              {container.metrics.memory.toFixed(0)} MB
+              {new Date().toISOString()} - CPU: {(container.metrics?.cpu ?? 0).toFixed(1)}% | Memory:{' '}
+              {(container.metrics?.memory ?? 0).toFixed(0)} MB
             </p>
           </div>
         </div>

@@ -18,7 +18,7 @@ interface AnimatedDotsProps {
  * The dots cycle from 1 to maxDots, creating a loading animation effect
  * Uses fixed-width span to prevent text from shifting during animation
  *
- * Example: "Loading" -> "Loading." -> "Loading.." -> "Loading..." -> "Loading."
+ * Example: "Loading." -> "Loading.." -> "Loading..." -> "Loading."
  */
 export function AnimatedDots({
   text,

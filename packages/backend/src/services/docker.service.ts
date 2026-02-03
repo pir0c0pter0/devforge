@@ -64,8 +64,20 @@ export class DockerService {
 
       logger.info({ containerId }, 'Docker container stopped successfully');
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      // If container is already stopped or doesn't exist, that's fine
+      if (errorMessage.includes('is not running') ||
+          errorMessage.includes('No such container') ||
+          errorMessage.includes('304') ||
+          (error as any).statusCode === 304 ||
+          (error as any).statusCode === 404) {
+        logger.warn({ containerId }, 'Container already stopped or not found');
+        return;
+      }
+
       logger.error({ error, containerId }, 'Failed to stop Docker container');
-      throw new Error(`Failed to stop container: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(`Failed to stop container: ${errorMessage}`);
     }
   }
 
@@ -81,8 +93,18 @@ export class DockerService {
 
       logger.info({ containerId }, 'Docker container deleted successfully');
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      // If container doesn't exist in Docker, that's fine - it's already gone
+      if (errorMessage.includes('No such container') ||
+          errorMessage.includes('404') ||
+          (error as any).statusCode === 404) {
+        logger.warn({ containerId }, 'Container not found in Docker, may have been already deleted');
+        return;
+      }
+
       logger.error({ error, containerId }, 'Failed to delete Docker container');
-      throw new Error(`Failed to delete container: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(`Failed to delete container: ${errorMessage}`);
     }
   }
 

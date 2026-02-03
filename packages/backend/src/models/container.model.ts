@@ -155,6 +155,24 @@ export const ContainerMetricsSchema = z.object({
 export type ContainerMetrics = z.infer<typeof ContainerMetricsSchema>;
 
 /**
+ * Simple metrics for list view (frontend compatible)
+ */
+export const SimpleMetricsSchema = z.object({
+  cpu: z.number(),
+  memory: z.number(),
+  disk: z.number(),
+});
+
+/**
+ * Resource limits for frontend
+ */
+export const ResourceLimitsSchema = z.object({
+  cpuCores: z.number(),
+  memoryMB: z.number(),
+  diskGB: z.number(),
+});
+
+/**
  * Container list response item
  */
 export const ContainerListItemSchema = z.object({
@@ -165,7 +183,10 @@ export const ContainerListItemSchema = z.object({
   mode: ContainerModeSchema,
   status: ContainerStatusSchema,
   createdAt: z.date(),
-  metrics: ContainerMetricsSchema.optional(),
+  metrics: SimpleMetricsSchema,
+  limits: ResourceLimitsSchema,
+  activeAgents: z.number(),
+  queueLength: z.number(),
 });
 
 export type ContainerListItem = z.infer<typeof ContainerListItemSchema>;

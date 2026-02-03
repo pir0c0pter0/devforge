@@ -28,6 +28,10 @@ const MAX_DATA_POINTS = 20
 export function MetricsChart({ container }: MetricsChartProps) {
   const [data, setData] = useState<DataPoint[]>([])
 
+  const cpuValue = container?.metrics?.cpu ?? 0
+  const memoryValue = container?.metrics?.memory ?? 0
+  const memoryLimit = container?.limits?.memoryMB ?? 1
+
   useEffect(() => {
     const now = new Date()
     const timeString = now.toLocaleTimeString('en-US', {
@@ -38,8 +42,8 @@ export function MetricsChart({ container }: MetricsChartProps) {
 
     const newDataPoint: DataPoint = {
       time: timeString,
-      cpu: container.metrics.cpu,
-      memory: (container.metrics.memory / container.limits.memoryMB) * 100,
+      cpu: cpuValue,
+      memory: memoryLimit > 0 ? (memoryValue / memoryLimit) * 100 : 0,
     }
 
     setData((prevData) => {
@@ -49,7 +53,7 @@ export function MetricsChart({ container }: MetricsChartProps) {
       }
       return newData
     })
-  }, [container.metrics.cpu, container.metrics.memory, container.limits.memoryMB])
+  }, [cpuValue, memoryValue, memoryLimit])
 
   if (data.length === 0) {
     return (

@@ -61,12 +61,12 @@ class WebSocketClient {
     })
   }
 
-  subscribeToContainer(containerId: string): void {
-    this.socket?.emit('subscribe:container', containerId)
+  subscribeToContainer(containerId: string, interval?: number): void {
+    this.socket?.emit('subscribe:metrics', { containerId, interval: interval ?? 2000 })
   }
 
-  unsubscribeFromContainer(containerId: string): void {
-    this.socket?.emit('unsubscribe:container', containerId)
+  unsubscribeFromContainer(_containerId: string): void {
+    this.socket?.emit('unsubscribe:metrics')
   }
 
   disconnect(): void {

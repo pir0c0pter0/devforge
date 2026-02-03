@@ -46,11 +46,12 @@ export default function MetricsPage() {
 
     const runningContainers = containers.filter((c) => c.status === 'running')
     const avgCpu = runningContainers.length > 0
-      ? runningContainers.reduce((sum, c) => sum + c.metrics.cpu, 0) / runningContainers.length
+      ? runningContainers.reduce((sum, c) => sum + (c.metrics?.cpu ?? 0), 0) / runningContainers.length
       : 0
     const avgMemory = runningContainers.length > 0
       ? runningContainers.reduce((sum, c) => {
-          const memPercent = (c.metrics.memory / c.limits.memoryMB) * 100
+          const memLimit = c.limits?.memoryMB ?? 1
+          const memPercent = memLimit > 0 ? ((c.metrics?.memory ?? 0) / memLimit) * 100 : 0
           return sum + memPercent
         }, 0) / runningContainers.length
       : 0
@@ -80,11 +81,11 @@ export default function MetricsPage() {
   const stoppedContainers = containers.filter((c) => c.status === 'stopped')
   const errorContainers = containers.filter((c) => c.status === 'error')
 
-  const totalCpuUsage = runningContainers.reduce((sum, c) => sum + c.metrics.cpu, 0)
-  const totalMemoryUsage = runningContainers.reduce((sum, c) => sum + c.metrics.memory, 0)
-  const totalMemoryLimit = runningContainers.reduce((sum, c) => sum + c.limits.memoryMB, 0)
-  const totalDiskUsage = containers.reduce((sum, c) => sum + c.metrics.disk, 0)
-  const totalDiskLimit = containers.reduce((sum, c) => sum + c.limits.diskGB, 0)
+  const totalCpuUsage = runningContainers.reduce((sum, c) => sum + (c.metrics?.cpu ?? 0), 0)
+  const totalMemoryUsage = runningContainers.reduce((sum, c) => sum + (c.metrics?.memory ?? 0), 0)
+  const totalMemoryLimit = runningContainers.reduce((sum, c) => sum + (c.limits?.memoryMB ?? 0), 0)
+  const totalDiskUsage = containers.reduce((sum, c) => sum + (c.metrics?.disk ?? 0), 0)
+  const totalDiskLimit = containers.reduce((sum, c) => sum + (c.limits?.diskGB ?? 0), 0)
 
   const statusData = [
     { name: 'Running', value: runningContainers.length, color: '#22c55e' },
@@ -92,11 +93,14 @@ export default function MetricsPage() {
     { name: 'Error', value: errorContainers.length, color: '#ef4444' },
   ].filter((item) => item.value > 0)
 
-  const containerMetricsData = runningContainers.map((c) => ({
-    name: c.name.length > 15 ? `${c.name.slice(0, 15)}...` : c.name,
-    cpu: Math.round(c.metrics.cpu * 10) / 10,
-    memory: Math.round((c.metrics.memory / c.limits.memoryMB) * 100 * 10) / 10,
-  }))
+  const containerMetricsData = runningContainers.map((c) => {
+    const memLimit = c.limits?.memoryMB ?? 1
+    return {
+      name: c.name.length > 15 ? `${c.name.slice(0, 15)}...` : c.name,
+      cpu: Math.round((c.metrics?.cpu ?? 0) * 10) / 10,
+      memory: memLimit > 0 ? Math.round(((c.metrics?.memory ?? 0) / memLimit) * 100 * 10) / 10 : 0,
+    }
+  })
 
   return (
     <div className="space-y-8">
@@ -396,7 +400,7 @@ export default function MetricsPage() {
             </thead>
             <tbody>
               {containers
-                .sort((a, b) => b.metrics.cpu - a.metrics.cpu)
+                .sort((a, b) => (b.metrics?.cpu ?? 0) - (a.metrics?.cpu ?? 0))
                 .slice(0, 10)
                 .map((container) => (
                   <tr
@@ -427,48 +431,49 @@ export default function MetricsPage() {
                           <div
                             className={clsx(
                               'h-2 rounded-full',
-                              container.metrics.cpu > 80
+                              (container.metrics?.cpu ?? 0) > 80
                                 ? 'bg-danger-600'
-                                : container.metrics.cpu > 60
+                                : (container.metrics?.cpu ?? 0) > 60
                                 ? 'bg-warning-600'
                                 : 'bg-success-600'
                             )}
-                            style={{ width: `${Math.min(container.metrics.cpu, 100)}%` }}
+                            style={{ width: `${Math.min(container.metrics?.cpu ?? 0, 100)}%` }}
                           />
                         </div>
                         <span className="text-sm text-gray-600 dark:text-gray-400">
-                          {container.metrics.cpu.toFixed(1)}%
+                          {(container.metrics?.cpu ?? 0).toFixed(1)}%
                         </span>
                       </div>
                     </td>
                     <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-16 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                          <div
-                            className={clsx(
-                              'h-2 rounded-full',
-                              (container.metrics.memory / container.limits.memoryMB) * 100 > 80
-                                ? 'bg-danger-600'
-                                : (container.metrics.memory / container.limits.memoryMB) * 100 > 60
-                                ? 'bg-warning-600'
-                                : 'bg-success-600'
-                            )}
-                            style={{
-                              width: `${Math.min(
-                                (container.metrics.memory / container.limits.memoryMB) * 100,
-                                100
-                              )}%`,
-                            }}
-                          />
-                        </div>
-                        <span className="text-sm text-gray-600 dark:text-gray-400">
-                          {container.metrics.memory.toFixed(0)} MB
-                        </span>
-                      </div>
+                      {(() => {
+                        const memLimit = container.limits?.memoryMB ?? 1
+                        const memPercent = memLimit > 0 ? ((container.metrics?.memory ?? 0) / memLimit) * 100 : 0
+                        return (
+                          <div className="flex items-center gap-2">
+                            <div className="w-16 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                              <div
+                                className={clsx(
+                                  'h-2 rounded-full',
+                                  memPercent > 80
+                                    ? 'bg-danger-600'
+                                    : memPercent > 60
+                                    ? 'bg-warning-600'
+                                    : 'bg-success-600'
+                                )}
+                                style={{ width: `${Math.min(memPercent, 100)}%` }}
+                              />
+                            </div>
+                            <span className="text-sm text-gray-600 dark:text-gray-400">
+                              {(container.metrics?.memory ?? 0).toFixed(0)} MB
+                            </span>
+                          </div>
+                        )
+                      })()}
                     </td>
                     <td className="py-3 px-4">
                       <span className="text-sm text-gray-600 dark:text-gray-400">
-                        {container.metrics.disk.toFixed(2)} GB
+                        {(container.metrics?.disk ?? 0).toFixed(2)} GB
                       </span>
                     </td>
                   </tr>

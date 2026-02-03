@@ -212,6 +212,40 @@ router.post(
 );
 
 /**
+ * POST /api/containers/:id/restart
+ * Restart a container
+ */
+router.post(
+  '/:id/restart',
+  validateParams(ContainerIdParamsSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const id = req.params['id'] as string;
+
+      logger.info({ containerId: id }, 'Restarting container');
+
+      await containerService.stop(id);
+      const container = await containerService.start(id);
+
+      logger.info({ containerId: id }, 'Container restarted successfully');
+
+      res.json(successResponse(container, 'Container restarted successfully'));
+    } catch (error) {
+      logger.error({ error, containerId: req.params['id'] }, 'Failed to restart container');
+
+      const statusCode = error instanceof Error && error.message.includes('not found') ? 404 : 500;
+
+      res.status(statusCode).json(
+        errorResponse(
+          error instanceof Error ? error.message : 'Failed to restart container',
+          statusCode
+        )
+      );
+    }
+  }
+);
+
+/**
  * DELETE /api/containers/:id
  * Delete a container
  */
@@ -229,7 +263,7 @@ router.delete(
 
       logger.info({ containerId: id }, 'Container deleted successfully');
 
-      res.json(successResponse(null, 'Container deleted successfully'));
+      res.json(successResponse({ id, deleted: true }, 'Container deleted successfully'));
     } catch (error) {
       logger.error({ error, containerId: req.params['id'] }, 'Failed to delete container');
 

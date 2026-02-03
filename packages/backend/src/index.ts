@@ -143,13 +143,22 @@ io.on('connection', (socket) => {
 
     logger.info({ socketId: socket.id, containerId, interval }, 'Client subscribed to metrics');
 
+    // Clear any existing interval before creating a new one
+    if (socket.data.metricsInterval) {
+      clearInterval(socket.data.metricsInterval);
+    }
+
     const metricsInterval = setInterval(async () => {
       try {
-        const metrics = await metricsService.getContainerMetrics(containerId);
+        const fullMetrics = await metricsService.getContainerMetrics(containerId);
 
+        // Emit flat metrics format expected by frontend
         socket.emit('metrics:update', {
           containerId,
-          metrics,
+          timestamp: new Date().toISOString(),
+          cpu: fullMetrics.cpu.usage,
+          memory: fullMetrics.memory.percentage,
+          disk: fullMetrics.disk.percentage,
         });
       } catch (error) {
         logger.error({ error, containerId }, 'Failed to emit metrics');
