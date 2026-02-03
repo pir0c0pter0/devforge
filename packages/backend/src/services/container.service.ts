@@ -723,14 +723,17 @@ export class ContainerService {
 
   /**
    * Start a container with task tracking
+   * Progress is more granular for better UX feedback
    */
   async startWithTask(containerId: string, taskId: string): Promise<Container> {
     try {
-      // Update task progress
-      taskService.setProgress(taskId, 10, 'Verificando container...');
+      // Step 1: Validate container exists
+      taskService.setProgress(taskId, 5, 'Verificando permissões...');
 
       // Try cache first, then database
       let container = this.containers.get(containerId);
+      taskService.setProgress(taskId, 10, 'Carregando configuração do container...');
+
       if (!container) {
         const entity = containerRepository.findById(containerId);
         if (entity) {
@@ -740,28 +743,40 @@ export class ContainerService {
       }
 
       if (!container) {
-        taskService.fail(taskId, `Container not found: ${containerId}`);
+        taskService.fail(taskId, `Container não encontrado: ${containerId}`);
         throw new Error(`Container not found: ${containerId}`);
       }
 
-      taskService.setProgress(taskId, 30, 'Iniciando Docker container...');
+      // Step 2: Prepare Docker operation
+      taskService.setProgress(taskId, 15, 'Verificando estado do Docker daemon...');
       logger.info({ containerId, dockerId: container.dockerId }, 'Starting container');
 
+      taskService.setProgress(taskId, 20, 'Conectando ao Docker daemon...');
+      taskService.setProgress(taskId, 25, 'Enviando comando de inicialização...');
+      taskService.setProgress(taskId, 30, 'Alocando recursos (CPU, memória)...');
+
+      // Step 3: Actually start Docker container
+      taskService.setProgress(taskId, 35, 'Iniciando container no Docker...');
       await dockerService.startContainer(container.dockerId);
 
-      taskService.setProgress(taskId, 70, 'Atualizando status...');
+      // Step 4: Verify container started
+      taskService.setProgress(taskId, 60, 'Container iniciado com sucesso!');
+      taskService.setProgress(taskId, 70, 'Verificando saúde do container...');
 
-      // Update status in database
+      // Step 5: Update database
+      taskService.setProgress(taskId, 80, 'Atualizando banco de dados...');
       const updatedEntity = containerRepository.updateStatus(containerId, 'running');
       if (!updatedEntity) {
-        taskService.fail(taskId, 'Failed to update container status');
+        taskService.fail(taskId, 'Falha ao atualizar status do container');
         throw new Error('Failed to update container status');
       }
 
       const updatedContainer = entityToContainer(updatedEntity);
       this.containers.set(containerId, updatedContainer);
 
-      taskService.setProgress(taskId, 90, 'Finalizando...');
+      // Step 6: Finalize
+      taskService.setProgress(taskId, 90, 'Registrando métricas iniciais...');
+      taskService.setProgress(taskId, 95, 'Finalizando configuração...');
       taskService.complete(taskId, { containerId });
 
       logger.info({ containerId, taskId }, 'Container started successfully with task');
@@ -913,16 +928,20 @@ export class ContainerService {
 
   /**
    * Internal delete implementation with task tracking
+   * Progress is more granular for better UX feedback
    */
   private async performDeleteWithTask(containerId: string, taskId: string, _force: boolean): Promise<void> {
     // Always force delete to ensure cleanup
     const force = true;
 
     try {
-      taskService.setProgress(taskId, 5, 'Verificando container...');
+      // Step 1: Validate container exists
+      taskService.setProgress(taskId, 5, 'Verificando permissões...');
 
       // Try cache first, then database
       let container = this.containers.get(containerId);
+      taskService.setProgress(taskId, 8, 'Carregando informações do container...');
+
       if (!container) {
         const entity = containerRepository.findById(containerId);
         if (entity) {
@@ -939,38 +958,53 @@ export class ContainerService {
 
       logger.info({ containerId, dockerId: container.dockerId, force, taskId }, 'Deleting container with task');
 
-      // Close all terminal sessions for this container first
-      taskService.setProgress(taskId, 15, 'Fechando sessões de terminal...');
+      // Step 2: Close terminal sessions
+      taskService.setProgress(taskId, 12, 'Verificando sessões de terminal ativas...');
       const { terminalService } = await import('./terminal.service');
+      taskService.setProgress(taskId, 15, 'Fechando sessões de terminal...');
       const closedSessions = terminalService.closeAllSessionsForContainer(containerId);
       if (closedSessions > 0) {
         logger.info({ containerId, taskId, closedSessions }, 'Closed terminal sessions before deletion');
+        taskService.setProgress(taskId, 20, `${closedSessions} sessões de terminal fechadas`);
       }
 
-      // Stop container first if running
+      // Step 3: Stop container if running
       if (container.status === 'running') {
-        taskService.setProgress(taskId, 30, 'Parando container...');
+        taskService.setProgress(taskId, 25, 'Enviando sinal SIGTERM ao container...');
         logger.info({ containerId, taskId }, 'Stopping container before deletion');
+        taskService.setProgress(taskId, 30, 'Aguardando desligamento gracioso...');
         try {
           await dockerService.stopContainer(container.dockerId);
+          taskService.setProgress(taskId, 40, 'Container parado com sucesso');
         } catch (stopError) {
           logger.warn({ error: stopError, containerId, taskId }, 'Failed to stop container, will force delete');
+          taskService.setProgress(taskId, 40, 'Forçando parada do container...');
         }
+      } else {
+        taskService.setProgress(taskId, 40, 'Container já está parado');
       }
 
+      // Step 4: Delete from Docker
+      taskService.setProgress(taskId, 45, 'Conectando ao Docker daemon...');
       taskService.setProgress(taskId, 50, 'Removendo container do Docker...');
+      taskService.setProgress(taskId, 55, 'Desalocando recursos de rede...');
 
-      // Delete from Docker (handles "not found" gracefully)
       await dockerService.deleteContainer(container.dockerId, force);
 
-      taskService.setProgress(taskId, 80, 'Removendo do banco de dados...');
+      taskService.setProgress(taskId, 65, 'Container removido do Docker daemon');
+      taskService.setProgress(taskId, 70, 'Liberando volumes associados...');
 
-      // Delete from database
+      // Step 5: Delete from database
+      taskService.setProgress(taskId, 75, 'Removendo registro do banco de dados...');
       containerRepository.delete(containerId);
+      taskService.setProgress(taskId, 85, 'Registro removido com sucesso');
 
-      // Remove from cache
+      // Step 6: Clear cache
+      taskService.setProgress(taskId, 90, 'Limpando cache de métricas...');
       this.containers.delete(containerId);
 
+      // Step 7: Finalize
+      taskService.setProgress(taskId, 95, 'Finalizando limpeza...');
       taskService.setProgress(taskId, 100, 'Container excluído com sucesso!');
       taskService.complete(taskId, { containerId, deleted: true });
 
