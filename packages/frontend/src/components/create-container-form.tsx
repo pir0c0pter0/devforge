@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { apiClient } from '@/lib/api-client'
 import { useI18n } from '@/lib/i18n'
 import type { TemplateType, ContainerMode, RepositoryType } from '@/lib/types'
+import { AnimatedDots } from '@/components/ui/animated-dots'
 import clsx from 'clsx'
 
 const createContainerSchema = z.object({
@@ -31,6 +32,7 @@ export function CreateContainerForm() {
   const { t } = useI18n()
   const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [progressStep, setProgressStep] = useState<string | null>(null)
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({})
   const [generalError, setGeneralError] = useState<string | null>(null)
 
@@ -68,6 +70,18 @@ export function CreateContainerForm() {
 
       setIsSubmitting(true)
 
+      // Show progress steps
+      setProgressStep('creating')
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      if (validated.repositoryType === 'github' && validated.repositoryUrl) {
+        setProgressStep('starting')
+        await new Promise(resolve => setTimeout(resolve, 500))
+        setProgressStep('cloning')
+      }
+
+      setProgressStep('copying')
+
       const response = await apiClient.createContainer({
         name: validated.name,
         template: validated.template,
@@ -78,6 +92,8 @@ export function CreateContainerForm() {
       })
 
       if (response.success) {
+        setProgressStep('finishing')
+        await new Promise(resolve => setTimeout(resolve, 300))
         router.push('/containers')
       } else {
         setGeneralError(response.error || t.createContainer.failedCreate)
@@ -96,6 +112,26 @@ export function CreateContainerForm() {
       }
     } finally {
       setIsSubmitting(false)
+      setProgressStep(null)
+    }
+  }
+
+  const getButtonText = (): React.ReactNode => {
+    if (!isSubmitting) return t.createContainer.create
+
+    switch (progressStep) {
+      case 'creating':
+        return <AnimatedDots text={t.createContainer.progressCreating} />
+      case 'starting':
+        return <AnimatedDots text={t.createContainer.progressStarting} />
+      case 'cloning':
+        return <AnimatedDots text={t.createContainer.progressCloningRepo} />
+      case 'copying':
+        return <AnimatedDots text={t.createContainer.progressCopyingConfigs} />
+      case 'finishing':
+        return <AnimatedDots text={t.createContainer.progressFinishing} />
+      default:
+        return <AnimatedDots text={t.createContainer.progressCreating} />
     }
   }
 
@@ -323,7 +359,7 @@ export function CreateContainerForm() {
           className="btn-primary flex-1"
           disabled={isSubmitting}
         >
-          {isSubmitting ? t.createContainer.creating : t.createContainer.create}
+          {getButtonText()}
         </button>
         <button
           type="button"

@@ -8,6 +8,7 @@ import { useContainerStore } from '@/stores/container.store'
 import { MetricsChart } from '@/components/metrics-chart'
 import { InstructionQueue } from '@/components/instruction-queue'
 import { ContainerDetailSkeleton } from '@/components/ui/skeleton'
+import { AnimatedDots } from '@/components/ui/animated-dots'
 import type { Container } from '@/lib/types'
 import clsx from 'clsx'
 
@@ -292,7 +293,7 @@ export default function ContainerDetailPage() {
               className="btn-primary"
               disabled={container.status === 'creating'}
             >
-              {container.status === 'creating' ? 'Starting...' : 'Start'}
+              {container.status === 'creating' ? <AnimatedDots text="Starting" /> : 'Start'}
             </button>
           )}
           <button

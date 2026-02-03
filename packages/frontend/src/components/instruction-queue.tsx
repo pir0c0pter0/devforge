@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { apiClient } from '@/lib/api-client'
 import type { QueueItem } from '@/lib/types'
+import { AnimatedDots } from '@/components/ui/animated-dots'
 import clsx from 'clsx'
 
 interface InstructionQueueProps {
@@ -107,7 +108,9 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
       <div className="card p-6">
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-primary-600 border-t-transparent"></div>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Loading queue...</p>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+            <AnimatedDots text="Loading queue" />
+          </p>
         </div>
       </div>
     )
@@ -130,7 +133,7 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
             disabled={isSubmitting}
           />
           <button type="submit" className="btn-primary" disabled={isSubmitting}>
-            {isSubmitting ? 'Adding...' : 'Add'}
+            {isSubmitting ? <AnimatedDots text="Adding" /> : 'Add'}
           </button>
         </form>
 

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useI18n } from '@/lib/i18n'
+import { AnimatedDots } from '@/components/ui/animated-dots'
 
 interface ClaudeStatus {
   authenticated: boolean
@@ -148,7 +149,9 @@ export default function SettingsPage() {
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-terminal-green border-t-transparent"></div>
-          <p className="mt-4 text-terminal-textMuted">{t.settings.loading}</p>
+          <p className="mt-4 text-terminal-textMuted">
+            <AnimatedDots text={t.settings.loading} />
+          </p>
         </div>
       </div>
     )
@@ -448,7 +451,7 @@ export default function SettingsPage() {
                     disabled={sshGenerating}
                     className="btn-primary disabled:opacity-50"
                   >
-                    {sshGenerating ? t.settings.github.generating : t.settings.github.generateSsh}
+                    {sshGenerating ? <AnimatedDots text={t.settings.github.generatingText} /> : t.settings.github.generateSsh}
                   </button>
                   <button
                     onClick={() => setShowSshForm(false)}

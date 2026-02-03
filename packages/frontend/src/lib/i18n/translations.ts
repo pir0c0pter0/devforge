@@ -52,11 +52,11 @@ export const translations = {
       cores: 'cores',
       start: 'Iniciar',
       stop: 'Parar',
-      starting: 'Iniciando...',
+      starting: 'Iniciando',
       shell: 'Terminal',
       vscode: 'VS Code',
       delete: 'Excluir',
-      deleting: 'Excluindo...',
+      deleting: 'Excluindo',
       confirmDelete: 'Tem certeza que deseja excluir',
       failedStart: 'Falha ao iniciar container',
       failedStop: 'Falha ao parar container',
@@ -108,18 +108,23 @@ export const translations = {
       cpuCores: 'Núcleos de CPU',
       memoryMb: 'Memória (MB)',
       diskGb: 'Espaço em Disco (GB)',
-      creating: 'Criando...',
+      creating: 'Criando',
       create: 'Criar Container',
       cancel: 'Cancelar',
       failedCreate: 'Falha ao criar container',
       unexpectedError: 'Ocorreu um erro inesperado',
+      progressCreating: 'Criando container',
+      progressStarting: 'Iniciando container',
+      progressCloningRepo: 'Clonando repositório',
+      progressCopyingConfigs: 'Copiando configurações',
+      progressFinishing: 'Finalizando',
     },
 
     // Settings
     settings: {
       title: 'Configurações',
       subtitle: 'Gerencie a autenticação e configurações do sistema',
-      loading: 'Carregando configurações...',
+      loading: 'Carregando configurações',
 
       // Claude Auth
       claudeAuth: {
@@ -161,6 +166,7 @@ export const translations = {
         emailPlaceholder: 'seu@email.com',
         emailInvalid: 'Por favor, insira um email válido',
         generating: 'Gerando...',
+        generatingText: 'Gerando',
         generateSsh: 'Gerar chave SSH',
         configureSsh: 'Configurar SSH',
         generateError: 'Erro ao gerar chave SSH',
@@ -207,7 +213,7 @@ export const translations = {
 
     // Common
     common: {
-      loading: 'Carregando...',
+      loading: 'Carregando',
       error: 'Erro',
       success: 'Sucesso',
       cancel: 'Cancelar',
@@ -269,11 +275,11 @@ export const translations = {
       cores: 'cores',
       start: 'Start',
       stop: 'Stop',
-      starting: 'Starting...',
+      starting: 'Starting',
       shell: 'Shell',
       vscode: 'VS Code',
       delete: 'Delete',
-      deleting: 'Deleting...',
+      deleting: 'Deleting',
       confirmDelete: 'Are you sure you want to delete',
       failedStart: 'Failed to start container',
       failedStop: 'Failed to stop container',
@@ -325,18 +331,23 @@ export const translations = {
       cpuCores: 'CPU Cores',
       memoryMb: 'Memory (MB)',
       diskGb: 'Disk Space (GB)',
-      creating: 'Creating...',
+      creating: 'Creating',
       create: 'Create Container',
       cancel: 'Cancel',
       failedCreate: 'Failed to create container',
       unexpectedError: 'An unexpected error occurred',
+      progressCreating: 'Creating container',
+      progressStarting: 'Starting container',
+      progressCloningRepo: 'Cloning repository',
+      progressCopyingConfigs: 'Copying configurations',
+      progressFinishing: 'Finishing',
     },
 
     // Settings
     settings: {
       title: 'Settings',
       subtitle: 'Manage authentication and system settings',
-      loading: 'Loading settings...',
+      loading: 'Loading settings',
 
       // Claude Auth
       claudeAuth: {
@@ -378,6 +389,7 @@ export const translations = {
         emailPlaceholder: 'your@email.com',
         emailInvalid: 'Please enter a valid email',
         generating: 'Generating...',
+        generatingText: 'Generating',
         generateSsh: 'Generate SSH key',
         configureSsh: 'Configure SSH',
         generateError: 'Error generating SSH key',
@@ -424,7 +436,7 @@ export const translations = {
 
     // Common
     common: {
-      loading: 'Loading...',
+      loading: 'Loading',
       error: 'Error',
       success: 'Success',
       cancel: 'Cancel',

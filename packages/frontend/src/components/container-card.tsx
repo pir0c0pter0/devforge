@@ -5,6 +5,7 @@ import type { Container } from '@/lib/types'
 import { apiClient } from '@/lib/api-client'
 import { useContainerStore } from '@/stores/container.store'
 import { useI18n } from '@/lib/i18n'
+import { AnimatedDots } from '@/components/ui/animated-dots'
 import clsx from 'clsx'
 
 interface ContainerCardProps {
@@ -215,7 +216,7 @@ export function ContainerCard({ container }: ContainerCardProps) {
               className="btn-primary text-sm py-1.5"
               disabled={isDeleting || container.status === 'creating'}
             >
-              {container.status === 'creating' ? t.container.starting : t.container.start}
+              {container.status === 'creating' ? <AnimatedDots text={t.container.starting} /> : t.container.start}
             </button>
           )}
 
@@ -242,7 +243,7 @@ export function ContainerCard({ container }: ContainerCardProps) {
             className="btn-danger text-sm py-1.5"
             disabled={isDeleting}
           >
-            {isDeleting ? t.container.deleting : t.container.delete}
+            {isDeleting ? <AnimatedDots text={t.container.deleting} /> : t.container.delete}
           </button>
         </div>
       </div>
