@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-1.0.0-22c55e?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/badge/Version-1.1.0-22c55e?style=for-the-badge" alt="Version">
   <img src="https://img.shields.io/badge/License-MIT-22c55e?style=for-the-badge" alt="License">
   <img src="https://img.shields.io/badge/Next.js-15-0d1117?style=for-the-badge&logo=next.js&logoColor=white" alt="Next.js">
   <img src="https://img.shields.io/badge/Docker-Required-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker">
@@ -180,8 +180,11 @@ cd claude-docker
 # 2. Execute o instalador
 ./install-local.sh
 
-# 3. Inicie o dashboard
-claude-docker-web
+# 3. Execute a configuracao inicial (primeira vez)
+claude-docker-web init
+
+# 4. Inicie o dashboard
+claude-docker-web start
 ```
 
 ### O que o instalador faz
@@ -191,6 +194,45 @@ claude-docker-web
 3. Copia arquivos para `~/.local/share/claude-docker-web/`
 4. Cria script `claude-docker-web` em `~/.local/bin/`
 5. Cria diretorio de config em `~/.config/claude-docker-web/`
+
+### Comandos do CLI
+
+| Comando | Descricao |
+|---------|-----------|
+| `claude-docker-web init` | Configuracao inicial interativa |
+| `claude-docker-web start` | Iniciar backend e frontend |
+| `claude-docker-web stop` | Parar todos os servicos |
+| `claude-docker-web restart` | Reiniciar servicos |
+| `claude-docker-web status` | Ver status dos servicos |
+| `claude-docker-web logs` | Ver logs em tempo real |
+| `claude-docker-web logs backend` | Ver apenas logs do backend |
+| `claude-docker-web logs frontend` | Ver apenas logs do frontend |
+| `claude-docker-web config` | Editar configuracao |
+| `claude-docker-web build-images` | Construir imagens Docker |
+| `claude-docker-web doctor` | Diagnostico completo |
+| `claude-docker-web update` | Atualizar instalacao |
+| `claude-docker-web help` | Mostrar ajuda |
+
+### Configuracao Inicial (init)
+
+O comando `init` verifica e configura automaticamente:
+
+1. **Dependencias** - Node.js, pnpm, Docker
+2. **Grupo docker** - Adiciona usuario ao grupo se necessario
+3. **Docker daemon** - Inicia e habilita o servico
+4. **Claude Code** - Configura autenticacao via navegador
+5. **Chaves SSH** - Gera chaves para GitHub
+6. **Imagens Docker** - Constroi as imagens base
+7. **PATH** - Configura ~/.local/bin no PATH
+
+### Tratamento de Permissoes Docker
+
+O script detecta automaticamente se o grupo docker esta ativo:
+
+- **Grupo ativo**: Executa comandos normalmente
+- **Grupo inativo**: Usa `sg docker` automaticamente
+
+Isso resolve o problema comum de precisar fazer logout/login apos adicionar ao grupo docker.
 
 ### Instalacao Manual
 
@@ -211,17 +253,10 @@ mkdir -p ~/.local/bin
 mkdir -p ~/.config/claude-docker-web
 
 # Copie arquivos
-cp -r packages docker ~/.local/share/claude-docker-web/
+cp -r packages docker node_modules pnpm-workspace.yaml package.json ~/.local/share/claude-docker-web/
 
-# Crie script de inicializacao
-cat > ~/.local/bin/claude-docker-web << 'EOF'
-#!/bin/bash
-cd ~/.local/share/claude-docker-web/packages/backend
-PORT=8000 ENABLE_AUTH=false node dist/index.js &
-cd ~/.local/share/claude-docker-web/packages/frontend
-pnpm start &
-echo "Dashboard: http://localhost:3000"
-EOF
+# Copie o script CLI
+cp install-local.sh ~/.local/bin/claude-docker-web
 chmod +x ~/.local/bin/claude-docker-web
 
 # Adicione ao PATH (se necessario)
@@ -428,6 +463,13 @@ chore: manutencao
 
 ## Troubleshooting
 
+### Diagnostico Rapido
+
+```bash
+# Execute o diagnostico completo
+claude-docker-web doctor
+```
+
 ### Docker nao inicia
 
 ```bash
@@ -445,8 +487,36 @@ sudo systemctl enable docker
 # Adicionar usuario ao grupo docker
 sudo usermod -aG docker $USER
 
-# Aplicar sem logout
+# Opcao 1: Aplicar sem logout
 newgrp docker
+
+# Opcao 2: O script usa 'sg docker' automaticamente
+claude-docker-web start  # Funciona mesmo sem relogin
+```
+
+O script v1.1.0 detecta automaticamente se o grupo docker esta ativo e usa `sg docker` quando necessario.
+
+### Backend nao inicia (EACCES docker.sock)
+
+Se o backend falhar com erro de permissao no socket do Docker:
+
+```bash
+# O script ja resolve isso automaticamente com sg docker
+claude-docker-web start
+
+# Ou manualmente:
+sg docker -c "cd ~/.local/share/claude-docker-web/packages/backend && PORT=8000 ENABLE_AUTH=false node dist/index.js"
+```
+
+### Imagens Docker nao encontradas
+
+```bash
+# Construir todas as imagens
+claude-docker-web build-images
+
+# Ou durante o init
+claude-docker-web init
+# Responda 'Y' quando perguntar sobre construir imagens
 ```
 
 ### Porta em uso
@@ -455,11 +525,23 @@ newgrp docker
 # Verificar processos nas portas
 lsof -i :3000 -i :8000
 
-# Matar processos
+# O script stop ja libera as portas
+claude-docker-web stop
+
+# Ou matar manualmente
 fuser -k 3000/tcp 8000/tcp
 ```
 
-### Erro de build
+### Erro de build nos Dockerfiles
+
+Os Dockerfiles v1.1.0 corrigem problemas de UID e permissoes pnpm:
+
+```bash
+# Reconstruir imagens com a versao corrigida
+claude-docker-web build-images
+```
+
+### Erro de build do projeto
 
 ```bash
 # Limpar e reinstalar
@@ -481,12 +563,32 @@ chmod 644 ~/.ssh/*.pub
 ### Logs do sistema
 
 ```bash
-# Backend
-tail -f ~/.config/claude-docker-web/backend.log
+# Todos os logs
+claude-docker-web logs
 
-# Frontend
+# Apenas backend
+claude-docker-web logs backend
+
+# Apenas frontend
+claude-docker-web logs frontend
+
+# Ou diretamente
+tail -f ~/.config/claude-docker-web/backend.log
 tail -f ~/.config/claude-docker-web/frontend.log
 ```
+
+### Verificar Status Completo
+
+```bash
+claude-docker-web status
+```
+
+Mostra:
+- Backend (PID + API status)
+- Frontend (PID + HTTP status)
+- Docker (acessibilidade)
+- Redis (se instalado)
+- Containers ativos
 
 ---
 
@@ -497,7 +599,7 @@ MIT License - veja [LICENSE](LICENSE)
 ---
 
 <p align="center">
-  <code>>_ claude-docker-web v1.0.0</code>
+  <code>>_ claude-docker-web v1.1.0</code>
 </p>
 
 <p align="center">

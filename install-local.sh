@@ -4,10 +4,10 @@
 #
 set -e
 
-VERSION="1.0.0"
-INSTALL_DIR="/home/mariostjr/.local/share/claude-docker-web"
-CONFIG_DIR="/home/mariostjr/.config/claude-docker-web"
-BIN_DIR="/home/mariostjr/.local/bin"
+VERSION="1.1.0"
+INSTALL_DIR="$HOME/.local/share/claude-docker-web"
+CONFIG_DIR="$HOME/.config/claude-docker-web"
+BIN_DIR="$HOME/.local/bin"
 
 # Cores
 RED='\033[0;31m'
@@ -37,7 +37,7 @@ show_banner() {
  | |    | |/ _` | | | |/ _` |/ _ \ | |  | |/ _ \ / __| |/ / _ \ '__|
  | |____| | (_| | |_| | (_| |  __/ | |__| | (_) | (__|   <  __/ |
   \_____|_|\__,_|\__,_|\__,_|\___| |_____/ \___/ \___|_|\_\___|_|
-                                                            Web v1.0
+                                                            Web v1.1
 EOF
     echo -e "${NC}"
 }
@@ -45,6 +45,20 @@ EOF
 # Verificar se comando existe
 check_cmd() {
     command -v "$1" &>/dev/null
+}
+
+# Verificar se grupo docker está ativo na sessão atual
+check_docker_group_active() {
+    id -nG | grep -qw docker
+}
+
+# Executar comando com grupo docker se necessário
+run_with_docker_group() {
+    if check_docker_group_active; then
+        "$@"
+    else
+        sg docker -c "$*"
+    fi
 }
 
 # ============================================
@@ -99,22 +113,11 @@ cmd_init() {
         all_ok=false
     fi
 
-    # Redis
+    # Redis (opcional)
     if check_cmd redis-server; then
         log_success "Redis instalado"
     else
-        log_warn "Redis não encontrado (opcional, mas recomendado)"
-        echo ""
-        read -p "  Deseja instalar o Redis agora? (Y/n) " -n 1 -r
-        echo ""
-        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-            if check_cmd pacman; then
-                sudo pacman -S redis --noconfirm
-            elif check_cmd apt; then
-                sudo apt install -y redis-server
-            fi
-            log_success "Redis instalado"
-        fi
+        log_info "Redis não encontrado (opcional)"
     fi
 
     echo ""
@@ -123,8 +126,18 @@ cmd_init() {
     log_step "Verificando permissões do Docker..."
     echo ""
 
-    if groups | grep -q docker; then
+    # Primeiro verifica se está no grupo
+    if groups "$USER" | grep -qw docker; then
         log_success "Usuário está no grupo 'docker'"
+
+        # Verifica se o grupo está ativo na sessão atual
+        if check_docker_group_active; then
+            log_success "Grupo 'docker' ativo na sessão atual"
+        else
+            log_warn "Grupo 'docker' NÃO está ativo nesta sessão"
+            log_info "O sistema usará 'sg docker' automaticamente"
+            log_info "Para ativar permanentemente, faça logout/login ou execute: newgrp docker"
+        fi
     else
         log_warn "Usuário NÃO está no grupo 'docker'"
         echo ""
@@ -147,19 +160,29 @@ cmd_init() {
     log_step "Verificando Docker daemon..."
     echo ""
 
-    if docker info &>/dev/null 2>&1; then
-        log_success "Docker daemon está rodando"
+    # Tenta com sg docker se necessário
+    if run_with_docker_group docker info &>/dev/null 2>&1; then
+        log_success "Docker daemon está rodando e acessível"
     else
-        log_warn "Docker daemon não está rodando"
-        echo ""
-        read -p "  Deseja iniciar o Docker agora? (requer sudo) (Y/n) " -n 1 -r
-        echo ""
-        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-            sudo systemctl start docker
-            sudo systemctl enable docker
-            log_success "Docker iniciado e habilitado no boot"
+        # Verifica se está rodando mas sem acesso
+        if systemctl is-active --quiet docker 2>/dev/null; then
+            log_warn "Docker daemon está rodando mas sem acesso"
+            log_info "Verifique as permissões do grupo docker"
+            if [ "$needs_relogin" = false ]; then
+                all_ok=false
+            fi
         else
-            all_ok=false
+            log_warn "Docker daemon não está rodando"
+            echo ""
+            read -p "  Deseja iniciar o Docker agora? (requer sudo) (Y/n) " -n 1 -r
+            echo ""
+            if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+                sudo systemctl start docker
+                sudo systemctl enable docker
+                log_success "Docker iniciado e habilitado no boot"
+            else
+                all_ok=false
+            fi
         fi
     fi
 
@@ -185,10 +208,7 @@ cmd_init() {
                 log_info "Abrindo Claude Code para autenticação..."
                 log_info "Siga as instruções no navegador e depois pressione Ctrl+C"
                 echo ""
-                claude --help &>/dev/null || npx @anthropic-ai/claude-code --help &>/dev/null || true
-
-                # Tentar abrir o claude para login
-                timeout 60 claude 2>/dev/null || timeout 60 npx @anthropic-ai/claude-code 2>/dev/null || true
+                timeout 120 claude 2>/dev/null || true
 
                 if [ -f "$HOME/.claude/.credentials.json" ]; then
                     log_success "Autenticação concluída!"
@@ -219,6 +239,8 @@ cmd_init() {
         if [[ ! $REPLY =~ ^[Nn]$ ]]; then
             echo ""
             read -p "  Seu email (para a chave): " email
+            mkdir -p "$HOME/.ssh"
+            chmod 700 "$HOME/.ssh"
             ssh-keygen -t ed25519 -C "$email" -f "$HOME/.ssh/id_ed25519" -N ""
             log_success "Chave SSH gerada em ~/.ssh/id_ed25519"
             echo ""
@@ -238,9 +260,14 @@ cmd_init() {
     log_step "Verificando imagens Docker..."
     echo ""
 
-    if docker images | grep -q "claude-docker/full"; then
-        log_success "Imagem claude-docker/full encontrada"
-    else
+    local has_images=false
+    if run_with_docker_group docker images 2>/dev/null | grep -q "claude-docker"; then
+        has_images=true
+        log_success "Imagens claude-docker encontradas"
+        run_with_docker_group docker images --format "  {{.Repository}}:{{.Tag}}\t{{.Size}}" 2>/dev/null | grep "claude-docker" || true
+    fi
+
+    if [ "$has_images" = false ]; then
         log_warn "Imagens Docker não encontradas"
         echo ""
         read -p "  Deseja construir as imagens agora? (pode demorar ~5min) (Y/n) " -n 1 -r
@@ -250,22 +277,28 @@ cmd_init() {
                 log_info "Construindo imagens..."
                 cd "$INSTALL_DIR/docker/base-image"
 
-                # Build imagem completa
-                if [ -f "Dockerfile.both" ]; then
-                    docker build -t claude-docker/full:latest -f Dockerfile.both . 2>&1 | tail -5
-                    log_success "Imagem claude-docker/full construída"
-                fi
-
-                # Build imagem só Claude
+                # Build imagem Claude (principal)
                 if [ -f "Dockerfile.claude" ]; then
-                    docker build -t claude-docker/claude:latest -f Dockerfile.claude . 2>&1 | tail -5
+                    echo ""
+                    log_info "Construindo claude-docker/claude..."
+                    run_with_docker_group docker build -t claude-docker/claude:latest -f Dockerfile.claude . 2>&1 | tail -3
                     log_success "Imagem claude-docker/claude construída"
                 fi
 
-                # Build imagem só VS Code
+                # Build imagem VS Code
                 if [ -f "Dockerfile.vscode" ]; then
-                    docker build -t claude-docker/vscode:latest -f Dockerfile.vscode . 2>&1 | tail -5
+                    echo ""
+                    log_info "Construindo claude-docker/vscode..."
+                    run_with_docker_group docker build -t claude-docker/vscode:latest -f Dockerfile.vscode . 2>&1 | tail -3
                     log_success "Imagem claude-docker/vscode construída"
+                fi
+
+                # Build imagem completa (both)
+                if [ -f "Dockerfile.both" ]; then
+                    echo ""
+                    log_info "Construindo claude-docker/both..."
+                    run_with_docker_group docker build -t claude-docker/both:latest -f Dockerfile.both . 2>&1 | tail -3
+                    log_success "Imagem claude-docker/both construída"
                 fi
             else
                 log_error "Diretório de imagens não encontrado: $INSTALL_DIR/docker/base-image"
@@ -325,10 +358,18 @@ cmd_init() {
     check_cmd docker && echo -e "${GREEN}OK${NC}" || echo -e "${RED}FALTANDO${NC}"
 
     printf "  %-30s" "Docker daemon:"
-    docker info &>/dev/null 2>&1 && echo -e "${GREEN}RODANDO${NC}" || echo -e "${RED}PARADO${NC}"
+    run_with_docker_group docker info &>/dev/null 2>&1 && echo -e "${GREEN}RODANDO${NC}" || echo -e "${RED}INACESSÍVEL${NC}"
 
     printf "  %-30s" "Grupo docker:"
-    groups | grep -q docker && echo -e "${GREEN}OK${NC}" || echo -e "${YELLOW}PENDENTE (relogin)${NC}"
+    if groups "$USER" | grep -qw docker; then
+        if check_docker_group_active; then
+            echo -e "${GREEN}OK (ativo)${NC}"
+        else
+            echo -e "${YELLOW}OK (requer sg docker)${NC}"
+        fi
+    else
+        echo -e "${RED}NÃO CONFIGURADO${NC}"
+    fi
 
     printf "  %-30s" "Claude autenticado:"
     [ -f "$HOME/.claude/.credentials.json" ] && echo -e "${GREEN}OK${NC}" || echo -e "${YELLOW}PENDENTE${NC}"
@@ -337,7 +378,7 @@ cmd_init() {
     [ -f "$HOME/.ssh/id_rsa" -o -f "$HOME/.ssh/id_ed25519" ] && echo -e "${GREEN}OK${NC}" || echo -e "${YELLOW}OPCIONAL${NC}"
 
     printf "  %-30s" "Imagens Docker:"
-    docker images | grep -q "claude-docker" && echo -e "${GREEN}OK${NC}" || echo -e "${YELLOW}NÃO CONSTRUÍDAS${NC}"
+    run_with_docker_group docker images 2>/dev/null | grep -q "claude-docker" && echo -e "${GREEN}OK${NC}" || echo -e "${YELLOW}NÃO CONSTRUÍDAS${NC}"
 
     echo ""
     echo -e "${CYAN}════════════════════════════════════════════════════════════${NC}"
@@ -382,14 +423,18 @@ cmd_start() {
     echo ""
 
     # Verificar pré-requisitos
-    if ! docker info &>/dev/null 2>&1; then
-        log_error "Docker daemon não está rodando"
-        log_info "Execute: sudo systemctl start docker"
-        log_info "Ou execute: claude-docker-web init"
+    if ! run_with_docker_group docker info &>/dev/null 2>&1; then
+        log_error "Docker daemon não está acessível"
+        echo ""
+        log_info "Possíveis soluções:"
+        echo "  1. Iniciar Docker: sudo systemctl start docker"
+        echo "  2. Adicionar ao grupo: sudo usermod -aG docker \$USER"
+        echo "  3. Ativar grupo: newgrp docker"
+        echo "  4. Executar diagnóstico: claude-docker-web init"
         exit 1
     fi
 
-    # Iniciar Redis se não estiver rodando
+    # Iniciar Redis se disponível e não estiver rodando
     if check_cmd redis-server; then
         if ! pgrep -x redis-server > /dev/null; then
             log_info "Iniciando Redis..."
@@ -397,36 +442,98 @@ cmd_start() {
         fi
     fi
 
-    # Copiar config
+    # Criar diretórios de config
     mkdir -p "$CONFIG_DIR"
+
+    # Copiar config se existir
     if [ -f "$CONFIG_DIR/config.env" ]; then
         cp "$CONFIG_DIR/config.env" "$INSTALL_DIR/packages/backend/.env" 2>/dev/null || true
     fi
 
-    # Verificar se já está rodando
-    if [ -f "$CONFIG_DIR/backend.pid" ] && kill -0 $(cat "$CONFIG_DIR/backend.pid") 2>/dev/null; then
-        log_warn "Backend já está rodando (PID: $(cat $CONFIG_DIR/backend.pid))"
-    else
-        # Iniciar backend
-        cd "$INSTALL_DIR/packages/backend"
-        PORT=8000 node dist/index.js > "$CONFIG_DIR/backend.log" 2>&1 &
-        BACKEND_PID=$!
-        echo "$BACKEND_PID" > "$CONFIG_DIR/backend.pid"
-        log_success "Backend iniciado (PID: $BACKEND_PID)"
+    # Matar processos antigos se existirem
+    if [ -f "$CONFIG_DIR/backend.pid" ]; then
+        local old_pid=$(cat "$CONFIG_DIR/backend.pid")
+        if kill -0 "$old_pid" 2>/dev/null; then
+            log_warn "Backend já rodando (PID: $old_pid), reiniciando..."
+            kill "$old_pid" 2>/dev/null || true
+            sleep 1
+        fi
+        rm -f "$CONFIG_DIR/backend.pid"
     fi
 
-    if [ -f "$CONFIG_DIR/frontend.pid" ] && kill -0 $(cat "$CONFIG_DIR/frontend.pid") 2>/dev/null; then
-        log_warn "Frontend já está rodando (PID: $(cat $CONFIG_DIR/frontend.pid))"
-    else
-        # Iniciar frontend
-        cd "$INSTALL_DIR/packages/frontend"
-        PORT=3000 npx next start > "$CONFIG_DIR/frontend.log" 2>&1 &
-        FRONTEND_PID=$!
-        echo "$FRONTEND_PID" > "$CONFIG_DIR/frontend.pid"
-        log_success "Frontend iniciado (PID: $FRONTEND_PID)"
+    if [ -f "$CONFIG_DIR/frontend.pid" ]; then
+        local old_pid=$(cat "$CONFIG_DIR/frontend.pid")
+        if kill -0 "$old_pid" 2>/dev/null; then
+            log_warn "Frontend já rodando (PID: $old_pid), reiniciando..."
+            kill "$old_pid" 2>/dev/null || true
+            sleep 1
+        fi
+        rm -f "$CONFIG_DIR/frontend.pid"
     fi
+
+    # Liberar portas se necessário
+    fuser -k 8000/tcp 2>/dev/null || true
+    fuser -k 3000/tcp 2>/dev/null || true
+    sleep 1
+
+    # Iniciar backend com grupo docker e auth desabilitado
+    log_info "Iniciando backend..."
+    cd "$INSTALL_DIR/packages/backend"
+
+    if check_docker_group_active; then
+        PORT=8000 ENABLE_AUTH=false node dist/index.js > "$CONFIG_DIR/backend.log" 2>&1 &
+        BACKEND_PID=$!
+    else
+        # Usa sg docker para executar com permissão do grupo
+        sg docker -c "cd '$INSTALL_DIR/packages/backend' && PORT=8000 ENABLE_AUTH=false node dist/index.js" > "$CONFIG_DIR/backend.log" 2>&1 &
+        BACKEND_PID=$!
+    fi
+
+    echo "$BACKEND_PID" > "$CONFIG_DIR/backend.pid"
+
+    # Aguardar backend iniciar
+    sleep 2
+
+    # Verificar se backend iniciou
+    if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+        log_error "Backend falhou ao iniciar. Verifique os logs:"
+        echo ""
+        tail -20 "$CONFIG_DIR/backend.log" 2>/dev/null || true
+        exit 1
+    fi
+
+    # Verificar se API está respondendo
+    local retries=5
+    while [ $retries -gt 0 ]; do
+        if curl -s http://localhost:8000/api/containers &>/dev/null; then
+            log_success "Backend iniciado (PID: $BACKEND_PID)"
+            break
+        fi
+        sleep 1
+        retries=$((retries - 1))
+    done
+
+    if [ $retries -eq 0 ]; then
+        log_warn "Backend iniciou mas API não respondeu ainda"
+    fi
+
+    # Iniciar frontend
+    log_info "Iniciando frontend..."
+    cd "$INSTALL_DIR/packages/frontend"
+    PORT=3000 npx next start > "$CONFIG_DIR/frontend.log" 2>&1 &
+    FRONTEND_PID=$!
+    echo "$FRONTEND_PID" > "$CONFIG_DIR/frontend.pid"
 
     sleep 2
+
+    if kill -0 "$FRONTEND_PID" 2>/dev/null; then
+        log_success "Frontend iniciado (PID: $FRONTEND_PID)"
+    else
+        log_error "Frontend falhou ao iniciar. Verifique os logs:"
+        tail -20 "$CONFIG_DIR/frontend.log" 2>/dev/null || true
+        exit 1
+    fi
+
     echo ""
     echo -e "${GREEN}════════════════════════════════════════${NC}"
     echo -e "${GREEN}       Claude Docker Web Iniciado!${NC}"
@@ -447,23 +554,52 @@ cmd_start() {
 cmd_stop() {
     echo -e "${CYAN}Parando Claude Docker Web...${NC}"
 
+    local stopped=false
+
     if [ -f "$CONFIG_DIR/backend.pid" ]; then
-        kill $(cat "$CONFIG_DIR/backend.pid") 2>/dev/null || true
+        local pid=$(cat "$CONFIG_DIR/backend.pid")
+        if kill -0 "$pid" 2>/dev/null; then
+            kill "$pid" 2>/dev/null || true
+            log_success "Backend parado (PID: $pid)"
+            stopped=true
+        fi
         rm -f "$CONFIG_DIR/backend.pid"
-        log_success "Backend parado"
     fi
 
     if [ -f "$CONFIG_DIR/frontend.pid" ]; then
-        kill $(cat "$CONFIG_DIR/frontend.pid") 2>/dev/null || true
+        local pid=$(cat "$CONFIG_DIR/frontend.pid")
+        if kill -0 "$pid" 2>/dev/null; then
+            kill "$pid" 2>/dev/null || true
+            log_success "Frontend parado (PID: $pid)"
+            stopped=true
+        fi
         rm -f "$CONFIG_DIR/frontend.pid"
-        log_success "Frontend parado"
     fi
 
-    # Matar processos órfãos
-    pkill -f "claude-docker-web.*node" 2>/dev/null || true
+    # Matar processos órfãos relacionados
+    pkill -f "node.*dist/index.js" 2>/dev/null || true
+    pkill -f "next-server" 2>/dev/null || true
+    pkill -f "sg docker.*node" 2>/dev/null || true
+
+    # Liberar portas
+    fuser -k 8000/tcp 2>/dev/null || true
+    fuser -k 3000/tcp 2>/dev/null || true
 
     echo ""
-    log_success "Claude Docker Web parado"
+    if [ "$stopped" = true ]; then
+        log_success "Claude Docker Web parado"
+    else
+        log_info "Nenhum serviço estava rodando"
+    fi
+}
+
+# ============================================
+# COMANDO: restart
+# ============================================
+cmd_restart() {
+    cmd_stop
+    sleep 1
+    cmd_start
 }
 
 # ============================================
@@ -477,7 +613,12 @@ cmd_status() {
     # Backend
     printf "  %-15s" "Backend:"
     if [ -f "$CONFIG_DIR/backend.pid" ] && kill -0 $(cat "$CONFIG_DIR/backend.pid") 2>/dev/null; then
-        echo -e "${GREEN}RODANDO${NC} (PID: $(cat $CONFIG_DIR/backend.pid))"
+        local pid=$(cat "$CONFIG_DIR/backend.pid")
+        if curl -s http://localhost:8000/api/containers &>/dev/null; then
+            echo -e "${GREEN}RODANDO${NC} (PID: $pid, API OK)"
+        else
+            echo -e "${YELLOW}RODANDO${NC} (PID: $pid, API não responde)"
+        fi
     else
         echo -e "${RED}PARADO${NC}"
     fi
@@ -485,17 +626,22 @@ cmd_status() {
     # Frontend
     printf "  %-15s" "Frontend:"
     if [ -f "$CONFIG_DIR/frontend.pid" ] && kill -0 $(cat "$CONFIG_DIR/frontend.pid") 2>/dev/null; then
-        echo -e "${GREEN}RODANDO${NC} (PID: $(cat $CONFIG_DIR/frontend.pid))"
+        local pid=$(cat "$CONFIG_DIR/frontend.pid")
+        if curl -sI http://localhost:3000 2>/dev/null | grep -q "200"; then
+            echo -e "${GREEN}RODANDO${NC} (PID: $pid, HTTP OK)"
+        else
+            echo -e "${YELLOW}RODANDO${NC} (PID: $pid)"
+        fi
     else
         echo -e "${RED}PARADO${NC}"
     fi
 
     # Docker
     printf "  %-15s" "Docker:"
-    if docker info &>/dev/null 2>&1; then
+    if run_with_docker_group docker info &>/dev/null 2>&1; then
         echo -e "${GREEN}RODANDO${NC}"
     else
-        echo -e "${RED}PARADO${NC}"
+        echo -e "${RED}INACESSÍVEL${NC}"
     fi
 
     # Redis
@@ -509,12 +655,12 @@ cmd_status() {
     # Containers ativos
     echo ""
     printf "  %-15s" "Containers:"
-    local count=$(docker ps --filter "label=claude-docker.id" --format "{{.ID}}" 2>/dev/null | wc -l)
+    local count=$(run_with_docker_group docker ps --filter "name=claude-docker" --format "{{.ID}}" 2>/dev/null | wc -l)
     echo "$count ativos"
 
     if [ "$count" -gt 0 ]; then
         echo ""
-        docker ps --filter "label=claude-docker.id" --format "    {{.Names}}\t{{.Status}}" 2>/dev/null
+        run_with_docker_group docker ps --filter "name=claude-docker" --format "    {{.Names}}\t{{.Status}}" 2>/dev/null
     fi
 
     echo ""
@@ -524,22 +670,55 @@ cmd_status() {
 # COMANDO: logs
 # ============================================
 cmd_logs() {
+    local target="${2:-all}"
+
     echo -e "${CYAN}Logs do Claude Docker Web (Ctrl+C para sair)${NC}"
     echo ""
 
-    if [ -f "$CONFIG_DIR/backend.log" ] || [ -f "$CONFIG_DIR/frontend.log" ]; then
-        tail -f "$CONFIG_DIR/backend.log" "$CONFIG_DIR/frontend.log" 2>/dev/null
-    else
-        log_warn "Nenhum log encontrado. O serviço está rodando?"
-    fi
+    case "$target" in
+        backend|back|b)
+            if [ -f "$CONFIG_DIR/backend.log" ]; then
+                tail -f "$CONFIG_DIR/backend.log"
+            else
+                log_warn "Log do backend não encontrado"
+            fi
+            ;;
+        frontend|front|f)
+            if [ -f "$CONFIG_DIR/frontend.log" ]; then
+                tail -f "$CONFIG_DIR/frontend.log"
+            else
+                log_warn "Log do frontend não encontrado"
+            fi
+            ;;
+        *)
+            if [ -f "$CONFIG_DIR/backend.log" ] || [ -f "$CONFIG_DIR/frontend.log" ]; then
+                tail -f "$CONFIG_DIR/backend.log" "$CONFIG_DIR/frontend.log" 2>/dev/null
+            else
+                log_warn "Nenhum log encontrado. O serviço está rodando?"
+            fi
+            ;;
+    esac
 }
 
 # ============================================
 # COMANDO: config
 # ============================================
 cmd_config() {
+    mkdir -p "$CONFIG_DIR"
+
+    if [ ! -f "$CONFIG_DIR/config.env" ]; then
+        cat > "$CONFIG_DIR/config.env" << 'ENVEOF'
+# Claude Docker Web Configuration
+PORT=8000
+ENABLE_AUTH=false
+# REDIS_URL=redis://localhost:6379
+# JWT_SECRET=your-secret-here
+ENVEOF
+        log_info "Arquivo de configuração criado: $CONFIG_DIR/config.env"
+    fi
+
     ${EDITOR:-nano} "$CONFIG_DIR/config.env"
-    log_info "Reinicie o serviço para aplicar: claude-docker-web stop && claude-docker-web start"
+    log_info "Reinicie o serviço para aplicar: claude-docker-web restart"
 }
 
 # ============================================
@@ -548,10 +727,15 @@ cmd_config() {
 cmd_update() {
     log_info "Atualizando Claude Docker Web..."
 
+    # Parar serviços primeiro
+    cmd_stop 2>/dev/null || true
+
     cd "$INSTALL_DIR"
 
     # Pull updates
-    git pull 2>/dev/null || log_warn "Não foi possível atualizar via git"
+    if [ -d ".git" ]; then
+        git pull 2>/dev/null || log_warn "Não foi possível atualizar via git"
+    fi
 
     # Reinstall dependencies
     pnpm install
@@ -560,7 +744,52 @@ cmd_update() {
     pnpm build
 
     log_success "Atualizado!"
-    log_info "Reinicie o serviço: claude-docker-web stop && claude-docker-web start"
+    log_info "Inicie o serviço: claude-docker-web start"
+}
+
+# ============================================
+# COMANDO: build-images
+# Construir imagens Docker
+# ============================================
+cmd_build_images() {
+    log_info "Construindo imagens Docker..."
+    echo ""
+
+    if [ ! -d "$INSTALL_DIR/docker/base-image" ]; then
+        log_error "Diretório de imagens não encontrado: $INSTALL_DIR/docker/base-image"
+        exit 1
+    fi
+
+    cd "$INSTALL_DIR/docker/base-image"
+
+    # Build imagem Claude
+    if [ -f "Dockerfile.claude" ]; then
+        echo ""
+        log_info "Construindo claude-docker/claude..."
+        run_with_docker_group docker build -t claude-docker/claude:latest -f Dockerfile.claude .
+        log_success "Imagem claude-docker/claude construída"
+    fi
+
+    # Build imagem VS Code
+    if [ -f "Dockerfile.vscode" ]; then
+        echo ""
+        log_info "Construindo claude-docker/vscode..."
+        run_with_docker_group docker build -t claude-docker/vscode:latest -f Dockerfile.vscode .
+        log_success "Imagem claude-docker/vscode construída"
+    fi
+
+    # Build imagem Both
+    if [ -f "Dockerfile.both" ]; then
+        echo ""
+        log_info "Construindo claude-docker/both..."
+        run_with_docker_group docker build -t claude-docker/both:latest -f Dockerfile.both .
+        log_success "Imagem claude-docker/both construída"
+    fi
+
+    echo ""
+    log_success "Todas as imagens foram construídas!"
+    echo ""
+    run_with_docker_group docker images --format "  {{.Repository}}:{{.Tag}}\t{{.Size}}" | grep "claude-docker"
 }
 
 # ============================================
@@ -589,7 +818,7 @@ cmd_doctor() {
     check_cmd docker && echo "$(docker --version | cut -d' ' -f3 | tr -d ',')" || echo "NÃO INSTALADO"
 
     printf "  %-20s" "Redis:"
-    check_cmd redis-server && echo "$(redis-server --version | cut -d' ' -f3 | tr -d 'v=')" || echo "NÃO INSTALADO"
+    check_cmd redis-server && echo "$(redis-server --version | cut -d' ' -f3 | tr -d 'v=')" || echo "NÃO INSTALADO (opcional)"
 
     printf "  %-20s" "Git:"
     check_cmd git && echo "$(git --version | cut -d' ' -f3)" || echo "NÃO INSTALADO"
@@ -598,10 +827,24 @@ cmd_doctor() {
 
     echo -e "${CYAN}Docker:${NC}"
     printf "  %-20s" "Daemon:"
-    docker info &>/dev/null 2>&1 && echo "RODANDO" || echo "PARADO"
+    if run_with_docker_group docker info &>/dev/null 2>&1; then
+        echo "RODANDO"
+    elif systemctl is-active --quiet docker 2>/dev/null; then
+        echo "RODANDO (sem acesso)"
+    else
+        echo "PARADO"
+    fi
 
     printf "  %-20s" "Grupo docker:"
-    groups | grep -q docker && echo "OK" || echo "USUÁRIO NÃO ESTÁ NO GRUPO"
+    if groups "$USER" | grep -qw docker; then
+        if check_docker_group_active; then
+            echo "OK (ativo)"
+        else
+            echo "OK (requer sg docker)"
+        fi
+    else
+        echo "NÃO CONFIGURADO"
+    fi
 
     printf "  %-20s" "Socket:"
     [ -S /var/run/docker.sock ] && echo "OK" || echo "NÃO ENCONTRADO"
@@ -636,22 +879,39 @@ cmd_doctor() {
     echo ""
 
     echo -e "${CYAN}Imagens Docker:${NC}"
-    docker images --format "  {{.Repository}}:{{.Tag}}\t{{.Size}}" 2>/dev/null | grep "claude-docker" || echo "  Nenhuma imagem construída"
+    run_with_docker_group docker images --format "  {{.Repository}}:{{.Tag}}\t{{.Size}}" 2>/dev/null | grep "claude-docker" || echo "  Nenhuma imagem construída"
 
     echo ""
 
     echo -e "${CYAN}Instalação:${NC}"
     printf "  %-20s" "Diretório:"
-    [ -d "$INSTALL_DIR" ] && echo "OK" || echo "NÃO ENCONTRADO"
+    [ -d "$INSTALL_DIR" ] && echo "OK ($INSTALL_DIR)" || echo "NÃO ENCONTRADO"
 
     printf "  %-20s" "Config:"
-    [ -f "$CONFIG_DIR/config.env" ] && echo "OK" || echo "NÃO ENCONTRADO"
+    [ -f "$CONFIG_DIR/config.env" ] && echo "OK" || echo "PADRÃO"
 
     printf "  %-20s" "Backend dist:"
     [ -d "$INSTALL_DIR/packages/backend/dist" ] && echo "OK" || echo "NÃO COMPILADO"
 
     printf "  %-20s" "Frontend .next:"
     [ -d "$INSTALL_DIR/packages/frontend/.next" ] && echo "OK" || echo "NÃO COMPILADO"
+
+    echo ""
+
+    echo -e "${CYAN}Portas:${NC}"
+    printf "  %-20s" "8000 (Backend):"
+    if ss -tlnp 2>/dev/null | grep -q ":8000 "; then
+        echo "EM USO"
+    else
+        echo "LIVRE"
+    fi
+
+    printf "  %-20s" "3000 (Frontend):"
+    if ss -tlnp 2>/dev/null | grep -q ":3000 "; then
+        echo "EM USO"
+    else
+        echo "LIVRE"
+    fi
 
     echo ""
 }
@@ -665,20 +925,24 @@ cmd_help() {
     echo ""
     echo -e "${BOLD}Comandos:${NC}"
     echo ""
-    echo -e "  ${CYAN}init${NC}      Configuração inicial interativa"
-    echo -e "            Verifica dependências, permissões, autenticação"
+    echo -e "  ${CYAN}init${NC}          Configuração inicial interativa"
+    echo -e "                Verifica dependências, permissões, autenticação"
     echo ""
-    echo -e "  ${CYAN}start${NC}     Iniciar o dashboard"
-    echo -e "  ${CYAN}stop${NC}      Parar o dashboard"
-    echo -e "  ${CYAN}status${NC}    Ver status dos serviços"
-    echo -e "  ${CYAN}logs${NC}      Ver logs em tempo real"
+    echo -e "  ${CYAN}start${NC}         Iniciar o dashboard"
+    echo -e "  ${CYAN}stop${NC}          Parar o dashboard"
+    echo -e "  ${CYAN}restart${NC}       Reiniciar o dashboard"
+    echo -e "  ${CYAN}status${NC}        Ver status dos serviços"
+    echo -e "  ${CYAN}logs${NC}          Ver logs em tempo real"
+    echo -e "                logs backend  - apenas backend"
+    echo -e "                logs frontend - apenas frontend"
     echo ""
-    echo -e "  ${CYAN}config${NC}    Editar configuração"
-    echo -e "  ${CYAN}update${NC}    Atualizar para última versão"
-    echo -e "  ${CYAN}doctor${NC}    Diagnóstico completo do sistema"
+    echo -e "  ${CYAN}config${NC}        Editar configuração"
+    echo -e "  ${CYAN}update${NC}        Atualizar para última versão"
+    echo -e "  ${CYAN}build-images${NC}  Construir imagens Docker"
+    echo -e "  ${CYAN}doctor${NC}        Diagnóstico completo do sistema"
     echo ""
-    echo -e "  ${CYAN}help${NC}      Esta ajuda"
-    echo -e "  ${CYAN}version${NC}   Mostrar versão"
+    echo -e "  ${CYAN}help${NC}          Esta ajuda"
+    echo -e "  ${CYAN}version${NC}       Mostrar versão"
     echo ""
     echo -e "${BOLD}Exemplos:${NC}"
     echo ""
@@ -707,17 +971,23 @@ main() {
         stop)
             cmd_stop
             ;;
+        restart|rs)
+            cmd_restart
+            ;;
         status|st)
             cmd_status
             ;;
         logs|log)
-            cmd_logs
+            cmd_logs "$@"
             ;;
         config|cfg)
             cmd_config
             ;;
         update|up)
             cmd_update
+            ;;
+        build-images|build)
+            cmd_build_images
             ;;
         doctor|diag)
             cmd_doctor
