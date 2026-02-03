@@ -1,98 +1,237 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-1.0.0-blue?style=for-the-badge" alt="Version">
-  <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License">
-  <img src="https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=next.js&logoColor=white" alt="Next.js">
+  <img src="https://img.shields.io/badge/Version-1.0.0-22c55e?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/badge/License-MIT-22c55e?style=for-the-badge" alt="License">
+  <img src="https://img.shields.io/badge/Next.js-15-0d1117?style=for-the-badge&logo=next.js&logoColor=white" alt="Next.js">
   <img src="https://img.shields.io/badge/Docker-Required-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker">
+  <img src="https://img.shields.io/badge/TypeScript-5.0-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript">
 </p>
 
-<h1 align="center">>_ Claude Docker Manager</h1>
+```
+   _____ _                 _        _____             _
+  / ____| |               | |      |  __ \           | |
+ | |    | | __ _ _   _  __| | ___  | |  | | ___   ___| | _____ _ __
+ | |    | |/ _` | | | |/ _` |/ _ \ | |  | |/ _ \ / __| |/ / _ \ '__|
+ | |____| | (_| | |_| | (_| |  __/ | |__| | (_) | (__|   <  __/ |
+  \_____|_|\__,_|\__,_|\__,_|\___| |_____/ \___/ \___|_|\_\___|_|
+
+  >_ Claude Docker Manager - Web Dashboard
+```
 
 <p align="center">
-  <strong>Dashboard web para gerenciar containers Docker com Claude Code e VS Code</strong>
-</p>
-
-<p align="center">
-  <a href="#-funcionalidades">Funcionalidades</a> •
-  <a href="#-instalacao">Instalação</a> •
-  <a href="#-uso">Uso</a> •
-  <a href="#-configuracao">Configuração</a> •
-  <a href="#-tecnologias">Tecnologias</a>
+  <strong>Dashboard web para gerenciar containers Docker isolados com Claude Code e VS Code</strong>
 </p>
 
 ---
 
-## 🌟 Funcionalidades
+## Indice
 
-Interface web moderna com tema terminal para criar e gerenciar **containers Docker isolados** com Claude Code e VS Code integrados.
+- [Funcionalidades](#-funcionalidades)
+- [Screenshots](#-screenshots)
+- [Arquitetura](#-arquitetura)
+- [Instalacao](#-instalacao)
+- [Uso](#-uso)
+- [Configuracao](#%EF%B8%8F-configuracao)
+- [API Reference](#-api-reference)
+- [Desenvolvimento](#-desenvolvimento)
+- [Troubleshooting](#-troubleshooting)
 
-| Recurso | Descrição |
+---
+
+## Funcionalidades
+
+### Dashboard Principal
+| Recurso | Descricao |
 |---------|-----------|
-| 🐳 **Containers Isolados** | Cada projeto em seu próprio container Docker |
-| 🤖 **Claude Code** | Assistente de IA para desenvolvimento |
-| 💻 **VS Code Server** | IDE no navegador via code-server |
-| 📊 **Métricas em Tempo Real** | CPU, memória e disco por container |
-| 🌐 **Interface Web** | Dashboard moderno com tema terminal |
-| 🌍 **Multilíngue** | Português (BR) e English |
+| **Containers Isolados** | Cada projeto em seu proprio container Docker |
+| **Claude Code** | Assistente de IA para desenvolvimento integrado |
+| **VS Code Server** | IDE completa no navegador via code-server |
+| **Metricas Real-Time** | CPU, memoria e disco via WebSocket |
+| **Tema Terminal** | Interface escura com cores verdes estilo terminal |
+| **Multilingue** | Portugues (BR) e English |
 
-### ✨ Destaques
+### Gerenciamento de Containers
+- Criar containers com templates pre-configurados
+- Iniciar/Parar containers
+- Abrir terminal (shell) no container
+- Abrir VS Code no navegador
+- Monitorar recursos em tempo real
+- Excluir containers com confirmacao
 
-- 🔒 **Isolamento total** entre projetos
-- 📋 **Dashboard** com status de todos os containers
-- 🔐 **Autenticação** do Claude via navegador
-- 🔑 **SSH/GitHub** configurável pela web
-- 🎨 **Tema terminal** com cores verdes
-- 📱 **Responsivo** - funciona em qualquer dispositivo
+### Configuracoes Web
+- Autenticacao do Claude Code via navegador
+- Geracao de chaves SSH para GitHub
+- Selecao de idioma (PT-BR/EN)
+- Status do sistema (Docker, Redis, SSH)
+- Visualizacao de configuracoes
 
 ---
 
-## 🚀 Instalação
+## Screenshots
 
-### Pré-requisitos
+### Tema Terminal Verde
+```
+┌─────────────────────────────────────────────────────────────┐
+│  >_ Claude Docker Manager                                   │
+│  Orquestracao de containers com IA                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  $ Painel                                                   │
+│  Monitore e gerencie seus containers Docker                │
+│                                                             │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐      │
+│  │ Total    │ │ Rodando  │ │ Agentes  │ │ Fila     │      │
+│  │    3     │ │    2     │ │    5     │ │    0     │      │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘      │
+│                                                             │
+│  $ Containers                                               │
+│  ┌─────────────────────┐ ┌─────────────────────┐           │
+│  │ > meu-projeto       │ │ > outro-projeto     │           │
+│  │ [rodando] [ambos]   │ │ [parado] [claude]   │           │
+│  │ CPU: 12% | Mem: 45% │ │ CPU: 0%  | Mem: 0%  │           │
+│  │ [Parar] [Terminal]  │ │ [Iniciar] [VS Code] │           │
+│  └─────────────────────┘ └─────────────────────┘           │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
 
-- Docker instalado e rodando
-- Node.js 18+ e pnpm
-- Usuário no grupo docker
+---
 
-### Instalação Rápida
+## Arquitetura
+
+```
+claude-docker/
+├── packages/
+│   ├── backend/              # API Express + TypeScript
+│   │   ├── src/
+│   │   │   ├── api/routes/   # Endpoints REST
+│   │   │   ├── services/     # Logica de negocios
+│   │   │   ├── repositories/ # Acesso a dados
+│   │   │   └── utils/        # Utilitarios
+│   │   └── package.json
+│   │
+│   ├── frontend/             # Next.js 15 + React 19
+│   │   ├── src/
+│   │   │   ├── app/          # App Router pages
+│   │   │   ├── components/   # Componentes React
+│   │   │   ├── hooks/        # Custom hooks
+│   │   │   ├── lib/          # Utilitarios + i18n
+│   │   │   └── stores/       # Zustand stores
+│   │   └── package.json
+│   │
+│   └── shared/               # Tipos compartilhados
+│       ├── src/
+│       │   ├── types/        # TypeScript types
+│       │   └── schemas/      # Zod schemas
+│       └── package.json
+│
+├── docker/
+│   └── base-image/           # Dockerfiles dos containers
+│       ├── Dockerfile.claude # Apenas Claude Code
+│       ├── Dockerfile.vscode # Apenas VS Code
+│       └── Dockerfile.both   # Claude + VS Code
+│
+├── install-local.sh          # Script de instalacao + inicializacao
+├── package.json              # Workspace root
+├── pnpm-workspace.yaml       # pnpm workspaces config
+└── README.md                 # Esta documentacao
+```
+
+### Stack Tecnologico
+
+| Camada | Tecnologia | Versao |
+|--------|------------|--------|
+| **Frontend** | Next.js | 15.x |
+| **Frontend** | React | 19.x |
+| **Frontend** | TailwindCSS | 3.x |
+| **Frontend** | Zustand | 5.x |
+| **Backend** | Express.js | 4.x |
+| **Backend** | TypeScript | 5.x |
+| **Backend** | Dockerode | 4.x |
+| **Backend** | Socket.io | 4.x |
+| **Shared** | Zod | 3.x |
+| **Infra** | Docker | 24.x+ |
+| **Infra** | code-server | latest |
+
+---
+
+## Instalacao
+
+### Pre-requisitos
 
 ```bash
-# Clone o repositório
+# Docker instalado e rodando
+docker --version  # Docker 24.0+
+
+# Node.js e pnpm
+node --version    # Node 18+
+pnpm --version    # pnpm 8+
+
+# Usuario no grupo docker
+groups | grep docker
+```
+
+### Instalacao no Linux
+
+```bash
+# 1. Clone o repositorio
 git clone https://github.com/pir0c0pter0/claude-docker.git
 cd claude-docker
 
-# Instale
+# 2. Execute o instalador
 ./install-local.sh
 
-# Inicie o dashboard
+# 3. Inicie o dashboard
 claude-docker-web
 ```
 
-### Instalação Manual
+### O que o instalador faz
+
+1. Instala dependencias com `pnpm install`
+2. Compila o projeto com `pnpm build`
+3. Copia arquivos para `~/.local/share/claude-docker-web/`
+4. Cria script `claude-docker-web` em `~/.local/bin/`
+5. Cria diretorio de config em `~/.config/claude-docker-web/`
+
+### Instalacao Manual
 
 ```bash
 # Clone
 git clone https://github.com/pir0c0pter0/claude-docker.git
 cd claude-docker
 
-# Instale dependências
+# Instale dependencias
 pnpm install
 
 # Build
 pnpm build
 
-# Copie para local
+# Crie diretorios
 mkdir -p ~/.local/share/claude-docker-web
-cp -r packages ~/.local/share/claude-docker-web/
-cp -r docker ~/.local/share/claude-docker-web/
+mkdir -p ~/.local/bin
+mkdir -p ~/.config/claude-docker-web
 
-# Copie o script de inicialização
-cp install-local.sh ~/.local/bin/claude-docker-web
+# Copie arquivos
+cp -r packages docker ~/.local/share/claude-docker-web/
+
+# Crie script de inicializacao
+cat > ~/.local/bin/claude-docker-web << 'EOF'
+#!/bin/bash
+cd ~/.local/share/claude-docker-web/packages/backend
+PORT=8000 ENABLE_AUTH=false node dist/index.js &
+cd ~/.local/share/claude-docker-web/packages/frontend
+pnpm start &
+echo "Dashboard: http://localhost:3000"
+EOF
 chmod +x ~/.local/bin/claude-docker-web
+
+# Adicione ao PATH (se necessario)
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
 ```
 
 ---
 
-## 🎯 Uso
+## Uso
 
 ### Iniciar o Dashboard
 
@@ -105,111 +244,208 @@ Acesse: **http://localhost:3000**
 ### Criar Container
 
 1. Clique em **"+ Novo Container"**
-2. Preencha:
-   - **Nome**: identificador único
-   - **Template**: Claude, VS Code ou ambos
-   - **Modo**: interativo ou autônomo
-   - **Repositório**: pasta vazia ou clone do GitHub
-   - **Recursos**: CPU, memória e disco
+2. Preencha o formulario:
+
+| Campo | Descricao | Exemplo |
+|-------|-----------|---------|
+| **Nome** | Identificador unico | `meu-projeto` |
+| **Template** | Claude, VS Code ou Ambos | `Claude + VS Code` |
+| **Modo** | Interativo ou Autonomo | `interativo` |
+| **Repositorio** | Pasta vazia ou Clone GitHub | `https://github.com/user/repo` |
+| **CPU** | Nucleos (1-16) | `2` |
+| **Memoria** | MB (512-32768) | `2048` |
+| **Disco** | GB (1-100) | `10` |
+
 3. Clique em **"Criar Container"**
 
-### Acessar Container
+### Acoes no Container
 
-- **Terminal**: clique em "Terminal" para abrir shell
-- **VS Code**: clique em "VS Code" para abrir IDE no navegador
-- **Iniciar/Parar**: controle o estado do container
+| Acao | Descricao |
+|------|-----------|
+| **Iniciar** | Inicia o container parado |
+| **Parar** | Para o container em execucao |
+| **Terminal** | Abre shell bash no container |
+| **VS Code** | Abre IDE no navegador |
+| **Excluir** | Remove container e dados |
 
-### Configurações
+### Configuracoes
 
-Acesse **Configurações** para:
+Acesse **Configuracoes** no menu para:
 
-- 🌍 **Idioma**: alternar entre PT-BR e English
-- 🔐 **Claude Auth**: autenticar no Claude Code
-- 🔑 **GitHub/SSH**: gerar e configurar chaves SSH
-- 📊 **Status**: verificar Docker, Redis e sistema
+#### Idioma
+- Portugues (Brasil) - padrao
+- English
+
+#### Claude Code Authentication
+1. Clique em "Configurar autenticacao"
+2. Execute `claude` no terminal
+3. Siga as instrucoes para login via navegador
+4. Clique em "Verificar autenticacao"
+
+#### GitHub / SSH
+1. Clique em "Configurar SSH"
+2. Insira seu email
+3. Clique em "Gerar chave SSH"
+4. Copie a chave publica
+5. Adicione ao GitHub em Settings > SSH Keys
 
 ---
 
-## ⚙️ Configuração
+## Configuracao
 
-### Estrutura de Diretórios
+### Estrutura de Diretorios
 
 ```
-~/.local/share/claude-docker-web/     # Instalação
+~/.local/share/claude-docker-web/   # Instalacao
 ├── packages/
-│   ├── backend/                      # API Express
-│   ├── frontend/                     # Next.js
-│   └── shared/                       # Tipos compartilhados
-├── docker/
-│   └── base-image/                   # Dockerfiles
+│   ├── backend/dist/               # Backend compilado
+│   └── frontend/.next/             # Frontend compilado
+└── docker/base-image/              # Dockerfiles
 
-~/.config/claude-docker-web/          # Configuração do usuário
-├── config.env                        # Variáveis de ambiente
-├── containers.json                   # Dados dos containers
-└── *.log                             # Logs
+~/.config/claude-docker-web/        # Configuracao do usuario
+├── config.env                      # Variaveis de ambiente
+├── containers.json                 # Dados dos containers
+├── backend.log                     # Log do backend
+└── frontend.log                    # Log do frontend
 ```
 
-### Variáveis de Ambiente
+### Variaveis de Ambiente
 
 Edite `~/.config/claude-docker-web/config.env`:
 
 ```env
+# Servidor
 PORT=8000
 FRONTEND_PORT=3000
 NODE_ENV=production
+
+# Redis (opcional)
 REDIS_URL=redis://localhost:6379
 
-# Limites padrão
+# Limites padrao para novos containers
 DEFAULT_CPU_LIMIT=2
 DEFAULT_MEMORY_LIMIT=2048
 DEFAULT_DISK_LIMIT=10240
+
+# Autenticacao (desabilitada por padrao)
+ENABLE_AUTH=false
+JWT_SECRET=your-secret-key
 ```
 
-### Portas
+### Portas Utilizadas
 
-| Serviço | Porta |
-|---------|-------|
-| Frontend | 3000 |
-| Backend API | 8000 |
-| WebSocket | 8000 |
-
----
-
-## 🛠️ Tecnologias
-
-### Backend
-- **Express.js** - API REST
-- **TypeScript** - Tipagem estática
-- **Dockerode** - API do Docker
-- **Socket.io** - WebSocket para métricas
-- **Zod** - Validação de dados
-
-### Frontend
-- **Next.js 15** - Framework React
-- **React 19** - Interface de usuário
-- **TailwindCSS** - Estilização
-- **Zustand** - Gerenciamento de estado
-
-### Infraestrutura
-- **Docker** - Containers isolados
-- **code-server** - VS Code no navegador
-- **pnpm** - Gerenciador de pacotes
+| Servico | Porta | Descricao |
+|---------|-------|-----------|
+| Frontend | 3000 | Interface web Next.js |
+| Backend | 8000 | API REST + WebSocket |
+| VS Code | 8080+ | code-server (por container) |
 
 ---
 
-## 🔧 Troubleshooting
+## API Reference
 
-### Docker não inicia
+### Containers
+
+```
+GET    /api/containers              # Listar todos
+POST   /api/containers              # Criar novo
+GET    /api/containers/:id          # Obter por ID
+POST   /api/containers/:id/start    # Iniciar
+POST   /api/containers/:id/stop     # Parar
+DELETE /api/containers/:id          # Excluir
+GET    /api/containers/:id/metrics  # Metricas
+GET    /api/containers/:id/logs     # Logs
+```
+
+### Settings
+
+```
+GET    /api/settings/claude-status  # Status do Claude
+GET    /api/settings/system-status  # Status do sistema
+GET    /api/settings/config         # Configuracoes
+POST   /api/settings/generate-ssh-key # Gerar SSH
+POST   /api/settings/open-claude-auth # Iniciar auth
+POST   /api/settings/logout-claude  # Logout Claude
+```
+
+### WebSocket Events
+
+```javascript
+// Conectar
+const socket = io('http://localhost:8000')
+
+// Eventos recebidos
+socket.on('container:metrics', (data) => {
+  // { containerId, cpu, memory, disk }
+})
+
+socket.on('container:status', (data) => {
+  // { containerId, status }
+})
+```
+
+---
+
+## Desenvolvimento
+
+### Setup Local
 
 ```bash
+# Clone
+git clone https://github.com/pir0c0pter0/claude-docker.git
+cd claude-docker
+
+# Instale dependencias
+pnpm install
+
+# Inicie em modo desenvolvimento
+pnpm dev
+```
+
+### Scripts Disponiveis
+
+| Script | Descricao |
+|--------|-----------|
+| `pnpm dev` | Inicia backend e frontend em dev |
+| `pnpm build` | Compila todos os pacotes |
+| `pnpm test` | Executa testes |
+| `pnpm lint` | Verifica codigo |
+| `pnpm typecheck` | Verifica tipos TypeScript |
+
+### Estrutura de Commits
+
+```
+feat: nova funcionalidade
+fix: correcao de bug
+docs: documentacao
+style: formatacao
+refactor: refatoracao
+test: testes
+chore: manutencao
+```
+
+---
+
+## Troubleshooting
+
+### Docker nao inicia
+
+```bash
+# Verificar status
+sudo systemctl status docker
+
+# Iniciar Docker
 sudo systemctl start docker
 sudo systemctl enable docker
 ```
 
-### Permissão negada no Docker
+### Permissao negada no Docker
 
 ```bash
+# Adicionar usuario ao grupo docker
 sudo usermod -aG docker $USER
+
+# Aplicar sem logout
 newgrp docker
 ```
 
@@ -226,14 +462,35 @@ fuser -k 3000/tcp 8000/tcp
 ### Erro de build
 
 ```bash
+# Limpar e reinstalar
 cd ~/.local/share/claude-docker-web
+rm -rf node_modules packages/*/node_modules
 pnpm install
 pnpm build
 ```
 
+### Container nao conecta SSH
+
+```bash
+# Verificar permissoes das chaves
+chmod 700 ~/.ssh
+chmod 600 ~/.ssh/id_*
+chmod 644 ~/.ssh/*.pub
+```
+
+### Logs do sistema
+
+```bash
+# Backend
+tail -f ~/.config/claude-docker-web/backend.log
+
+# Frontend
+tail -f ~/.config/claude-docker-web/frontend.log
+```
+
 ---
 
-## 📄 Licença
+## Licenca
 
 MIT License - veja [LICENSE](LICENSE)
 
@@ -244,9 +501,9 @@ MIT License - veja [LICENSE](LICENSE)
 </p>
 
 <p align="center">
-  Feito com 🐳 e Claude Code no CachyOS 🐧
+  Feito com Claude Code no CachyOS
 </p>
 
 <p align="center">
-  <strong>Autor:</strong> <a href="https://github.com/pir0c0pter0">@pir0c0pter0</a>
+  <a href="https://github.com/pir0c0pter0">@pir0c0pter0</a>
 </p>
