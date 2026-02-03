@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções
 
-## Versão Atual: 0.0.32-alpha
+## Versão Atual: 0.0.33-alpha
 
 ## Estrutura do Projeto
 
@@ -698,6 +698,12 @@ ALLOWED_ORIGINS=https://myapp.com,https://api.myapp.com
 ```
 
 ## Histórico de Versões
+
+### v0.0.33-alpha
+- Fix: Credenciais Claude (.credentials.json) agora são copiadas via docker cp (além do mount)
+- Fix: Dockerfiles criam arquivo .credentials.json vazio para evitar bug de bind mount
+- Fix: Dockerfiles criam settings.json com tema dark por padrão
+- Fix: Adicionadas pastas faltantes (plugins, get-shit-done, commands, hooks) nos Dockerfiles
 
 ### v0.0.32-alpha
 - Feat: Progress granular em START (4→12 steps) e DELETE (6→15 steps)

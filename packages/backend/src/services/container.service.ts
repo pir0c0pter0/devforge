@@ -1381,8 +1381,8 @@ export class ContainerService {
       // Directories to copy (exclude credentials, cache, history, session-env)
       const dirsToСopy = ['agents', 'skills', 'rules', 'commands', 'hooks', 'get-shit-done', 'plugins'];
 
-      // Files to copy
-      const filesToCopy = ['CLAUDE.md', 'settings.json', 'settings.local.json'];
+      // Files to copy (including credentials as fallback if mount fails)
+      const filesToCopy = ['CLAUDE.md', 'settings.json', 'settings.local.json', '.credentials.json'];
 
       const { exec } = await import('child_process');
       const { promisify } = await import('util');

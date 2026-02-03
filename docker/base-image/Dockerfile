@@ -182,13 +182,19 @@ RUN go install golang.org/x/tools/gopls@latest \
 RUN mkdir -p /home/developer/.config/code-server
 COPY --chown=developer:developer config.yaml /home/developer/.config/code-server/config.yaml
 
-# Create .claude directory structure
+# Create .claude directory structure and placeholder files for bind mounts
+# IMPORTANT: Create empty .credentials.json file to prevent Docker from creating a directory
+# when bind mounting host credentials
 RUN mkdir -p /home/developer/.claude/agents \
     && mkdir -p /home/developer/.claude/skills \
     && mkdir -p /home/developer/.claude/rules \
     && mkdir -p /home/developer/.claude/cache \
     && mkdir -p /home/developer/.claude/commands \
-    && mkdir -p /home/developer/.claude/hooks
+    && mkdir -p /home/developer/.claude/hooks \
+    && mkdir -p /home/developer/.claude/plugins \
+    && mkdir -p /home/developer/.claude/get-shit-done \
+    && touch /home/developer/.claude/.credentials.json \
+    && echo '{"theme":"dark"}' > /home/developer/.claude/settings.json
 
 # Create workspace directory
 RUN mkdir -p /home/developer/workspace
