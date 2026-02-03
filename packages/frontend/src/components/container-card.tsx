@@ -296,8 +296,13 @@ export function ContainerCard({ container }: ContainerCardProps) {
 
           <div className="flex items-center justify-between text-sm">
             <span className="text-terminal-textMuted">{t.container.disk}</span>
-            <span className="font-medium text-terminal-text">
+            <span className={clsx(
+              'font-medium',
+              diskPercent > 95 ? 'text-terminal-red' :
+              diskPercent > 80 ? 'text-terminal-yellow' : 'text-terminal-text'
+            )}>
               {(container.metrics?.disk ?? 0).toFixed(2)} GB / {container.limits?.diskGB ?? 0} GB
+              <span className="text-terminal-textMuted text-xs ml-1">({t.container.softLimit})</span>
             </span>
           </div>
           <div className="w-full bg-terminal-bg rounded h-1.5">
@@ -313,6 +318,19 @@ export function ContainerCard({ container }: ContainerCardProps) {
               style={{ width: `${Math.min(diskPercent, 100)}%` }}
             />
           </div>
+          {/* Disk usage alerts */}
+          {diskPercent > 95 && (
+            <div className="mt-1 text-xs text-terminal-red flex items-center gap-1">
+              <span className="inline-block w-2 h-2 bg-terminal-red rounded-full animate-pulse"></span>
+              {t.container.diskCritical}
+            </div>
+          )}
+          {diskPercent > 80 && diskPercent <= 95 && (
+            <div className="mt-1 text-xs text-terminal-yellow flex items-center gap-1">
+              <span className="inline-block w-2 h-2 bg-terminal-yellow rounded-full"></span>
+              {t.container.diskWarning}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-between text-sm mb-4 pt-4 border-t border-terminal-border">

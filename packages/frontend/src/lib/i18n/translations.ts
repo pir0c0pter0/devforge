@@ -65,6 +65,10 @@ export const translations = {
       failedVscode: 'Falha ao abrir VS Code',
       startingPolling: 'Aguardando container iniciar',
       startTimeout: 'Tempo esgotado ao iniciar',
+      // Disk alerts
+      diskWarning: 'Uso de disco acima de 80%',
+      diskCritical: 'Uso de disco crítico! Acima de 95%',
+      softLimit: 'Limite soft',
     },
 
     // Status
@@ -322,6 +326,10 @@ export const translations = {
       failedVscode: 'Failed to open VS Code',
       startingPolling: 'Waiting for container to start',
       startTimeout: 'Timeout while starting',
+      // Disk alerts
+      diskWarning: 'Disk usage above 80%',
+      diskCritical: 'Critical disk usage! Above 95%',
+      softLimit: 'Soft limit',
     },
 
     // Status

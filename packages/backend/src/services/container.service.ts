@@ -915,6 +915,25 @@ export class ContainerService {
               ? (diskUsageMB / configuredDiskLimitMB) * 100
               : 0;
 
+            // Log warnings for disk usage soft limits
+            if (diskPercentage > 95) {
+              logger.warn({
+                containerId: container.id,
+                name: container.name,
+                diskUsageMB,
+                diskLimitMB: configuredDiskLimitMB,
+                diskPercentage: Number(diskPercentage.toFixed(2)),
+              }, 'CRITICAL: Container disk usage above 95% (soft limit)');
+            } else if (diskPercentage > 80) {
+              logger.warn({
+                containerId: container.id,
+                name: container.name,
+                diskUsageMB,
+                diskLimitMB: configuredDiskLimitMB,
+                diskPercentage: Number(diskPercentage.toFixed(2)),
+              }, 'WARNING: Container disk usage above 80% (soft limit)');
+            }
+
             simpleMetrics = {
               cpu: fullMetrics.cpu.usage,
               memory: fullMetrics.memory.percentage,
@@ -993,6 +1012,25 @@ export class ContainerService {
         const diskPercentage = configuredDiskLimitMB > 0
           ? (diskUsageMB / configuredDiskLimitMB) * 100
           : 0;
+
+        // Log warnings for disk usage soft limits
+        if (diskPercentage > 95) {
+          logger.warn({
+            containerId: container.id,
+            name: container.name,
+            diskUsageMB,
+            diskLimitMB: configuredDiskLimitMB,
+            diskPercentage: Number(diskPercentage.toFixed(2)),
+          }, 'CRITICAL: Container disk usage above 95% (soft limit)');
+        } else if (diskPercentage > 80) {
+          logger.warn({
+            containerId: container.id,
+            name: container.name,
+            diskUsageMB,
+            diskLimitMB: configuredDiskLimitMB,
+            diskPercentage: Number(diskPercentage.toFixed(2)),
+          }, 'WARNING: Container disk usage above 80% (soft limit)');
+        }
 
         simpleMetrics = {
           cpu: fullMetrics.cpu.usage,
