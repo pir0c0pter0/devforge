@@ -177,6 +177,21 @@ class TerminalService {
     return Array.from(this.sessions.values()).map(s => s.session)
   }
 
+  /**
+   * Close all terminal sessions for a specific container
+   */
+  closeAllSessionsForContainer(containerId: string): number {
+    let closedCount = 0
+    for (const [sessionId, activeSession] of this.sessions) {
+      if (activeSession.session.containerId === containerId) {
+        logger.info({ sessionId, containerId }, 'Closing terminal session due to container deletion')
+        this.closeSession(sessionId, 143) // SIGTERM
+        closedCount++
+      }
+    }
+    return closedCount
+  }
+
   private updateActivity(sessionId: string): void {
     const activeSession = this.sessions.get(sessionId)
     if (activeSession) {

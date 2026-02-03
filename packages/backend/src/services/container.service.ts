@@ -906,9 +906,12 @@ export class ContainerService {
   /**
    * Internal delete implementation with task tracking
    */
-  private async performDeleteWithTask(containerId: string, taskId: string, force: boolean): Promise<void> {
+  private async performDeleteWithTask(containerId: string, taskId: string, _force: boolean): Promise<void> {
+    // Always force delete to ensure cleanup
+    const force = true;
+
     try {
-      taskService.setProgress(taskId, 10, 'Verificando container...');
+      taskService.setProgress(taskId, 5, 'Verificando container...');
 
       // Try cache first, then database
       let container = this.containers.get(containerId);
@@ -928,6 +931,14 @@ export class ContainerService {
 
       logger.info({ containerId, dockerId: container.dockerId, force, taskId }, 'Deleting container with task');
 
+      // Close all terminal sessions for this container first
+      taskService.setProgress(taskId, 15, 'Fechando sessões de terminal...');
+      const { terminalService } = await import('./terminal.service');
+      const closedSessions = terminalService.closeAllSessionsForContainer(containerId);
+      if (closedSessions > 0) {
+        logger.info({ containerId, taskId, closedSessions }, 'Closed terminal sessions before deletion');
+      }
+
       // Stop container first if running
       if (container.status === 'running') {
         taskService.setProgress(taskId, 30, 'Parando container...');
@@ -935,8 +946,7 @@ export class ContainerService {
         try {
           await dockerService.stopContainer(container.dockerId);
         } catch (stopError) {
-          logger.warn({ error: stopError, containerId, taskId }, 'Failed to stop container, trying force delete');
-          force = true;
+          logger.warn({ error: stopError, containerId, taskId }, 'Failed to stop container, will force delete');
         }
       }
 
