@@ -189,6 +189,26 @@ export const translations = {
         sshNotFound: 'Configure acima',
       },
 
+      // Diagnostics
+      diagnostics: {
+        title: 'Diagnóstico do Sistema',
+        runDiagnostics: 'Executar Diagnóstico',
+        running: 'Executando diagnóstico',
+        ok: 'OK',
+        warning: 'Aviso',
+        error: 'Erro',
+        summary: 'Resumo',
+        errors: 'erros',
+        warnings: 'avisos',
+        allOk: 'Todos os sistemas funcionando',
+        fixInstructions: 'Instruções para corrigir:',
+        details: 'Detalhes:',
+        close: 'Fechar',
+        timestamp: 'Executado em',
+        user: 'Usuário',
+        platform: 'Plataforma',
+      },
+
       // Configuration
       config: {
         title: 'Configuração',
@@ -410,6 +430,26 @@ export const translations = {
         sshKeys: 'SSH Keys',
         sshFound: 'Key found',
         sshNotFound: 'Configure above',
+      },
+
+      // Diagnostics
+      diagnostics: {
+        title: 'System Diagnostics',
+        runDiagnostics: 'Run Diagnostics',
+        running: 'Running diagnostics',
+        ok: 'OK',
+        warning: 'Warning',
+        error: 'Error',
+        summary: 'Summary',
+        errors: 'errors',
+        warnings: 'warnings',
+        allOk: 'All systems operational',
+        fixInstructions: 'Instructions to fix:',
+        details: 'Details:',
+        close: 'Close',
+        timestamp: 'Executed at',
+        user: 'User',
+        platform: 'Platform',
       },
 
       // Configuration

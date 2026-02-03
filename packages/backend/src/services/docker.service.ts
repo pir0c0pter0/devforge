@@ -384,6 +384,19 @@ export class DockerService {
       return false;
     }
   }
+
+  /**
+   * Check if a Docker image exists
+   */
+  async imageExists(imageName: string): Promise<boolean> {
+    try {
+      const image = this.docker.getImage(imageName);
+      await image.inspect();
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
 }
 
 // Export singleton instance
