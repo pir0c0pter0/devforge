@@ -12,6 +12,7 @@ import { dockerService } from './services/docker.service';
 import containersRouter from './api/routes/containers.routes';
 import templatesRouter from './api/routes/templates.routes';
 import diagnosticsRouter from './api/routes/diagnostics.routes';
+import settingsRouter from './api/routes/settings.routes';
 import { initializeDatabase, closeDatabase, isDatabaseHealthy } from './database';
 import { runMigrations, getDatabaseStats } from './database/migrations';
 
@@ -90,6 +91,7 @@ app.get('/health', async (_req: Request, res: Response) => {
 app.use('/api/containers', containersRouter);
 app.use('/api/templates', templatesRouter);
 app.use('/api/diagnostics', diagnosticsRouter);
+app.use('/api/settings', settingsRouter);
 
 /**
  * Root endpoint
