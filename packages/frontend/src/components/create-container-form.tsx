@@ -7,6 +7,9 @@ import { apiClient } from '@/lib/api-client'
 import { useI18n } from '@/lib/i18n'
 import type { TemplateType, ContainerMode, RepositoryType } from '@/lib/types'
 import { AnimatedDots } from '@/components/ui/animated-dots'
+import { useContainerProgress } from '@/hooks/use-container-progress'
+import { ProgressBar } from '@/components/ui/progress-bar'
+import { v4 as uuidv4 } from 'uuid'
 import clsx from 'clsx'
 
 /**
@@ -84,9 +87,9 @@ export function CreateContainerForm() {
   const { t } = useI18n()
   const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [progressStep, setProgressStep] = useState<string | null>(null)
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({})
   const [generalError, setGeneralError] = useState<string | null>(null)
+  const { progress, subscribe, reset } = useContainerProgress()
 
   const [formData, setFormData] = useState<FormData>({
     name: '',
@@ -131,18 +134,11 @@ export function CreateContainerForm() {
       }
 
       setIsSubmitting(true)
+      reset() // Reset progress state
 
-      // Show progress steps
-      setProgressStep('creating')
-      await new Promise(resolve => setTimeout(resolve, 500))
-
-      if (validated.repositoryType === 'github' && normalizedUrl) {
-        setProgressStep('starting')
-        await new Promise(resolve => setTimeout(resolve, 500))
-        setProgressStep('cloning')
-      }
-
-      setProgressStep('copying')
+      // Generate task ID and subscribe to progress updates
+      const taskId = uuidv4()
+      subscribe(taskId)
 
       const response = await apiClient.createContainer({
         name: validated.name,
@@ -151,11 +147,10 @@ export function CreateContainerForm() {
         repositoryType: validated.repositoryType,
         repositoryUrl: normalizedUrl,
         limits: validated.limits,
+        taskId, // Pass taskId for WebSocket progress
       })
 
       if (response.success) {
-        setProgressStep('finishing')
-        await new Promise(resolve => setTimeout(resolve, 300))
         router.push('/containers')
       } else {
         setGeneralError(response.error || t.createContainer.failedCreate)
@@ -174,27 +169,30 @@ export function CreateContainerForm() {
       }
     } finally {
       setIsSubmitting(false)
-      setProgressStep(null)
     }
   }
 
   const getButtonText = (): React.ReactNode => {
     if (!isSubmitting) return t.createContainer.create
 
-    switch (progressStep) {
-      case 'creating':
-        return <AnimatedDots text={t.createContainer.progressCreating} />
-      case 'starting':
-        return <AnimatedDots text={t.createContainer.progressStarting} />
-      case 'cloning':
-        return <AnimatedDots text={t.createContainer.progressCloningRepo} />
-      case 'copying':
-        return <AnimatedDots text={t.createContainer.progressCopyingConfigs} />
-      case 'finishing':
-        return <AnimatedDots text={t.createContainer.progressFinishing} />
-      default:
-        return <AnimatedDots text={t.createContainer.progressCreating} />
+    if (progress) {
+      // Map stage to translated message
+      const stageMessages: Record<string, string> = {
+        validating: t.createContainer.progressCreating,
+        creating: t.createContainer.progressCreating,
+        starting: t.createContainer.progressStarting,
+        cloning: t.createContainer.progressCloningRepo,
+        configuring: t.createContainer.progressCopyingConfigs,
+        stopping: t.createContainer.progressFinishing,
+        saving: t.createContainer.progressFinishing,
+        ready: t.createContainer.progressFinishing,
+        error: progress.error || t.createContainer.failedCreate,
+      }
+      const message = stageMessages[progress.stage] || t.createContainer.progressCreating
+      return <AnimatedDots text={`${message} (${progress.percentage}%)`} />
     }
+
+    return <AnimatedDots text={t.createContainer.progressCreating} />
   }
 
   const updateFormData = <K extends keyof FormData>(key: K, value: FormData[K]) => {
@@ -424,6 +422,12 @@ export function CreateContainerForm() {
           />
         </div>
       </div>
+
+      {isSubmitting && progress && (
+        <div className="pt-2">
+          <ProgressBar progress={progress} />
+        </div>
+      )}
 
       <div className="flex gap-4 pt-4">
         <button

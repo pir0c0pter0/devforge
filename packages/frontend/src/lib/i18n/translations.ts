@@ -63,6 +63,8 @@ export const translations = {
       failedDelete: 'Falha ao excluir container',
       failedShell: 'Falha ao abrir terminal',
       failedVscode: 'Falha ao abrir VS Code',
+      startingPolling: 'Aguardando container iniciar',
+      startTimeout: 'Tempo esgotado ao iniciar',
     },
 
     // Status
@@ -118,6 +120,18 @@ export const translations = {
       progressCloningRepo: 'Clonando repositório',
       progressCopyingConfigs: 'Copiando configurações',
       progressFinishing: 'Finalizando',
+      // Progress messages (real-time)
+      progress: {
+        validating: 'Validando configurações',
+        creating: 'Criando container Docker',
+        starting: 'Iniciando container',
+        cloning: 'Clonando repositório',
+        configuring: 'Configurando ambiente',
+        stopping: 'Finalizando setup',
+        saving: 'Salvando configurações',
+        ready: 'Container pronto!',
+        error: 'Erro na criação',
+      },
     },
 
     // Settings
@@ -306,6 +320,8 @@ export const translations = {
       failedDelete: 'Failed to delete container',
       failedShell: 'Failed to open shell',
       failedVscode: 'Failed to open VS Code',
+      startingPolling: 'Waiting for container to start',
+      startTimeout: 'Timeout while starting',
     },
 
     // Status
@@ -361,6 +377,18 @@ export const translations = {
       progressCloningRepo: 'Cloning repository',
       progressCopyingConfigs: 'Copying configurations',
       progressFinishing: 'Finishing',
+      // Progress messages (real-time)
+      progress: {
+        validating: 'Validating configuration',
+        creating: 'Creating Docker container',
+        starting: 'Starting container',
+        cloning: 'Cloning repository',
+        configuring: 'Configuring environment',
+        stopping: 'Finishing setup',
+        saving: 'Saving configuration',
+        ready: 'Container ready!',
+        error: 'Creation error',
+      },
     },
 
     // Settings

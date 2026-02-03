@@ -65,6 +65,7 @@ class ApiClient {
       cpuLimit: data.limits.cpuCores,
       memoryLimit: data.limits.memoryMB,
       diskLimit: data.limits.diskGB * 1024, // Convert GB to MB
+      taskId: data.taskId,
     }
     return this.request<Container>('/api/containers', {
       method: 'POST',

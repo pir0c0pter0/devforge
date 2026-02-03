@@ -47,6 +47,14 @@ export type {
   QueueMetrics,
 } from './types/queue.types'
 
+// Export all progress types
+export type {
+  ContainerProgressStage,
+  ContainerCreationProgress,
+} from './types/progress.types'
+
+export { PROGRESS_STAGES } from './types/progress.types'
+
 // Export all schemas
 export {
   containerConfigSchema,

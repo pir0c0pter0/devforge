@@ -6,6 +6,7 @@ import type {
   ContainerMetrics,
   InstructionEventData,
   ContainerStatusEventData,
+  ContainerCreationProgress,
 } from '@claude-docker/shared'
 import { config } from '../config'
 
@@ -40,6 +41,7 @@ export const initializeWebSocket = (
   setupMetricsNamespace()
   setupQueueNamespace()
   setupLogsNamespace()
+  setupCreationNamespace()
 
   console.info('[WebSocket] Server initialized successfully')
 
@@ -142,6 +144,33 @@ const setupLogsNamespace = (): void => {
     socket.on('disconnect', () => {
       cleanupSocketSubscriptions(socket.id)
       console.info(`[WebSocket] Client disconnected from /logs: ${socket.id}`)
+    })
+  })
+}
+
+/**
+ * Setup /creation namespace for container creation progress updates
+ */
+const setupCreationNamespace = (): void => {
+  if (!io) return
+
+  const creationNamespace = io.of('/creation')
+
+  creationNamespace.on('connection', (socket: Socket) => {
+    console.info(`[WebSocket] Client connected to /creation: ${socket.id}`)
+
+    socket.on('subscribe:task', (taskId: string) => {
+      socket.join(`task:${taskId}`)
+      console.info(`[WebSocket] Client ${socket.id} subscribed to task ${taskId}`)
+    })
+
+    socket.on('unsubscribe:task', (taskId: string) => {
+      socket.leave(`task:${taskId}`)
+      console.info(`[WebSocket] Client ${socket.id} unsubscribed from task ${taskId}`)
+    })
+
+    socket.on('disconnect', () => {
+      console.info(`[WebSocket] Client disconnected from /creation: ${socket.id}`)
     })
   })
 }
@@ -258,6 +287,17 @@ export const emitContainerLog = (
 ): void => {
   if (!io) return
   io.of('/logs').to(`container:${containerId}`).emit('log', log)
+}
+
+/**
+ * Emit container creation progress update
+ */
+export const emitContainerCreationProgress = (
+  taskId: string,
+  data: ContainerCreationProgress
+): void => {
+  if (!io) return
+  io.of('/creation').to(`task:${taskId}`).emit('container:creation:progress', data)
 }
 
 /**

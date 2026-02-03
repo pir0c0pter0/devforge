@@ -92,7 +92,10 @@ router.post(
     try {
       logger.info({ body: req.body }, 'Creating container');
 
-      const container = await containerService.create(req.body);
+      // Extract taskId from body (optional)
+      const { taskId, ...containerData } = req.body;
+
+      const container = await containerService.create(containerData, taskId);
 
       logger.info({ containerId: container.id }, 'Container created successfully');
 

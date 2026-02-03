@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { Container } from '@/lib/types'
 import { apiClient } from '@/lib/api-client'
 import { useContainerStore } from '@/stores/container.store'
@@ -15,7 +15,18 @@ interface ContainerCardProps {
 export function ContainerCard({ container }: ContainerCardProps) {
   const { t } = useI18n()
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isPolling, setIsPolling] = useState(false)
+  const pollingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const { updateContainer, removeContainer, setError } = useContainerStore()
+
+  useEffect(() => {
+    return () => {
+      // Cleanup polling timeout on unmount
+      if (pollingTimeoutRef.current) {
+        clearTimeout(pollingTimeoutRef.current)
+      }
+    }
+  }, [])
 
   const handleStart = async () => {
     updateContainer(container.id, { status: 'creating' })
@@ -24,7 +35,51 @@ export function ContainerCard({ container }: ContainerCardProps) {
     if (!response.success) {
       setError(response.error || t.container.failedStart)
       updateContainer(container.id, { status: 'stopped' })
+      return
     }
+
+    // Poll for status until running or error
+    setIsPolling(true)
+    let attempts = 0
+    const maxAttempts = 30 // 30 seconds max
+
+    const pollStatus = async () => {
+      attempts++
+      const statusResponse = await apiClient.getContainer(container.id)
+
+      if (statusResponse.success && statusResponse.data) {
+        const newStatus = statusResponse.data.status
+
+        if (newStatus === 'running') {
+          updateContainer(container.id, { status: 'running' })
+          setIsPolling(false)
+          return
+        }
+
+        if (newStatus === 'error' || newStatus === 'stopped') {
+          updateContainer(container.id, { status: newStatus })
+          setIsPolling(false)
+          if (newStatus === 'error') {
+            setError(t.container.failedStart)
+          }
+          return
+        }
+      }
+
+      // Continue polling if not done and under max attempts
+      if (attempts < maxAttempts) {
+        pollingTimeoutRef.current = setTimeout(pollStatus, 1000)
+      } else {
+        // Timeout - fetch final status
+        const finalResponse = await apiClient.getContainer(container.id)
+        if (finalResponse.success && finalResponse.data) {
+          updateContainer(container.id, { status: finalResponse.data.status })
+        }
+        setIsPolling(false)
+      }
+    }
+
+    pollStatus()
   }
 
   const handleStop = async () => {
@@ -216,9 +271,13 @@ export function ContainerCard({ container }: ContainerCardProps) {
             <button
               onClick={handleStart}
               className="btn-primary text-sm py-1.5"
-              disabled={isDeleting || container.status === 'creating'}
+              disabled={isDeleting || container.status === 'creating' || isPolling}
             >
-              {container.status === 'creating' ? <AnimatedDots text={t.container.starting} /> : t.container.start}
+              {(container.status === 'creating' || isPolling) ? (
+                <AnimatedDots text={t.container.starting} />
+              ) : (
+                t.container.start
+              )}
             </button>
           )}
 

@@ -1,6 +1,7 @@
 import type { ContainerMetrics } from './metrics.types'
 import type { Instruction } from './instruction.types'
 import type { ContainerStatus } from './container.types'
+import type { ContainerCreationProgress } from './progress.types'
 
 /**
  * Metrics event data sent from server to client
@@ -32,6 +33,8 @@ export interface ServerToClientEvents {
   'container:metrics': (data: MetricsEventData) => void
   /** Container status changed */
   'container:status': (data: ContainerStatusEventData) => void
+  /** Container creation progress update */
+  'container:creation:progress': (data: ContainerCreationProgress) => void
   /** New instruction added to queue */
   'instruction:pending': (data: InstructionEventData) => void
   /** Instruction started executing */

@@ -39,6 +39,7 @@ export interface CreateContainerRequest {
     memoryMB: number
     diskGB: number
   }
+  taskId?: string
 }
 
 export interface Metrics {
