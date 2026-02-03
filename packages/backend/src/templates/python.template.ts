@@ -12,7 +12,7 @@ export const pythonTemplate: ContainerTemplate = {
   category: 'language',
   tags: ['python', 'pip', 'venv', 'poetry', 'data-science', 'machine-learning'],
   defaultConfig: {
-    image: 'claude-docker/full:latest',
+    image: 'claude-docker/both:latest',
     environment: {
       PYTHON_VERSION: '3.11',
       PYTHONDONTWRITEBYTECODE: '1',

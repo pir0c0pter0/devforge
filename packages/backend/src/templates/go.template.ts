@@ -12,7 +12,7 @@ export const goTemplate: ContainerTemplate = {
   category: 'language',
   tags: ['go', 'golang', 'backend', 'api', 'microservices', 'cli'],
   defaultConfig: {
-    image: 'claude-docker/full:latest',
+    image: 'claude-docker/both:latest',
     environment: {
       GOPATH: '/home/developer/go',
       GOROOT: '/usr/local/go',
