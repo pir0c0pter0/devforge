@@ -29,6 +29,11 @@ else
     echo "📦 Acesso ao Docker OK"
 fi
 
+# Carregar variáveis de ambiente do backend
+if [ -f "$PROJECT_DIR/packages/backend/.env" ]; then
+    export $(grep -v '^#' "$PROJECT_DIR/packages/backend/.env" | xargs)
+fi
+
 # Iniciar backend
 echo "🔧 Iniciando backend na porta 8000..."
 if [ "$USE_SG_DOCKER" = true ]; then
