@@ -441,7 +441,7 @@ export function useTaskWebSocket(
 
   // Subscribe to a single task
   const subscribe = useCallback(
-    (taskId: string) => {
+    async (taskId: string) => {
       console.log(
         '[TaskWS] Subscribing to task:',
         taskId,
@@ -461,6 +461,28 @@ export function useTaskWebSocket(
       currentTaskIdRef.current = taskId
       setTask(null) // Reset task state for new subscription
       completedTasksRef.current.delete(taskId) // Allow re-polling if re-subscribed
+
+      // IMMEDIATELY fetch task state - handles already-completed tasks
+      try {
+        const response = await apiClient.getTask(taskId)
+        if (response.success && response.data) {
+          const taskData = response.data
+          setTask(taskData)
+
+          // If task is already completed/failed, trigger callbacks immediately
+          if (taskData.status === 'completed') {
+            console.log('[TaskWS] Task already completed:', taskId)
+            onCompleteRef.current?.(taskData)
+            return // Don't subscribe to WebSocket for completed tasks
+          } else if (taskData.status === 'failed') {
+            console.log('[TaskWS] Task already failed:', taskId)
+            onErrorRef.current?.(taskData)
+            return // Don't subscribe to WebSocket for failed tasks
+          }
+        }
+      } catch (error) {
+        console.error('[TaskWS] Error fetching initial task state:', error)
+      }
 
       if (socketRef.current?.connected) {
         socketRef.current.emit('subscribe:task', { taskId })
