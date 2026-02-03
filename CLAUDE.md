@@ -264,9 +264,303 @@ export interface ContainerMetrics {
 }
 ```
 
-## Sistema de Tasks (OBRIGATÓRIO)
+## Sistema de Tasks (OBRIGATÓRIO) - Documentação Completa
 
-### Regras de Progress Granular
+O sistema de tasks gerencia operações assíncronas de longa duração com feedback em tempo real via WebSocket.
+
+### Arquitetura
+
+```
+┌─────────────────┐     HTTP 202 + taskId      ┌─────────────────┐
+│    Frontend     │◄──────────────────────────►│     Backend     │
+│   (Next.js)     │                            │    (Express)    │
+└────────┬────────┘                            └────────┬────────┘
+         │                                              │
+         │  WebSocket /tasks                            │
+         │  ┌────────────────────┐                      │
+         └──┤ task:subscribe     │◄─────────────────────┤
+            │ task:event         │  emitTaskEvent()     │
+            └────────────────────┘                      │
+                                                        │
+                                               ┌────────┴────────┐
+                                               │  TaskService    │
+                                               │  (In-Memory)    │
+                                               └─────────────────┘
+```
+
+### Arquivos do Sistema
+
+| Arquivo | Propósito |
+|---------|-----------|
+| `backend/services/task.service.ts` | Gerenciamento de tasks (create, update, complete, fail) |
+| `backend/services/websocket.service.ts` | Namespace `/tasks` e emissão de eventos |
+| `frontend/hooks/use-task-websocket.ts` | Hook React para subscriptions |
+| `frontend/components/container-card.tsx` | Exemplo de uso do hook |
+| `shared/types/task.types.ts` | Tipos TypeScript compartilhados |
+| `shared/types/events.types.ts` | Enum TaskEvent e payloads |
+
+### Tipos TypeScript (shared)
+
+```typescript
+// packages/shared/src/types/task.types.ts
+export type TaskType =
+  | 'create-container'
+  | 'start-container'
+  | 'delete-container'
+  | 'clone-repo'
+  | 'generic';
+
+export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+export interface Task {
+  id: string;
+  type: TaskType;
+  status: TaskStatus;
+  progress: number;        // 0-100
+  message: string;         // Mensagem atual para o usuário
+  createdAt: Date;
+  startedAt?: Date;
+  completedAt?: Date;
+  result?: unknown;        // Resultado em caso de sucesso
+  error?: string;          // Mensagem de erro em caso de falha
+}
+
+// packages/shared/src/types/events.types.ts
+export enum TaskEvent {
+  CREATED = 'CREATED',
+  UPDATED = 'UPDATED',
+  PROGRESS = 'PROGRESS',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+}
+
+export interface TaskEventPayload {
+  event: TaskEvent;
+  task: Task;
+  timestamp: Date;
+  meta?: {
+    previousStatus?: TaskStatus;
+    errorDetails?: string;
+  };
+}
+```
+
+### API de Tasks
+
+```typescript
+// packages/backend/src/services/task.service.ts
+
+// Criar nova task
+const task = taskService.create('start-container');
+// → { id: 'uuid', type: 'start-container', status: 'pending', progress: 0 }
+
+// Iniciar task
+taskService.start(taskId, 'Iniciando operação...');
+// → status: 'running', emite TaskEvent.UPDATED
+
+// Atualizar progresso (OBRIGATÓRIO: muitas vezes por operação!)
+taskService.setProgress(taskId, 30, 'Conectando ao Docker...');
+// → emite TaskEvent.PROGRESS
+
+// Completar com sucesso
+taskService.complete(taskId, { containerId: 'xxx' });
+// → status: 'completed', progress: 100, emite TaskEvent.COMPLETED
+
+// Falhar com erro
+taskService.fail(taskId, 'Erro: container não encontrado');
+// → status: 'failed', emite TaskEvent.FAILED
+
+// Buscar task
+const task = taskService.get(taskId);
+```
+
+### WebSocket Events
+
+| Evento | Direção | Payload | Descrição |
+|--------|---------|---------|-----------|
+| `task:subscribe` | Client→Server | `{ taskId: string }` | Subscrever a uma task |
+| `task:unsubscribe` | Client→Server | `{ taskId: string }` | Cancelar subscrição |
+| `task:subscribe:batch` | Client→Server | `{ taskIds: string[] }` | Subscrever a várias tasks |
+| `task:event` | Server→Client | `TaskEventPayload` | Atualização de task |
+
+### Frontend Hook (use-task-websocket)
+
+```typescript
+// packages/frontend/src/hooks/use-task-websocket.ts
+
+const {
+  task,           // Task atual (single subscription)
+  tasks,          // Map de tasks (batch subscription)
+  isConnected,    // WebSocket conectado?
+  isUsingFallback,// Usando HTTP polling?
+  subscribe,      // Subscrever a uma task
+  unsubscribe,    // Cancelar subscrição
+  subscribeBatch, // Subscrever a várias tasks
+  reset,          // Resetar estado
+} = useTaskWebSocket({
+  onComplete: (task) => { /* task completou */ },
+  onError: (task) => { /* task falhou */ },
+  onUpdate: (payload) => { /* qualquer atualização */ },
+  enableFallback: true,  // HTTP polling se WebSocket falhar
+});
+
+// Uso típico
+useEffect(() => {
+  if (taskId) {
+    subscribe(taskId);
+  }
+  return () => unsubscribe();
+}, [taskId]);
+```
+
+### Como Criar Nova Operação com Task
+
+#### 1. Adicionar TaskType (se necessário)
+
+```typescript
+// packages/shared/src/types/task.types.ts
+export type TaskType =
+  | 'create-container'
+  | 'start-container'
+  | 'delete-container'
+  | 'nova-operacao'  // ← Adicionar aqui
+  | 'generic';
+```
+
+#### 2. Criar Endpoint na API
+
+```typescript
+// packages/backend/src/api/routes/exemplo.routes.ts
+router.post('/:id/nova-operacao', async (req, res) => {
+  const { id } = req.params;
+
+  // 1. Criar task
+  const task = taskService.create('nova-operacao');
+
+  // 2. Iniciar task
+  taskService.start(task.id, 'Iniciando operação...');
+
+  // 3. Executar operação ASYNC (não bloquear response)
+  meuService.executarOperacao(id, task.id)
+    .then((result) => {
+      logger.info({ id, taskId: task.id }, 'Operação concluída');
+    })
+    .catch((error) => {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error({ error, taskId: task.id }, 'Operação falhou');
+      taskService.fail(task.id, errorMessage);  // ← OBRIGATÓRIO!
+    });
+
+  // 4. Retornar imediatamente com taskId
+  res.status(202).json({
+    success: true,
+    data: { taskId: task.id },
+    message: 'Operação iniciada'
+  });
+});
+```
+
+#### 3. Implementar Operação com Progress Granular
+
+```typescript
+// packages/backend/src/services/meu.service.ts
+async executarOperacao(id: string, taskId: string): Promise<Result> {
+  try {
+    // OBRIGATÓRIO: Progress granular (mínimo 10 steps)
+    taskService.setProgress(taskId, 5, 'Validando permissões...');
+    await this.validarPermissoes(id);
+
+    taskService.setProgress(taskId, 10, 'Carregando configuração...');
+    const config = await this.carregarConfig(id);
+
+    taskService.setProgress(taskId, 20, 'Preparando recursos...');
+    taskService.setProgress(taskId, 25, 'Conectando ao serviço...');
+
+    taskService.setProgress(taskId, 30, 'Executando operação principal...');
+    taskService.setProgress(taskId, 35, 'Aguardando resposta...');
+    const resultado = await this.operacaoPrincipal(config);
+
+    taskService.setProgress(taskId, 60, 'Operação concluída!');
+    taskService.setProgress(taskId, 70, 'Validando resultado...');
+
+    taskService.setProgress(taskId, 80, 'Atualizando banco de dados...');
+    await this.salvarResultado(resultado);
+
+    taskService.setProgress(taskId, 90, 'Limpando recursos temporários...');
+    taskService.setProgress(taskId, 95, 'Finalizando...');
+
+    // OBRIGATÓRIO: Completar a task
+    taskService.complete(taskId, { id, resultado });
+
+    return resultado;
+  } catch (error) {
+    // OBRIGATÓRIO: Falhar a task em caso de erro
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    taskService.fail(taskId, errorMessage);
+    throw error;
+  }
+}
+```
+
+#### 4. Usar no Frontend
+
+```typescript
+// packages/frontend/src/components/meu-componente.tsx
+function MeuComponente({ id }: Props) {
+  const [taskId, setTaskId] = useState<string | null>(null);
+
+  const handleComplete = useCallback((task: Task) => {
+    console.log('Operação concluída:', task.result);
+    setTaskId(null);
+  }, []);
+
+  const handleError = useCallback((task: Task) => {
+    console.error('Operação falhou:', task.error);
+    setTaskId(null);
+  }, []);
+
+  const { task, subscribe, unsubscribe } = useTaskWebSocket({
+    onComplete: handleComplete,
+    onError: handleError,
+  });
+
+  // Subscrever quando tiver taskId
+  useEffect(() => {
+    if (taskId) {
+      subscribe(taskId);
+    }
+    return () => unsubscribe();
+  }, [taskId, subscribe, unsubscribe]);
+
+  const handleClick = async () => {
+    const response = await apiClient.novaOperacao(id);
+    if (response.success && response.data?.taskId) {
+      setTaskId(response.data.taskId);
+    }
+  };
+
+  return (
+    <div>
+      <button onClick={handleClick} disabled={!!taskId}>
+        {taskId ? 'Executando...' : 'Executar'}
+      </button>
+
+      {task && (
+        <div>
+          <progress value={task.progress} max={100} />
+          <span>{task.progress}% - {task.message}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+---
+
+## Regras OBRIGATÓRIAS para Tasks
+
+### 1. Progress Granular (OBRIGATÓRIO)
 
 **SEMPRE usar progress granular em operações async.** Operações rápidas (~100ms) parecem "travadas" se o progress pula muito.
 
@@ -292,66 +586,89 @@ taskService.setProgress(taskId, 90, 'Finalizando...');
 taskService.complete(taskId, result);
 ```
 
-### Mínimo de Steps por Operação
+### 2. Mínimo de Steps por Operação
 
-| Operação | Mínimo Steps | Exemplo |
-|----------|-------------|---------|
-| CREATE | 15+ steps | 5%, 10%, 15%, 20%, 25%, 30%, 35%, 55%, 65%, 75%, 85%, 90%, 95%, 100% |
-| START | 10+ steps | 5%, 10%, 15%, 20%, 25%, 30%, 35%, 60%, 70%, 80%, 90%, 95% |
-| DELETE | 12+ steps | 5%, 8%, 12%, 15%, 25%, 30%, 40%, 50%, 55%, 65%, 75%, 85%, 90%, 95% |
-| STOP | 6+ steps | 10%, 30%, 50%, 70%, 90%, 100% |
+| Operação | Mínimo Steps | Gap Máximo |
+|----------|-------------|------------|
+| CREATE | 15+ steps | 10% |
+| START | 10+ steps | 15% |
+| DELETE | 12+ steps | 15% |
+| STOP | 6+ steps | 20% |
+| Nova operação | 10+ steps | 15% |
 
-### Error Handling em Operações Async (OBRIGATÓRIO)
+### 3. Error Handling (OBRIGATÓRIO)
 
-**SEMPRE chamar `taskService.fail()` no catch block de operações async.**
+**SEMPRE chamar `taskService.fail()` em DOIS lugares:**
 
-#### ❌ ERRADO - Task fica em "running" para sempre
+#### No catch block da rota (fire-and-forget):
 ```typescript
-containerService.create(config, task.id)
-  .catch((error) => {
-    logger.error({ error }, 'Failed'); // Task nunca é marcada como failed!
-  });
-```
-
-#### ✅ CORRETO - Task é marcada como failed
-```typescript
-containerService.create(config, task.id)
+meuService.operacao(id, task.id)
   .catch((error) => {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     logger.error({ error }, 'Failed');
-    taskService.fail(task.id, errorMessage); // OBRIGATÓRIO!
+    taskService.fail(task.id, errorMessage);  // ← OBRIGATÓRIO!
   });
 ```
 
-### Cleanup de Containers com Erro
-
-Quando criação falha, **DELETAR** o registro do banco (não apenas marcar como 'error'):
-
+#### No catch block do service:
 ```typescript
-// Em caso de falha na criação:
-if (containerId) {
-  containerRepository.delete(containerId);  // ✅ Permite reuso do nome
-  // NÃO usar: containerRepository.updateStatus(containerId, 'error'); // ❌ Bloqueia nome
-}
-```
-
-### Verificação de Nome com Status
-
-Ao verificar nome duplicado, considerar status:
-
-```typescript
-const existing = containerRepository.findByName(name);
-if (existing) {
-  if (existing.status === 'error') {
-    // Deletar registro com erro para permitir reuso
-    containerRepository.delete(existing.id);
-  } else if (existing.status === 'creating') {
-    return error('Container está sendo criado. Aguarde.');
-  } else {
-    return error('Nome já existe');
+async operacao(id: string, taskId: string) {
+  try {
+    // ... operação
+    taskService.complete(taskId, result);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    taskService.fail(taskId, errorMessage);  // ← OBRIGATÓRIO!
+    throw error;
   }
 }
 ```
+
+### 4. Cleanup em Caso de Erro
+
+Quando operação falha, **DELETAR** registros parciais:
+
+```typescript
+// Em caso de falha:
+if (containerId) {
+  containerRepository.delete(containerId);  // ✅ Permite retry
+  // NÃO: containerRepository.updateStatus(containerId, 'error'); // ❌ Bloqueia
+}
+```
+
+### 5. Verificação de Status Antes de Operações
+
+```typescript
+const existing = repository.findByName(name);
+if (existing) {
+  if (existing.status === 'error') {
+    repository.delete(existing.id);  // Limpar registro com erro
+  } else if (existing.status === 'creating' || existing.status === 'deleting') {
+    return error('Operação em andamento. Aguarde.');
+  } else {
+    return error('Recurso já existe');
+  }
+}
+```
+
+### 6. Mensagens em Português
+
+Todas as mensagens de progress devem ser em português:
+
+```typescript
+// ✅ CORRETO
+taskService.setProgress(taskId, 30, 'Iniciando container no Docker...');
+taskService.setProgress(taskId, 60, 'Container iniciado com sucesso!');
+taskService.fail(taskId, 'Falha ao iniciar container: timeout');
+
+// ❌ ERRADO
+taskService.setProgress(taskId, 30, 'Starting container...');
+```
+
+### 7. Timeout de Tasks
+
+Tasks são automaticamente limpas após 1 hora pelo `TaskService`.
+Não é necessário implementar timeout manual.
 
 ## Rate Limiting (v0.0.24+)
 
