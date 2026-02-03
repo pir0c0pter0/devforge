@@ -168,17 +168,6 @@ export default function ContainerDetailPage() {
     }
   }
 
-  const handleOpenShell = async () => {
-    if (!container) return
-
-    const response = await apiClient.openShell(container.id)
-    if (response.success && response.data?.url) {
-      window.open(response.data.url, '_blank')
-    } else {
-      setError(response.error || 'Failed to open shell')
-    }
-  }
-
   const handleOpenVSCode = async () => {
     if (!container) return
 
@@ -296,13 +285,6 @@ export default function ContainerDetailPage() {
               {container.status === 'creating' ? <AnimatedDots text="Starting" /> : 'Start'}
             </button>
           )}
-          <button
-            onClick={handleOpenShell}
-            className="btn-secondary"
-            disabled={container.status !== 'running'}
-          >
-            Shell
-          </button>
           {(container.template === 'vscode' || container.template === 'both') && (
             <button
               onClick={handleOpenVSCode}

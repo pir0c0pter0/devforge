@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import type { Container, Metrics } from '@/lib/types'
+import type { Container } from '@/lib/types'
+import type { ContainerMetrics } from '@claude-docker/shared'
 
 interface ContainerState {
   containers: Container[]
@@ -12,7 +13,7 @@ interface ContainerState {
   updateContainer: (id: string, updates: Partial<Container>) => void
   removeContainer: (id: string) => void
   setSelectedContainer: (container: Container | null) => void
-  updateMetrics: (metrics: Metrics) => void
+  updateMetrics: (metrics: ContainerMetrics) => void
   setLoading: (isLoading: boolean) => void
   setError: (error: string | null) => void
   clearError: () => void
@@ -59,31 +60,32 @@ export const useContainerStore = create<ContainerState>((set) => ({
     }),
 
   updateMetrics: (metrics) =>
-    set((state) => ({
-      containers: state.containers.map((c) =>
-        c.id === metrics.containerId
-          ? {
-              ...c,
-              metrics: {
-                cpu: metrics.cpu,
-                memory: metrics.memory,
-                disk: metrics.disk,
-              },
-            }
-          : c
-      ),
-      selectedContainer:
-        state.selectedContainer?.id === metrics.containerId
-          ? {
-              ...state.selectedContainer,
-              metrics: {
-                cpu: metrics.cpu,
-                memory: metrics.memory,
-                disk: metrics.disk,
-              },
-            }
-          : state.selectedContainer,
-    })),
+    set((state) => {
+      // Extract flat values from nested ContainerMetrics structure
+      const flatMetrics = {
+        cpu: metrics.cpu?.usage ?? 0,
+        memory: metrics.memory?.percentage ?? 0,
+        disk: metrics.disk?.percentage ?? 0,
+      }
+
+      return {
+        containers: state.containers.map((c) =>
+          c.id === metrics.containerId
+            ? {
+                ...c,
+                metrics: flatMetrics,
+              }
+            : c
+        ),
+        selectedContainer:
+          state.selectedContainer?.id === metrics.containerId
+            ? {
+                ...state.selectedContainer,
+                metrics: flatMetrics,
+              }
+            : state.selectedContainer,
+      }
+    }),
 
   setLoading: (isLoading) =>
     set({

@@ -1,56 +1,47 @@
-import { useEffect } from 'react'
-import { wsClient } from '@/lib/websocket'
+import { useEffect, useState } from 'react'
+import { metricsWsClient } from '@/lib/websocket'
 import { useContainerStore } from '@/stores/container.store'
-import type { Metrics, Container } from '@/lib/types'
+import type { ContainerMetrics } from '@claude-docker/shared'
 
 export function useMetrics(containerId?: string) {
-  const { updateMetrics, updateContainer } = useContainerStore()
+  const { updateMetrics } = useContainerStore()
+  const [isConnected, setIsConnected] = useState(false)
 
   useEffect(() => {
-    const handleMetricsUpdate = (metrics: Metrics) => {
+    const handleMetricsUpdate = (metrics: ContainerMetrics) => {
       if (!containerId || metrics.containerId === containerId) {
         updateMetrics(metrics)
       }
     }
 
-    const handleContainerUpdate = (container: Container) => {
-      if (!containerId || container.id === containerId) {
-        updateContainer(container.id, container)
-      }
-    }
-
-    const handleQueueUpdate = (data: { containerId: string; queueLength: number }) => {
-      if (!containerId || data.containerId === containerId) {
-        updateContainer(data.containerId, { queueLength: data.queueLength })
-      }
-    }
-
-    wsClient.connect({
+    metricsWsClient.connect({
       onMetricsUpdate: handleMetricsUpdate,
-      onContainerUpdate: handleContainerUpdate,
-      onQueueUpdate: handleQueueUpdate,
       onConnect: () => {
+        setIsConnected(true)
         if (containerId) {
-          wsClient.subscribeToContainer(containerId)
+          metricsWsClient.subscribeToContainer(containerId)
         }
+      },
+      onDisconnect: () => {
+        setIsConnected(false)
       },
       onError: (error) => {
         console.error('WebSocket error:', error)
       },
     })
 
-    if (containerId && wsClient.isConnected()) {
-      wsClient.subscribeToContainer(containerId)
+    if (containerId && metricsWsClient.isConnected()) {
+      metricsWsClient.subscribeToContainer(containerId)
     }
 
     return () => {
       if (containerId) {
-        wsClient.unsubscribeFromContainer(containerId)
+        metricsWsClient.unsubscribeFromContainer(containerId)
       }
     }
-  }, [containerId, updateMetrics, updateContainer])
+  }, [containerId, updateMetrics])
 
   return {
-    isConnected: wsClient.isConnected(),
+    isConnected,
   }
 }

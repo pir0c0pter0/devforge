@@ -15,29 +15,45 @@ export interface ContainerMetrics {
   }
   /** Memory metrics */
   memory: {
-    /** Current memory usage in bytes */
+    /** Current memory usage in MB */
     usage: number
-    /** Memory limit in bytes */
+    /** Memory limit in MB */
     limit: number
     /** Memory usage percentage */
-    percent: number
+    percentage: number
   }
   /** Disk metrics */
   disk: {
-    /** Current disk usage in bytes */
+    /** Current disk usage in MB */
     usage: number
-    /** Disk limit in bytes */
+    /** Disk limit in MB */
     limit: number
+    /** Disk usage percentage */
+    percentage: number
   }
-  /** Network metrics */
-  network: {
+  /** Network metrics (optional) */
+  network?: {
     /** Received bytes */
     rxBytes: number
     /** Transmitted bytes */
     txBytes: number
   }
-  /** Number of active Claude Code agents */
-  activeAgents: number
+  /** Active agent processes */
+  activeAgents: AgentProcess[]
+}
+
+/**
+ * Agent process information
+ */
+export interface AgentProcess {
+  /** Process ID */
+  pid: number
+  /** Command that started the process */
+  command: string
+  /** CPU usage percentage */
+  cpu: number
+  /** Memory usage percentage */
+  memory: number
 }
 
 /**

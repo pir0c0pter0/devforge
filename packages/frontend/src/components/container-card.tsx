@@ -7,6 +7,7 @@ import { useContainerStore } from '@/stores/container.store'
 import { useI18n } from '@/lib/i18n'
 import { AnimatedDots } from '@/components/ui/animated-dots'
 import { useTaskWebSocket } from '@/hooks/use-task-websocket'
+import { useMetrics } from '@/hooks/use-metrics'
 import clsx from 'clsx'
 
 interface ContainerCardProps {
@@ -19,6 +20,9 @@ export function ContainerCard({ container }: ContainerCardProps) {
   const [isStarting, setIsStarting] = useState(false)
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
   const { updateContainer, removeContainer, setError } = useContainerStore()
+
+  // Subscribe to real-time metrics updates for this container
+  useMetrics(container.status === 'running' ? container.id : undefined)
 
   // Handle task completion - refresh container data
   const handleTaskComplete = useCallback(async (_task: Task) => {
