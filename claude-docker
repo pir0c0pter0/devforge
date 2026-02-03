@@ -1,0 +1,799 @@
+#!/bin/bash
+#
+# claude-docker - Gerenciador de ambientes Docker com Claude Code
+# https://github.com/pir0c0pter0/claude-docker
+#
+# Uso: claude-docker [comando] [opcoes]
+#
+set -e
+
+VERSION="1.0.0"
+SCRIPT_NAME="claude-docker"
+CONFIG_DIR="$HOME/.config/claude-docker"
+ENVS_DIR="$HOME/.claude-docker-envs"
+DATA_FILE="$CONFIG_DIR/environments.json"
+
+# Cores
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+MAGENTA='\033[0;35m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+# Icones (usando caracteres ASCII para compatibilidade)
+ICON_OK="[OK]"
+ICON_ERR="[X]"
+ICON_WARN="[!]"
+ICON_INFO="[i]"
+ICON_RUN="[>]"
+ICON_STOP="[-]"
+
+# Logging
+log_info() { echo -e "${BLUE}${ICON_INFO}${NC} $1"; }
+log_success() { echo -e "${GREEN}${ICON_OK}${NC} $1"; }
+log_warn() { echo -e "${YELLOW}${ICON_WARN}${NC} $1"; }
+log_error() { echo -e "${RED}${ICON_ERR}${NC} $1"; }
+log_step() { echo -e "${CYAN}>>>${NC} ${BOLD}$1${NC}"; }
+
+# Inicializar diretorios
+init_dirs() {
+    mkdir -p "$CONFIG_DIR" "$ENVS_DIR"
+    if [ ! -f "$DATA_FILE" ]; then
+        echo '{"environments":[]}' > "$DATA_FILE"
+    fi
+}
+
+# Banner
+show_banner() {
+    echo -e "${CYAN}"
+    cat << 'EOF'
+   _____ _                 _        _____             _
+  / ____| |               | |      |  __ \           | |
+ | |    | | __ _ _   _  __| | ___  | |  | | ___   ___| | _____ _ __
+ | |    | |/ _` | | | |/ _` |/ _ \ | |  | |/ _ \ / __| |/ / _ \ '__|
+ | |____| | (_| | |_| | (_| |  __/ | |__| | (_) | (__|   <  __/ |
+  \_____|_|\__,_|\__,_|\__,_|\___| |_____/ \___/ \___|_|\_\___|_|
+EOF
+    echo -e "${NC}"
+    echo -e "${DIM}  Gerenciador de ambientes Docker com Claude Code v${VERSION}${NC}"
+    echo ""
+}
+
+# Verificar dependencias
+check_deps() {
+    local missing=()
+
+    command -v docker &>/dev/null || missing+=("docker")
+    command -v docker-compose &>/dev/null || missing+=("docker-compose")
+    command -v git &>/dev/null || missing+=("git")
+    command -v jq &>/dev/null || missing+=("jq")
+
+    if [ ${#missing[@]} -gt 0 ]; then
+        log_error "Dependencias faltando: ${missing[*]}"
+        echo ""
+        echo "Instale com:"
+        echo "  sudo pacman -S ${missing[*]}"
+        exit 1
+    fi
+
+    # Docker daemon
+    if ! docker info &>/dev/null; then
+        log_error "Docker daemon nao esta rodando"
+        echo "  sudo systemctl start docker"
+        exit 1
+    fi
+}
+
+# Listar ambientes
+list_envs() {
+    init_dirs
+
+    echo -e "${BOLD}Ambientes Claude Docker:${NC}"
+    echo ""
+
+    local count=0
+    local format="%-4s %-20s %-12s %-30s %s\n"
+
+    printf "${DIM}${format}${NC}" "#" "NOME" "STATUS" "REPOSITORIO" "CRIADO"
+    echo "${DIM}$(printf '%.0s-' {1..90})${NC}"
+
+    for env_dir in "$ENVS_DIR"/*/; do
+        [ -d "$env_dir" ] || continue
+
+        local name=$(basename "$env_dir")
+        local container="${name}_claude"
+        local status
+        local repo=""
+        local created=""
+
+        # Status do container
+        if docker ps -q -f "name=$container" 2>/dev/null | grep -q .; then
+            status="${GREEN}running${NC}"
+        elif docker ps -aq -f "name=$container" 2>/dev/null | grep -q .; then
+            status="${YELLOW}stopped${NC}"
+        else
+            status="${DIM}not built${NC}"
+        fi
+
+        # Info do .env
+        if [ -f "$env_dir/.env" ]; then
+            repo=$(grep "^REPO_URL=" "$env_dir/.env" 2>/dev/null | cut -d'"' -f2 | head -1)
+            repo=${repo:-"-"}
+        fi
+
+        # Data de criacao
+        if [ -f "$env_dir/docker-compose.yml" ]; then
+            created=$(stat -c %y "$env_dir/docker-compose.yml" 2>/dev/null | cut -d' ' -f1)
+        fi
+
+        ((count++))
+        printf "${format}" "$count" "$name" "$status" "${repo:0:28}" "$created"
+    done
+
+    if [ $count -eq 0 ]; then
+        echo -e "${DIM}  Nenhum ambiente encontrado.${NC}"
+        echo ""
+        echo "  Crie um novo com: $SCRIPT_NAME create"
+    fi
+
+    echo ""
+}
+
+# Menu interativo de selecao
+select_env() {
+    local prompt="${1:-Selecione o ambiente}"
+    local envs=()
+    local i=1
+
+    for env_dir in "$ENVS_DIR"/*/; do
+        [ -d "$env_dir" ] || continue
+        envs+=("$(basename "$env_dir")")
+    done
+
+    if [ ${#envs[@]} -eq 0 ]; then
+        log_error "Nenhum ambiente encontrado"
+        return 1
+    fi
+
+    echo ""
+    echo -e "${BOLD}$prompt:${NC}"
+    echo ""
+
+    for env in "${envs[@]}"; do
+        local container="${env}_claude"
+        local status_icon
+
+        if docker ps -q -f "name=$container" 2>/dev/null | grep -q .; then
+            status_icon="${GREEN}${ICON_RUN}${NC}"
+        elif docker ps -aq -f "name=$container" 2>/dev/null | grep -q .; then
+            status_icon="${YELLOW}${ICON_STOP}${NC}"
+        else
+            status_icon="${DIM}[ ]${NC}"
+        fi
+
+        echo -e "  ${BOLD}$i)${NC} $status_icon $env"
+        ((i++))
+    done
+
+    echo ""
+    read -p "Numero (ou 'q' para cancelar): " choice
+
+    if [[ "$choice" == "q" ]]; then
+        return 1
+    fi
+
+    if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le ${#envs[@]} ]; then
+        SELECTED_ENV="${envs[$((choice-1))]}"
+        return 0
+    else
+        log_error "Selecao invalida"
+        return 1
+    fi
+}
+
+# Criar novo ambiente
+create_env() {
+    init_dirs
+    show_banner
+
+    log_step "Criar novo ambiente Docker com Claude Code"
+    echo ""
+
+    # Nome do projeto
+    while true; do
+        read -p "Nome do ambiente: " env_name
+        if [[ "$env_name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            if [ -d "$ENVS_DIR/$env_name" ]; then
+                log_error "Ambiente '$env_name' ja existe"
+                continue
+            fi
+            break
+        else
+            log_error "Use apenas letras, numeros, - e _"
+        fi
+    done
+
+    # Repositorio
+    read -p "URL do repositorio Git (Enter para pular): " repo_url
+
+    # API Key
+    local api_key=""
+    if [ -z "$ANTHROPIC_API_KEY" ]; then
+        read -p "ANTHROPIC_API_KEY (Enter para configurar depois): " api_key
+    else
+        api_key="$ANTHROPIC_API_KEY"
+        log_info "Usando ANTHROPIC_API_KEY do ambiente"
+    fi
+
+    echo ""
+    log_info "Criando ambiente '$env_name'..."
+
+    local env_dir="$ENVS_DIR/$env_name"
+    mkdir -p "$env_dir"
+
+    # Criar Dockerfile
+    create_dockerfile "$env_dir"
+
+    # Criar docker-compose.yml
+    create_compose "$env_dir" "$env_name"
+
+    # Criar .env
+    cat > "$env_dir/.env" << EOF
+ANTHROPIC_API_KEY=${api_key}
+GITHUB_TOKEN=
+REPO_URL="${repo_url}"
+EOF
+
+    # Criar .gitignore
+    echo -e ".env\n*.log" > "$env_dir/.gitignore"
+
+    log_success "Estrutura criada em $env_dir"
+
+    # Build
+    echo ""
+    read -p "Construir e iniciar agora? (Y/n) " -n 1 -r
+    echo ""
+
+    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+        build_env "$env_name"
+        start_env "$env_name"
+
+        # Clonar repo se especificado
+        if [ -n "$repo_url" ]; then
+            clone_repo "$env_name" "$repo_url"
+        fi
+
+        echo ""
+        log_success "Ambiente '$env_name' pronto!"
+        echo ""
+        echo "  Acessar:  $SCRIPT_NAME shell $env_name"
+        echo "  Claude:   $SCRIPT_NAME claude $env_name"
+    fi
+}
+
+# Criar Dockerfile
+create_dockerfile() {
+    local dir="$1"
+
+    cat > "$dir/Dockerfile" << 'DOCKERFILE'
+FROM node:22-bookworm
+
+LABEL maintainer="claude-docker"
+
+ARG USERNAME=developer
+ARG USER_UID=1000
+ARG USER_GID=1000
+
+RUN apt-get update && apt-get install -y \
+    git curl wget vim nano sudo zsh jq unzip \
+    openssh-client ca-certificates gnupg lsb-release \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+    | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+    && apt-get update && apt-get install -y gh \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --gid $USER_GID $USERNAME 2>/dev/null || true \
+    && useradd --uid $USER_UID --gid $USER_GID -m $USERNAME 2>/dev/null \
+    || useradd --uid $USER_UID -g node -m $USERNAME \
+    && echo "$USERNAME ALL=(root) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME \
+    && chmod 0440 /etc/sudoers.d/$USERNAME
+
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+USER $USERNAME
+WORKDIR /home/$USERNAME
+
+RUN npm install -g @anthropic-ai/claude-code
+
+RUN mkdir -p .claude/{agents,commands,hooks,plugins,rules,skills,get-shit-done} .ssh \
+    && chmod 700 .ssh
+
+WORKDIR /home/$USERNAME/workspace
+
+EXPOSE 3000 5173 8080
+
+CMD ["tail", "-f", "/dev/null"]
+DOCKERFILE
+}
+
+# Criar docker-compose.yml
+create_compose() {
+    local dir="$1"
+    local name="$2"
+
+    cat > "$dir/docker-compose.yml" << COMPOSE
+services:
+  claude-dev:
+    build:
+      context: .
+      args:
+        USERNAME: developer
+        USER_UID: $(id -u)
+        USER_GID: $(id -g)
+    container_name: ${name}_claude
+    hostname: claude-dev
+    stdin_open: true
+    tty: true
+    volumes:
+      - claude-config:/home/developer/.claude
+      - workspace:/home/developer/workspace
+      - ~/.ssh:/home/developer/.ssh:ro
+      - ~/.gitconfig:/home/developer/.gitconfig:ro
+    environment:
+      - NODE_ENV=development
+      - ANTHROPIC_API_KEY=\${ANTHROPIC_API_KEY:-}
+      - GITHUB_TOKEN=\${GITHUB_TOKEN:-}
+      - TERM=xterm-256color
+    networks:
+      - claude-net
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
+volumes:
+  claude-config:
+    name: ${name}_claude_config
+  workspace:
+    name: ${name}_workspace
+
+networks:
+  claude-net:
+    name: ${name}_network
+COMPOSE
+}
+
+# Build ambiente
+build_env() {
+    local name="$1"
+    local env_dir="$ENVS_DIR/$name"
+
+    if [ ! -d "$env_dir" ]; then
+        log_error "Ambiente '$name' nao encontrado"
+        return 1
+    fi
+
+    log_info "Construindo imagem para '$name'..."
+    cd "$env_dir"
+    docker-compose build
+    log_success "Imagem construida!"
+}
+
+# Iniciar ambiente
+start_env() {
+    local name="$1"
+    local env_dir="$ENVS_DIR/$name"
+
+    if [ ! -d "$env_dir" ]; then
+        log_error "Ambiente '$name' nao encontrado"
+        return 1
+    fi
+
+    log_info "Iniciando '$name'..."
+    cd "$env_dir"
+    docker-compose up -d
+    sleep 2
+
+    local container="${name}_claude"
+
+    # Primeira execucao - copiar configs
+    if ! docker exec "$container" test -f /home/developer/.claude/settings.json 2>/dev/null; then
+        log_info "Copiando configuracoes do Claude Code..."
+        copy_claude_config "$name"
+    fi
+
+    log_success "'$name' iniciado!"
+}
+
+# Parar ambiente
+stop_env() {
+    local name="$1"
+    local env_dir="$ENVS_DIR/$name"
+
+    if [ ! -d "$env_dir" ]; then
+        log_error "Ambiente '$name' nao encontrado"
+        return 1
+    fi
+
+    log_info "Parando '$name'..."
+    cd "$env_dir"
+    docker-compose down
+    log_success "'$name' parado!"
+}
+
+# Copiar configuracoes do Claude
+copy_claude_config() {
+    local name="$1"
+    local container="${name}_claude"
+
+    docker exec "$container" mkdir -p /home/developer/.claude/{agents,commands,hooks,plugins,rules,skills,get-shit-done}
+
+    for dir in agents commands hooks rules skills get-shit-done plugins; do
+        if [ -d "$HOME/.claude/$dir" ]; then
+            docker cp "$HOME/.claude/$dir/." "$container:/home/developer/.claude/$dir/" 2>/dev/null || true
+        fi
+    done
+
+    for file in CLAUDE.md settings.json settings.local.json; do
+        if [ -f "$HOME/.claude/$file" ]; then
+            docker cp "$HOME/.claude/$file" "$container:/home/developer/.claude/$file" 2>/dev/null || true
+        fi
+    done
+
+    docker exec "$container" sudo chown -R developer:developer /home/developer/.claude
+    docker exec "$container" chmod 700 /home/developer/.ssh 2>/dev/null || true
+}
+
+# Clonar repositorio
+clone_repo() {
+    local name="$1"
+    local repo_url="$2"
+    local container="${name}_claude"
+
+    log_info "Clonando $repo_url..."
+
+    docker exec "$container" git clone "$repo_url" /home/developer/workspace/project 2>/dev/null || \
+    docker exec -w /home/developer/workspace/project "$container" git pull 2>/dev/null || true
+
+    # Instalar deps
+    if docker exec "$container" test -f /home/developer/workspace/project/package.json 2>/dev/null; then
+        log_info "Instalando dependencias..."
+        docker exec -w /home/developer/workspace/project "$container" pnpm install 2>/dev/null || \
+        docker exec -w /home/developer/workspace/project "$container" npm install 2>/dev/null || true
+    fi
+}
+
+# Shell no ambiente
+shell_env() {
+    local name="$1"
+    local container="${name}_claude"
+
+    if ! docker ps -q -f "name=$container" | grep -q .; then
+        log_warn "Ambiente '$name' nao esta rodando. Iniciando..."
+        start_env "$name"
+    fi
+
+    docker exec -it "$container" /bin/bash
+}
+
+# Executar Claude Code
+claude_env() {
+    local name="$1"
+    local container="${name}_claude"
+
+    if ! docker ps -q -f "name=$container" | grep -q .; then
+        log_warn "Ambiente '$name' nao esta rodando. Iniciando..."
+        start_env "$name"
+    fi
+
+    docker exec -it -w /home/developer/workspace "$container" claude
+}
+
+# Deletar ambiente
+delete_env() {
+    local name="$1"
+    local env_dir="$ENVS_DIR/$name"
+
+    if [ ! -d "$env_dir" ]; then
+        log_error "Ambiente '$name' nao encontrado"
+        return 1
+    fi
+
+    echo ""
+    log_warn "Isso vai deletar PERMANENTEMENTE:"
+    echo "  - Container: ${name}_claude"
+    echo "  - Volumes: ${name}_claude_config, ${name}_workspace"
+    echo "  - Diretorio: $env_dir"
+    echo ""
+    read -p "Digite '$name' para confirmar: " confirm
+
+    if [ "$confirm" != "$name" ]; then
+        log_info "Cancelado"
+        return 0
+    fi
+
+    log_info "Deletando '$name'..."
+
+    cd "$env_dir"
+    docker-compose down -v 2>/dev/null || true
+    docker volume rm "${name}_claude_config" "${name}_workspace" 2>/dev/null || true
+    rm -rf "$env_dir"
+
+    log_success "'$name' deletado!"
+}
+
+# Atualizar Claude Code no ambiente
+update_env() {
+    local name="$1"
+    local container="${name}_claude"
+
+    if ! docker ps -q -f "name=$container" | grep -q .; then
+        log_error "Ambiente '$name' nao esta rodando"
+        return 1
+    fi
+
+    log_info "Atualizando Claude Code em '$name'..."
+    docker exec "$container" npm update -g @anthropic-ai/claude-code
+
+    log_info "Atualizando configuracoes..."
+    copy_claude_config "$name"
+
+    log_success "'$name' atualizado!"
+}
+
+# Status de um ambiente
+status_env() {
+    local name="$1"
+    local container="${name}_claude"
+    local env_dir="$ENVS_DIR/$name"
+
+    if [ ! -d "$env_dir" ]; then
+        log_error "Ambiente '$name' nao encontrado"
+        return 1
+    fi
+
+    echo ""
+    echo -e "${BOLD}Ambiente: $name${NC}"
+    echo ""
+
+    # Status container
+    echo -e "${CYAN}Container:${NC}"
+    docker ps -a --filter "name=$container" --format "  Status: {{.Status}}\n  Ports: {{.Ports}}" 2>/dev/null || echo "  Nao criado"
+
+    # Volumes
+    echo ""
+    echo -e "${CYAN}Volumes:${NC}"
+    docker volume ls --filter "name=${name}_" --format "  {{.Name}}" 2>/dev/null || echo "  Nenhum"
+
+    # Config
+    echo ""
+    echo -e "${CYAN}Configuracao:${NC}"
+    echo "  Diretorio: $env_dir"
+    if [ -f "$env_dir/.env" ]; then
+        local repo=$(grep "^REPO_URL=" "$env_dir/.env" | cut -d'"' -f2)
+        echo "  Repositorio: ${repo:-N/A}"
+    fi
+    echo ""
+}
+
+# Menu principal interativo
+main_menu() {
+    while true; do
+        show_banner
+
+        echo -e "${BOLD}Menu Principal:${NC}"
+        echo ""
+        echo "  1) Listar ambientes"
+        echo "  2) Criar novo ambiente"
+        echo "  3) Iniciar ambiente"
+        echo "  4) Parar ambiente"
+        echo "  5) Abrir shell"
+        echo "  6) Executar Claude Code"
+        echo "  7) Atualizar ambiente"
+        echo "  8) Ver status"
+        echo "  9) Deletar ambiente"
+        echo "  0) Sair"
+        echo ""
+        read -p "Opcao: " choice
+
+        case $choice in
+            1)
+                clear
+                list_envs
+                read -p "Pressione Enter para continuar..."
+                ;;
+            2)
+                clear
+                create_env
+                read -p "Pressione Enter para continuar..."
+                ;;
+            3)
+                clear
+                if select_env "Iniciar ambiente"; then
+                    start_env "$SELECTED_ENV"
+                fi
+                read -p "Pressione Enter para continuar..."
+                ;;
+            4)
+                clear
+                if select_env "Parar ambiente"; then
+                    stop_env "$SELECTED_ENV"
+                fi
+                read -p "Pressione Enter para continuar..."
+                ;;
+            5)
+                clear
+                if select_env "Abrir shell"; then
+                    shell_env "$SELECTED_ENV"
+                fi
+                ;;
+            6)
+                clear
+                if select_env "Executar Claude Code"; then
+                    claude_env "$SELECTED_ENV"
+                fi
+                ;;
+            7)
+                clear
+                if select_env "Atualizar ambiente"; then
+                    update_env "$SELECTED_ENV"
+                fi
+                read -p "Pressione Enter para continuar..."
+                ;;
+            8)
+                clear
+                if select_env "Ver status"; then
+                    status_env "$SELECTED_ENV"
+                fi
+                read -p "Pressione Enter para continuar..."
+                ;;
+            9)
+                clear
+                if select_env "Deletar ambiente"; then
+                    delete_env "$SELECTED_ENV"
+                fi
+                read -p "Pressione Enter para continuar..."
+                ;;
+            0|q)
+                echo "Ate logo!"
+                exit 0
+                ;;
+            *)
+                log_error "Opcao invalida"
+                sleep 1
+                ;;
+        esac
+        clear
+    done
+}
+
+# Ajuda
+show_help() {
+    echo "claude-docker v$VERSION - Gerenciador de ambientes Docker com Claude Code"
+    echo ""
+    echo "Uso: $SCRIPT_NAME [comando] [ambiente] [opcoes]"
+    echo ""
+    echo "Comandos:"
+    echo "  (sem comando)     Menu interativo"
+    echo "  list              Listar todos os ambientes"
+    echo "  create            Criar novo ambiente"
+    echo "  start <nome>      Iniciar ambiente"
+    echo "  stop <nome>       Parar ambiente"
+    echo "  shell <nome>      Abrir shell no ambiente"
+    echo "  claude <nome>     Executar Claude Code no ambiente"
+    echo "  update <nome>     Atualizar Claude Code e configs"
+    echo "  status <nome>     Ver status do ambiente"
+    echo "  delete <nome>     Deletar ambiente"
+    echo "  help              Esta ajuda"
+    echo ""
+    echo "Exemplos:"
+    echo "  $SCRIPT_NAME                    # Menu interativo"
+    echo "  $SCRIPT_NAME create             # Criar novo ambiente"
+    echo "  $SCRIPT_NAME shell meu-projeto  # Shell no ambiente"
+    echo "  $SCRIPT_NAME claude meu-projeto # Claude Code no ambiente"
+    echo ""
+}
+
+# Main
+main() {
+    init_dirs
+    check_deps
+
+    case "${1:-}" in
+        "")
+            main_menu
+            ;;
+        list|ls)
+            list_envs
+            ;;
+        create|new)
+            create_env
+            ;;
+        start)
+            if [ -z "$2" ]; then
+                if select_env "Iniciar ambiente"; then
+                    start_env "$SELECTED_ENV"
+                fi
+            else
+                start_env "$2"
+            fi
+            ;;
+        stop)
+            if [ -z "$2" ]; then
+                if select_env "Parar ambiente"; then
+                    stop_env "$SELECTED_ENV"
+                fi
+            else
+                stop_env "$2"
+            fi
+            ;;
+        shell|sh)
+            if [ -z "$2" ]; then
+                if select_env "Abrir shell"; then
+                    shell_env "$SELECTED_ENV"
+                fi
+            else
+                shell_env "$2"
+            fi
+            ;;
+        claude|c)
+            if [ -z "$2" ]; then
+                if select_env "Executar Claude Code"; then
+                    claude_env "$SELECTED_ENV"
+                fi
+            else
+                claude_env "$2"
+            fi
+            ;;
+        update|up)
+            if [ -z "$2" ]; then
+                if select_env "Atualizar ambiente"; then
+                    update_env "$SELECTED_ENV"
+                fi
+            else
+                update_env "$2"
+            fi
+            ;;
+        status|st)
+            if [ -z "$2" ]; then
+                if select_env "Ver status"; then
+                    status_env "$SELECTED_ENV"
+                fi
+            else
+                status_env "$2"
+            fi
+            ;;
+        delete|rm)
+            if [ -z "$2" ]; then
+                if select_env "Deletar ambiente"; then
+                    delete_env "$SELECTED_ENV"
+                fi
+            else
+                delete_env "$2"
+            fi
+            ;;
+        help|--help|-h)
+            show_help
+            ;;
+        version|--version|-v)
+            echo "$SCRIPT_NAME v$VERSION"
+            ;;
+        *)
+            log_error "Comando desconhecido: $1"
+            echo ""
+            show_help
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"
