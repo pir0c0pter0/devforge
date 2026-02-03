@@ -356,10 +356,10 @@ export function useTaskWebSocket(
 
         // Re-subscribe to tasks after reconnection
         if (currentTaskIdRef.current) {
-          socket.emit('subscribe:task', { taskId: currentTaskIdRef.current })
+          socket.emit('task:subscribe', { taskId: currentTaskIdRef.current })
         }
         if (batchTaskIdsRef.current.size > 0) {
-          socket.emit('subscribe:batch', {
+          socket.emit('task:subscribe:batch', {
             taskIds: Array.from(batchTaskIdsRef.current),
           })
         }
@@ -453,7 +453,7 @@ export function useTaskWebSocket(
 
       // Unsubscribe from previous task if any
       if (currentTaskIdRef.current && currentTaskIdRef.current !== taskId) {
-        socketRef.current?.emit('unsubscribe:task', {
+        socketRef.current?.emit('task:unsubscribe', {
           taskId: currentTaskIdRef.current,
         })
       }
@@ -485,7 +485,7 @@ export function useTaskWebSocket(
       }
 
       if (socketRef.current?.connected) {
-        socketRef.current.emit('subscribe:task', { taskId })
+        socketRef.current.emit('task:subscribe', { taskId })
       } else if (isUsingFallback && !pollingIntervalRef.current) {
         // Start polling if in fallback mode and not already polling
         startPollingFallbackRef.current()
@@ -498,7 +498,7 @@ export function useTaskWebSocket(
   const unsubscribe = useCallback(() => {
     if (currentTaskIdRef.current) {
       console.log('[TaskWS] Unsubscribing from task:', currentTaskIdRef.current)
-      socketRef.current?.emit('unsubscribe:task', {
+      socketRef.current?.emit('task:unsubscribe', {
         taskId: currentTaskIdRef.current,
       })
       completedTasksRef.current.add(currentTaskIdRef.current) // Mark as completed to stop polling
@@ -526,7 +526,7 @@ export function useTaskWebSocket(
       })
 
       if (socketRef.current?.connected) {
-        socketRef.current.emit('subscribe:batch', { taskIds })
+        socketRef.current.emit('task:subscribe:batch', { taskIds })
       } else if (isUsingFallback && !pollingIntervalRef.current) {
         // Start polling if in fallback mode and not already polling
         startPollingFallbackRef.current()
@@ -544,8 +544,10 @@ export function useTaskWebSocket(
       )
       // Mark all batch tasks as completed to stop polling
       batchTaskIdsRef.current.forEach((id) => completedTasksRef.current.add(id))
-      socketRef.current?.emit('unsubscribe:batch', {
-        taskIds: Array.from(batchTaskIdsRef.current),
+      // Note: No batch unsubscribe event defined in shared types
+      // Unsubscribe from each task individually
+      Array.from(batchTaskIdsRef.current).forEach((taskId) => {
+        socketRef.current?.emit('task:unsubscribe', { taskId })
       })
       batchTaskIdsRef.current.clear()
       setTasks(new Map())
