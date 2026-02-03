@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções
 
-## Versão Atual: 0.0.15-alpha
+## Versão Atual: 0.0.26-alpha
 
 ## Estrutura do Projeto
 
@@ -158,3 +158,117 @@ O sistema detecta automaticamente:
 - `~/.claude/commands/` - Skills/comandos (contados recursivamente)
 - `~/.claude/agents/` - Agentes (contados recursivamente)
 - `~/.claude/rules/` - Regras (contadas recursivamente)
+
+## Sistema de WebSocket (v0.0.24+)
+
+### Arquitetura
+
+O backend usa Socket.io com namespaces separados para diferentes funcionalidades:
+
+| Namespace | Propósito | Eventos |
+|-----------|-----------|---------|
+| `/metrics` | Métricas em tempo real | `subscribe:container`, `container:metrics` |
+| `/tasks` | Progresso de tarefas | `task:subscribe`, `task:event` |
+| `/queue` | Fila de instruções | `instruction:*` |
+| `/logs` | Logs do container | `log` |
+| `/creation` | Progresso de criação | `container:creation:progress` |
+
+### Inicialização
+
+O WebSocket é inicializado em `websocket.service.ts` e chamado no `index.ts`:
+
+```typescript
+// packages/backend/src/index.ts
+import { initializeWebSocket } from './services/websocket.service'
+
+// No startServer():
+io = initializeWebSocket(httpServer)
+```
+
+### Métricas em Tempo Real
+
+Quando um cliente se inscreve em um container:
+1. Backend inicia coleta a cada 2 segundos
+2. Métricas são emitidas via `container:metrics`
+3. Coleta para quando último cliente desconecta
+
+**Frontend:**
+```typescript
+// packages/frontend/src/hooks/use-metrics.ts
+useMetrics(containerId) // Inscreve automaticamente se container running
+
+// packages/frontend/src/lib/websocket.ts
+metricsWsClient.connect()  // Conecta ao namespace /metrics
+metricsWsClient.subscribeToContainer(containerId)
+```
+
+### Tipos Compartilhados
+
+```typescript
+// packages/shared/src/types/websocket.ts
+export enum TaskEvent {
+  CREATED = 'CREATED',
+  UPDATED = 'UPDATED',
+  PROGRESS = 'PROGRESS',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+}
+
+// packages/shared/src/types/metrics.types.ts
+export interface ContainerMetrics {
+  containerId: string
+  cpu: { usage: number; limit: number }
+  memory: { usage: number; limit: number; percentage: number }
+  disk: { usage: number; limit: number; percentage: number }
+  network?: { rxBytes: number; txBytes: number }
+  activeAgents: AgentProcess[]
+}
+```
+
+## Rate Limiting (v0.0.24+)
+
+Três níveis de rate limiting configuráveis via env:
+
+| Tipo | Limite | Janela | Uso |
+|------|--------|--------|-----|
+| Standard | 100 req | 15 min | GET endpoints |
+| Strict | 20 req | 15 min | POST/PUT/DELETE |
+| Auth | 5 req | 1 min | Autenticação |
+
+**Variáveis de ambiente:**
+- `RATE_LIMIT_STANDARD` / `RATE_LIMIT_STANDARD_WINDOW_MS`
+- `RATE_LIMIT_STRICT` / `RATE_LIMIT_STRICT_WINDOW_MS`
+- `RATE_LIMIT_AUTH` / `RATE_LIMIT_AUTH_WINDOW_MS`
+
+## CORS (v0.0.24+)
+
+Origens permitidas configuráveis via `ALLOWED_ORIGINS`:
+
+```bash
+# Default (desenvolvimento)
+http://localhost:3000,http://127.0.0.1:3000,http://localhost:8000,http://127.0.0.1:8000
+
+# Produção (exemplo)
+ALLOWED_ORIGINS=https://myapp.com,https://api.myapp.com
+```
+
+## Histórico de Versões
+
+### v0.0.26-alpha
+- Fix: Integração correta do WebSocket com namespaces no index.ts
+- Métricas em tempo real funcionando na lista de containers
+
+### v0.0.25-alpha
+- Fix: WebSocket client conectando na URL/namespace corretos
+- Fix: Tipos ContainerMetrics (percentage vs percent)
+- ContainerCard agora se inscreve em métricas quando running
+
+### v0.0.24-alpha
+- Feat: Sistema completo de WebSocket para tasks em tempo real
+- Feat: TaskEvent types no shared package
+- Feat: Namespace /tasks com subscriptions
+- Feat: Hook useTaskWebSocket com reconnection e fallback
+- Feat: Componente TaskProgress
+- Feat: Rate limiting (standard/strict/auth)
+- Feat: CORS com validação de origem
+- 154 testes adicionados
