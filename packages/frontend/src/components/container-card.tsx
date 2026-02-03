@@ -70,9 +70,16 @@ export function ContainerCard({ container }: ContainerCardProps) {
     enableFallback: true,
   })
 
-  // Subscribe to task when container is being created, starting, or deleting
+  // Subscribe to task - DELETE has priority over everything else
   useEffect(() => {
-    const taskId = deleteTaskId || activeTaskId || (container.status === 'creating' ? container.taskId : null)
+    // If deleting, ONLY subscribe to delete task
+    if (deleteTaskId) {
+      subscribe(deleteTaskId)
+      return () => unsubscribe()
+    }
+
+    // If not deleting, subscribe to other tasks
+    const taskId = activeTaskId || (container.status === 'creating' ? container.taskId : null)
 
     if (taskId) {
       subscribe(taskId)
@@ -92,6 +99,14 @@ export function ContainerCard({ container }: ContainerCardProps) {
       setActiveTaskId(null)
     }
   }, [container.status])
+
+  // Reset all state when container changes (new container with same position)
+  useEffect(() => {
+    setIsDeleting(false)
+    setDeleteTaskId(null)
+    setIsStarting(false)
+    setActiveTaskId(null)
+  }, [container.id])
 
   const handleStart = async () => {
     setIsStarting(true)
@@ -138,6 +153,11 @@ export function ContainerCard({ container }: ContainerCardProps) {
     if (!confirm(`${t.container.confirmDelete} "${container.name}"?`)) {
       return
     }
+
+    // PRIORITY: Reset ALL other state first - delete takes over
+    setIsStarting(false)
+    setActiveTaskId(null)
+    unsubscribe() // Unsubscribe from any current task
 
     setIsDeleting(true)
     const response = await apiClient.deleteContainer(container.id)
@@ -215,22 +235,25 @@ export function ContainerCard({ container }: ContainerCardProps) {
                 {t.modes[container.mode]}
               </span>
             </div>
-            {/* Progress bar for active operations (creating, starting, or deleting) - using WebSocket */}
-            {(deleteTaskId || activeTaskId || (container.status === 'creating' && container.taskId)) && (
+            {/* Progress bar for active operations - DELETE has priority */}
+            {(deleteTaskId || (!isDeleting && (activeTaskId || (container.status === 'creating' && container.taskId)))) && (
               <div className="mt-3">
                 {wsTask ? (
                   <div className="space-y-1">
                     <div className="flex justify-between text-xs">
                       <span className={clsx(
                         'truncate max-w-[200px]',
-                        wsTask.status === 'failed' ? 'text-terminal-red' : 'text-terminal-textMuted'
+                        wsTask.status === 'failed' ? 'text-terminal-red' :
+                        deleteTaskId ? 'text-terminal-yellow' : 'text-terminal-textMuted'
                       )}>
-                        {wsTask.message || (wsTask.status === 'pending' ? 'Aguardando...' : 'Processando...')}
+                        {deleteTaskId && !wsTask.message ? 'Excluindo...' :
+                         wsTask.message || (wsTask.status === 'pending' ? 'Aguardando...' : 'Processando...')}
                       </span>
                       <span className={clsx(
                         'font-mono ml-2',
                         wsTask.status === 'failed' ? 'text-terminal-red' :
-                        wsTask.status === 'completed' ? 'text-terminal-green' : 'text-terminal-cyan'
+                        wsTask.status === 'completed' ? 'text-terminal-green' :
+                        deleteTaskId ? 'text-terminal-yellow' : 'text-terminal-cyan'
                       )}>
                         {wsTask.progress}%
                       </span>
@@ -240,7 +263,8 @@ export function ContainerCard({ container }: ContainerCardProps) {
                         className={clsx(
                           'h-full transition-all duration-300 ease-out',
                           wsTask.status === 'failed' ? 'bg-terminal-red' :
-                          wsTask.status === 'completed' ? 'bg-terminal-green' : 'bg-terminal-cyan'
+                          wsTask.status === 'completed' ? 'bg-terminal-green' :
+                          deleteTaskId ? 'bg-terminal-yellow' : 'bg-terminal-cyan'
                         )}
                         style={{ width: `${wsTask.progress}%` }}
                       />
