@@ -5,6 +5,9 @@ import { ClientLayout } from '@/components/client-layout'
 export const metadata: Metadata = {
   title: 'Claude Docker Manager',
   description: 'Gerenciador de containers Docker com Claude Code e VS Code',
+  icons: {
+    icon: '/favicon.svg',
+  },
 }
 
 export default function RootLayout({
