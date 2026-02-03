@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import type { Router as RouterType } from 'express';
 import { settingsService } from '../../services/settings.service';
 import { logger } from '../../utils/logger';
+import { authRateLimiter, strictRateLimiter } from '../../middleware/rate-limit';
 
 const router: RouterType = Router();
 
@@ -57,7 +58,7 @@ router.get('/config', (_req: Request, res: Response) => {
  * POST /api/settings/open-claude-auth
  * Get instructions to open Claude auth
  */
-router.post('/open-claude-auth', (_req: Request, res: Response) => {
+router.post('/open-claude-auth', authRateLimiter, (_req: Request, res: Response) => {
   try {
     const instructions = settingsService.getAuthInstructions();
     res.json({ instructions });
@@ -73,7 +74,7 @@ router.post('/open-claude-auth', (_req: Request, res: Response) => {
  * POST /api/settings/logout-claude
  * Logout from Claude
  */
-router.post('/logout-claude', async (_req: Request, res: Response) => {
+router.post('/logout-claude', authRateLimiter, async (_req: Request, res: Response) => {
   try {
     const result = await settingsService.logoutClaude();
     if (result.success) {
@@ -93,7 +94,7 @@ router.post('/logout-claude', async (_req: Request, res: Response) => {
  * POST /api/settings/generate-ssh-key
  * Generate SSH key
  */
-router.post('/generate-ssh-key', async (req: Request, res: Response) => {
+router.post('/generate-ssh-key', strictRateLimiter, async (req: Request, res: Response) => {
   try {
     const { email } = req.body as { email?: string };
 

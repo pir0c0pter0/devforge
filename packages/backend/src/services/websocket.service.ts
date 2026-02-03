@@ -7,6 +7,10 @@ import type {
   InstructionEventData,
   ContainerStatusEventData,
   ContainerCreationProgress,
+  TaskEventPayload,
+  TaskSubscription,
+  TaskUnsubscription,
+  TaskBatchSubscription,
 } from '@claude-docker/shared'
 import { config } from '../config'
 
@@ -28,7 +32,19 @@ export const initializeWebSocket = (
 ): Server<ClientToServerEvents, ServerToClientEvents> => {
   io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
     cors: {
-      origin: config.corsOrigin,
+      origin: (origin, callback) => {
+        // Allow requests with no origin (same-origin, curl, etc.)
+        if (!origin) {
+          callback(null, true)
+          return
+        }
+        // Check if origin is in the allowed list
+        if (config.allowedOrigins.includes(origin)) {
+          callback(null, true)
+          return
+        }
+        callback(new Error(`Origin ${origin} not allowed by CORS policy`))
+      },
       methods: ['GET', 'POST'],
       credentials: true,
     },
@@ -42,6 +58,7 @@ export const initializeWebSocket = (
   setupQueueNamespace()
   setupLogsNamespace()
   setupCreationNamespace()
+  setupTasksNamespace()
 
   console.info('[WebSocket] Server initialized successfully')
 
@@ -176,6 +193,89 @@ const setupCreationNamespace = (): void => {
 }
 
 /**
+ * Map of task subscriptions (taskId -> Set of socket IDs)
+ */
+const taskSubscriptions = new Map<string, Set<string>>()
+
+/**
+ * Add task subscription tracking
+ */
+const addTaskSubscription = (taskId: string, socketId: string): void => {
+  if (!taskSubscriptions.has(taskId)) {
+    taskSubscriptions.set(taskId, new Set())
+  }
+  taskSubscriptions.get(taskId)?.add(socketId)
+}
+
+/**
+ * Remove task subscription tracking
+ */
+const removeTaskSubscription = (taskId: string, socketId: string): void => {
+  const subs = taskSubscriptions.get(taskId)
+  if (subs) {
+    subs.delete(socketId)
+    if (subs.size === 0) {
+      taskSubscriptions.delete(taskId)
+    }
+  }
+}
+
+/**
+ * Cleanup all task subscriptions for a socket
+ */
+const cleanupSocketTaskSubscriptions = (socketId: string): void => {
+  for (const [taskId, sockets] of taskSubscriptions.entries()) {
+    sockets.delete(socketId)
+    if (sockets.size === 0) {
+      taskSubscriptions.delete(taskId)
+    }
+  }
+}
+
+/**
+ * Setup /tasks namespace for real-time task updates
+ */
+const setupTasksNamespace = (): void => {
+  if (!io) return
+
+  const tasksNamespace = io.of('/tasks')
+
+  tasksNamespace.on('connection', (socket: Socket) => {
+    console.info(`[WebSocket] Client connected to /tasks: ${socket.id}`)
+
+    socket.on('task:subscribe', (subscription: TaskSubscription) => {
+      const { taskId } = subscription
+      socket.join(`task:${taskId}`)
+      addTaskSubscription(taskId, socket.id)
+      console.info(`[WebSocket] Client ${socket.id} subscribed to task ${taskId}`)
+    })
+
+    socket.on('task:unsubscribe', (unsubscription: TaskUnsubscription) => {
+      const { taskId } = unsubscription
+      socket.leave(`task:${taskId}`)
+      removeTaskSubscription(taskId, socket.id)
+      console.info(`[WebSocket] Client ${socket.id} unsubscribed from task ${taskId}`)
+    })
+
+    socket.on('task:subscribe:batch', (subscription: TaskBatchSubscription) => {
+      const { taskIds } = subscription
+      for (const taskId of taskIds) {
+        socket.join(`task:${taskId}`)
+        addTaskSubscription(taskId, socket.id)
+      }
+      console.info(
+        `[WebSocket] Client ${socket.id} batch subscribed to ${taskIds.length} tasks`
+      )
+    })
+
+    socket.on('disconnect', () => {
+      cleanupSocketTaskSubscriptions(socket.id)
+      console.info(`[WebSocket] Client disconnected from /tasks: ${socket.id}`)
+    })
+  })
+}
+
+/**
  * Add subscription tracking
  */
 const addSubscription = (containerId: string, socketId: string): void => {
@@ -298,6 +398,32 @@ export const emitContainerCreationProgress = (
 ): void => {
   if (!io) return
   io.of('/creation').to(`task:${taskId}`).emit('container:creation:progress', data)
+}
+
+/**
+ * Emit task event to subscribers
+ */
+export const emitTaskEvent = (taskId: string, payload: TaskEventPayload): void => {
+  if (!io) return
+  io.of('/tasks').to(`task:${taskId}`).emit('task:event', payload)
+}
+
+/**
+ * Get active task subscriptions count for a task
+ */
+export const getTaskSubscribers = (taskId: string): number => {
+  return taskSubscriptions.get(taskId)?.size ?? 0
+}
+
+/**
+ * Get all active task subscriptions
+ */
+export const getAllTaskSubscriptions = (): Map<string, number> => {
+  const result = new Map<string, number>()
+  for (const [taskId, sockets] of taskSubscriptions.entries()) {
+    result.set(taskId, sockets.size)
+  }
+  return result
 }
 
 /**

@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import type { Container, Task } from '@/lib/types'
 import { apiClient } from '@/lib/api-client'
 import { useContainerStore } from '@/stores/container.store'
 import { useI18n } from '@/lib/i18n'
 import { AnimatedDots } from '@/components/ui/animated-dots'
+import { useTaskWebSocket } from '@/hooks/use-task-websocket'
 import clsx from 'clsx'
 
 interface ContainerCardProps {
@@ -16,125 +17,89 @@ export function ContainerCard({ container }: ContainerCardProps) {
   const { t } = useI18n()
   const [isDeleting, setIsDeleting] = useState(false)
   const [isStarting, setIsStarting] = useState(false)
-  const [activeTask, setActiveTask] = useState<Task | null>(null)
-  const pollingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const taskPollingRef = useRef<NodeJS.Timeout | null>(null)
-  const startTaskPollingRef = useRef<NodeJS.Timeout | null>(null)
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
   const { updateContainer, removeContainer, setError } = useContainerStore()
 
-  // Poll task when container is being created (from creation flow)
-  useEffect(() => {
-    if (container.status === 'creating' && container.taskId) {
-      const pollTask = async () => {
-        try {
-          const response = await apiClient.getTask(container.taskId!)
-          if (response.success && response.data) {
-            setActiveTask(response.data)
-
-            // If task is done, refresh container status
-            if (response.data.status === 'completed' || response.data.status === 'failed') {
-              // Fetch updated container
-              const containerResponse = await apiClient.getContainer(container.id)
-              if (containerResponse.success && containerResponse.data) {
-                updateContainer(container.id, containerResponse.data)
-              }
-              setActiveTask(null)
-              return // Stop polling
-            }
-          }
-          // Continue polling
-          taskPollingRef.current = setTimeout(pollTask, 1000)
-        } catch (error) {
-          console.error('Error polling task:', error)
-          taskPollingRef.current = setTimeout(pollTask, 2000)
-        }
+  // Handle task completion - refresh container data
+  const handleTaskComplete = useCallback(async (_task: Task) => {
+    try {
+      const containerResponse = await apiClient.getContainer(container.id)
+      if (containerResponse.success && containerResponse.data) {
+        updateContainer(container.id, containerResponse.data)
       }
+    } catch (error) {
+      console.error('Error fetching container after task completion:', error)
+    }
+    setActiveTaskId(null)
+    setIsStarting(false)
+  }, [container.id, updateContainer])
 
-      pollTask()
-    } else if (container.status !== 'creating') {
-      // Clear task when container is no longer creating
-      setActiveTask(null)
+  // Handle task failure
+  const handleTaskError = useCallback((task: Task) => {
+    setError(task.error || t.container.failedStart)
+    setActiveTaskId(null)
+    setIsStarting(false)
+  }, [setError, t.container.failedStart])
+
+  // Use WebSocket hook for task updates
+  const { task: wsTask, isConnected, subscribe, unsubscribe } = useTaskWebSocket({
+    onComplete: handleTaskComplete,
+    onError: handleTaskError,
+    enableFallback: true,
+  })
+
+  // Subscribe to task when container is being created or starting
+  useEffect(() => {
+    const taskId = activeTaskId || (container.status === 'creating' ? container.taskId : null)
+
+    if (taskId) {
+      subscribe(taskId)
+    } else {
+      unsubscribe()
     }
 
     return () => {
-      if (taskPollingRef.current) {
-        clearTimeout(taskPollingRef.current)
-      }
+      unsubscribe()
     }
-  }, [container.status, container.taskId, container.id, updateContainer])
+  }, [activeTaskId, container.status, container.taskId, subscribe, unsubscribe])
 
+  // Sync isStarting state when container status changes
   useEffect(() => {
-    return () => {
-      // Cleanup polling timeouts on unmount
-      if (pollingTimeoutRef.current) {
-        clearTimeout(pollingTimeoutRef.current)
-      }
-      if (startTaskPollingRef.current) {
-        clearTimeout(startTaskPollingRef.current)
-      }
+    if (container.status === 'running' || container.status === 'stopped') {
+      setIsStarting(false)
+      setActiveTaskId(null)
     }
-  }, [])
+  }, [container.status])
 
   const handleStart = async () => {
     setIsStarting(true)
-    setActiveTask({ id: '', type: 'start-container', status: 'pending', progress: 0, message: 'Iniciando...', createdAt: '' })
 
     const response = await apiClient.startContainer(container.id)
 
     if (!response.success) {
       setError(response.error || t.container.failedStart)
       setIsStarting(false)
-      setActiveTask(null)
       return
     }
 
-    // API returns taskId - poll that task for progress
+    // API returns taskId - subscribe to WebSocket updates
     const taskId = response.data?.taskId
     if (!taskId) {
-      // Fallback to old behavior if no taskId
+      // Fallback to old behavior if no taskId - refresh container directly
       setIsStarting(false)
-      setActiveTask(null)
-      const containerResponse = await apiClient.getContainer(container.id)
-      if (containerResponse.success && containerResponse.data) {
-        updateContainer(container.id, containerResponse.data)
+      try {
+        const containerResponse = await apiClient.getContainer(container.id)
+        if (containerResponse.success && containerResponse.data) {
+          updateContainer(container.id, containerResponse.data)
+        }
+      } catch (error) {
+        console.error('Error fetching container:', error)
       }
       return
     }
 
-    // Poll task for progress
-    const pollStartTask = async () => {
-      try {
-        const taskResponse = await apiClient.getTask(taskId)
-        if (taskResponse.success && taskResponse.data) {
-          setActiveTask(taskResponse.data)
-
-          if (taskResponse.data.status === 'completed') {
-            // Fetch updated container
-            const containerResponse = await apiClient.getContainer(container.id)
-            if (containerResponse.success && containerResponse.data) {
-              updateContainer(container.id, containerResponse.data)
-            }
-            setIsStarting(false)
-            setActiveTask(null)
-            return
-          }
-
-          if (taskResponse.data.status === 'failed') {
-            setError(taskResponse.data.error || t.container.failedStart)
-            setIsStarting(false)
-            setActiveTask(null)
-            return
-          }
-        }
-        // Continue polling
-        startTaskPollingRef.current = setTimeout(pollStartTask, 500)
-      } catch (error) {
-        console.error('Error polling start task:', error)
-        startTaskPollingRef.current = setTimeout(pollStartTask, 1000)
-      }
-    }
-
-    pollStartTask()
+    // Subscribe to task updates via WebSocket
+    setActiveTaskId(taskId)
   }
 
   const handleStop = async () => {
@@ -224,23 +189,57 @@ export function ContainerCard({ container }: ContainerCardProps) {
                 {t.modes[container.mode]}
               </span>
             </div>
-            {/* Progress bar for active operations (creating or starting) */}
-            {activeTask && (
-              <div className="mt-3 space-y-1">
-                <div className="flex justify-between text-xs">
-                  <span className="text-terminal-textMuted truncate max-w-[200px]">
-                    {activeTask.message}
-                  </span>
-                  <span className="text-terminal-green font-mono ml-2">
-                    {activeTask.progress}%
-                  </span>
-                </div>
-                <div className="w-full bg-terminal-bg border border-terminal-border rounded-full h-1.5 overflow-hidden">
-                  <div
-                    className="h-full bg-terminal-green transition-all duration-300 ease-out"
-                    style={{ width: `${activeTask.progress}%` }}
-                  />
-                </div>
+            {/* Progress bar for active operations (creating or starting) - using WebSocket */}
+            {(activeTaskId || (container.status === 'creating' && container.taskId)) && (
+              <div className="mt-3">
+                {wsTask ? (
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className={clsx(
+                        'truncate max-w-[200px]',
+                        wsTask.status === 'failed' ? 'text-terminal-red' : 'text-terminal-textMuted'
+                      )}>
+                        {wsTask.message || (wsTask.status === 'pending' ? 'Aguardando...' : 'Processando...')}
+                      </span>
+                      <span className={clsx(
+                        'font-mono ml-2',
+                        wsTask.status === 'failed' ? 'text-terminal-red' :
+                        wsTask.status === 'completed' ? 'text-terminal-green' : 'text-terminal-cyan'
+                      )}>
+                        {wsTask.progress}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-terminal-bg border border-terminal-border rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className={clsx(
+                          'h-full transition-all duration-300 ease-out',
+                          wsTask.status === 'failed' ? 'bg-terminal-red' :
+                          wsTask.status === 'completed' ? 'bg-terminal-green' : 'bg-terminal-cyan'
+                        )}
+                        style={{ width: `${wsTask.progress}%` }}
+                      />
+                    </div>
+                    {/* Connection status indicator */}
+                    {!isConnected && (
+                      <div className="flex items-center gap-1 text-xs text-terminal-yellow mt-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-terminal-yellow animate-pulse" />
+                        Reconectando...
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-terminal-textMuted">
+                        <AnimatedDots text="Conectando" />
+                      </span>
+                      <span className="text-terminal-cyan font-mono ml-2">0%</span>
+                    </div>
+                    <div className="w-full bg-terminal-bg border border-terminal-border rounded-full h-1.5 overflow-hidden">
+                      <div className="h-full bg-terminal-textMuted/30 animate-pulse" style={{ width: '10%' }} />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

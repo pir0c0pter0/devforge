@@ -2,6 +2,7 @@ import type { ContainerMetrics } from './metrics.types'
 import type { Instruction } from './instruction.types'
 import type { ContainerStatus } from './container.types'
 import type { ContainerCreationProgress } from './progress.types'
+import type { TaskEventPayload, TaskSubscription, TaskUnsubscription, TaskBatchSubscription } from './websocket'
 
 /**
  * Metrics event data sent from server to client
@@ -49,6 +50,8 @@ export interface ServerToClientEvents {
   'instruction:confirmed': (data: { instructionId: string; approved: boolean }) => void
   /** Container log line */
   log: (log: { timestamp: Date; message: string; stream: 'stdout' | 'stderr' }) => void
+  /** Task event (created, updated, progress, completed, failed) */
+  'task:event': (data: TaskEventPayload) => void
 }
 
 /**
@@ -61,4 +64,10 @@ export interface ClientToServerEvents {
   'unsubscribe:container': (containerId: string) => void
   /** Confirm or reject instruction execution (interactive mode) */
   'instruction:confirm': (instructionId: string, approved: boolean) => void
+  /** Subscribe to task updates */
+  'task:subscribe': (subscription: TaskSubscription) => void
+  /** Unsubscribe from task updates */
+  'task:unsubscribe': (unsubscription: TaskUnsubscription) => void
+  /** Subscribe to multiple tasks at once */
+  'task:subscribe:batch': (subscription: TaskBatchSubscription) => void
 }

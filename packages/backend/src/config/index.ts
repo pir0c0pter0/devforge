@@ -1,6 +1,26 @@
 import { z } from 'zod'
 
 /**
+ * Default allowed origins for CORS (used in development)
+ */
+const DEFAULT_ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost:8000',
+  'http://127.0.0.1:8000',
+]
+
+/**
+ * Parse ALLOWED_ORIGINS environment variable (comma-separated list)
+ */
+const parseAllowedOrigins = (value: string | undefined): string[] => {
+  if (!value || value === '*') {
+    return DEFAULT_ALLOWED_ORIGINS
+  }
+  return value.split(',').map((origin) => origin.trim()).filter(Boolean)
+}
+
+/**
  * Configuration schema with validation
  */
 const configSchema = z.object({
@@ -8,7 +28,7 @@ const configSchema = z.object({
   port: z.coerce.number().int().min(1).max(65535).default(3000),
   redisUrl: z.string().url().default('redis://localhost:6379'),
   logLevel: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
-  corsOrigin: z.string().default('*'),
+  allowedOrigins: z.array(z.string()).default(DEFAULT_ALLOWED_ORIGINS),
   jobTimeout: z.coerce.number().int().positive().default(300000), // 5 minutes
   maxJobRetries: z.coerce.number().int().min(0).max(10).default(3),
   queueConcurrency: z.coerce.number().int().positive().default(5),
@@ -29,7 +49,7 @@ const loadConfig = (): Config => {
     port: process.env['PORT'],
     redisUrl: process.env['REDIS_URL'],
     logLevel: process.env['LOG_LEVEL'],
-    corsOrigin: process.env['CORS_ORIGIN'],
+    allowedOrigins: parseAllowedOrigins(process.env['ALLOWED_ORIGINS']),
     jobTimeout: process.env['JOB_TIMEOUT'],
     maxJobRetries: process.env['MAX_JOB_RETRIES'],
     queueConcurrency: process.env['QUEUE_CONCURRENCY'],
@@ -85,6 +105,7 @@ const initializeConfig = (): Config => {
   console.info(`[Config] Port: ${cfg.port}`)
   console.info(`[Config] Redis URL: ${cfg.redisUrl}`)
   console.info(`[Config] Log Level: ${cfg.logLevel}`)
+  console.info(`[Config] Allowed Origins: ${cfg.allowedOrigins.join(', ')}`)
 
   return cfg
 }

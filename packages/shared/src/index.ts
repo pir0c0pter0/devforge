@@ -64,6 +64,20 @@ export type {
   TaskUpdate,
 } from './types/task.types'
 
+// Export all WebSocket task event types
+export {
+  TaskEvent,
+} from './types/websocket'
+
+export type {
+  TaskEventPayload,
+  TaskSubscription,
+  TaskUnsubscription,
+  TaskTypeSubscription,
+  TaskBatchSubscription,
+  TaskEventHandler,
+} from './types/websocket'
+
 // Export all schemas
 export {
   containerConfigSchema,

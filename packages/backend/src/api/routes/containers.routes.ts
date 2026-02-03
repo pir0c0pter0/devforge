@@ -6,6 +6,7 @@ import { containerRepository } from '../../repositories';
 import { validateBody, validateParams, validateQuery } from '../../utils/validation';
 import { CreateContainerRequestSchema } from '../../models/container.model';
 import { apiLogger as logger } from '../../utils/logger';
+import { strictRateLimiter } from '../../middleware/rate-limit';
 
 const router: Router = Router();
 
@@ -89,6 +90,7 @@ router.get(
  */
 router.post(
   '/',
+  strictRateLimiter,
   validateBody(CreateContainerRequestSchema),
   async (req: Request, res: Response): Promise<void> => {
     try {
@@ -179,6 +181,7 @@ router.get(
  */
 router.post(
   '/:id/start',
+  strictRateLimiter,
   validateParams(ContainerIdParamsSchema),
   async (req: Request, res: Response): Promise<void> => {
     try {
@@ -228,6 +231,7 @@ router.post(
  */
 router.post(
   '/:id/stop',
+  strictRateLimiter,
   validateParams(ContainerIdParamsSchema),
   async (req: Request, res: Response): Promise<void> => {
     try {
@@ -261,6 +265,7 @@ router.post(
  */
 router.post(
   '/:id/restart',
+  strictRateLimiter,
   validateParams(ContainerIdParamsSchema),
   async (req: Request, res: Response): Promise<void> => {
     try {
@@ -295,6 +300,7 @@ router.post(
  */
 router.delete(
   '/:id',
+  strictRateLimiter,
   validateParams(ContainerIdParamsSchema),
   async (req: Request, res: Response): Promise<void> => {
     try {

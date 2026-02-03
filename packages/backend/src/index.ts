@@ -16,6 +16,10 @@ import settingsRouter from './api/routes/settings.routes';
 import tasksRouter from './api/routes/tasks.routes';
 import { initializeDatabase, closeDatabase, isDatabaseHealthy } from './database';
 import { runMigrations, getDatabaseStats } from './database/migrations';
+import {
+  standardRateLimiter,
+  rateLimitConfig,
+} from './middleware/rate-limit';
 
 // Load environment variables
 dotenv.config();
@@ -23,8 +27,54 @@ dotenv.config();
 // Configuration
 const PORT = process.env['PORT'] ? parseInt(process.env['PORT'], 10) : 3000;
 const HOST = process.env['HOST'] || '0.0.0.0';
-const CORS_ORIGIN = process.env['CORS_ORIGIN'] || '*';
 const NODE_ENV = process.env['NODE_ENV'] || 'development';
+
+/**
+ * Default allowed origins for CORS (used in development)
+ */
+const DEFAULT_ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost:8000',
+  'http://127.0.0.1:8000',
+];
+
+/**
+ * Parse ALLOWED_ORIGINS environment variable (comma-separated list)
+ */
+const parseAllowedOrigins = (value: string | undefined): string[] => {
+  if (!value || value === '*') {
+    return DEFAULT_ALLOWED_ORIGINS;
+  }
+  return value.split(',').map((origin) => origin.trim()).filter(Boolean);
+};
+
+const ALLOWED_ORIGINS = parseAllowedOrigins(process.env['ALLOWED_ORIGINS']);
+
+/**
+ * CORS origin validation function
+ * Validates incoming origin against allowed origins list
+ */
+const corsOriginValidator = (
+  origin: string | undefined,
+  callback: (err: Error | null, allow?: boolean) => void
+): void => {
+  // Allow requests with no origin (e.g., same-origin, curl, mobile apps)
+  if (!origin) {
+    callback(null, true);
+    return;
+  }
+
+  // Check if origin is in the allowed list
+  if (ALLOWED_ORIGINS.includes(origin)) {
+    callback(null, true);
+    return;
+  }
+
+  // Log rejected origin for debugging
+  logger.warn({ origin, allowedOrigins: ALLOWED_ORIGINS }, 'CORS request from unauthorized origin blocked');
+  callback(new Error(`Origin ${origin} not allowed by CORS policy`));
+};
 
 /**
  * Initialize Express application
@@ -33,12 +83,25 @@ const app: express.Application = express();
 const httpServer = createServer(app);
 
 /**
- * Initialize Socket.io
+ * Initialize Socket.io with secure CORS configuration
  */
 const io = new SocketServer(httpServer, {
   cors: {
-    origin: CORS_ORIGIN,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (same-origin, curl, etc.)
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      // Check if origin is in the allowed list
+      if (ALLOWED_ORIGINS.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error(`Origin ${origin} not allowed by CORS policy`));
+    },
     methods: ['GET', 'POST'],
+    credentials: true,
   },
 });
 
@@ -50,14 +113,26 @@ app.use(helmet({
 }));
 
 app.use(cors({
-  origin: CORS_ORIGIN,
+  origin: corsOriginValidator,
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 }));
 
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(httpLogger);
+
+/**
+ * Rate limiting middleware
+ * Applied globally with different limits for different operation types
+ */
+// Apply standard rate limiter globally for all requests
+app.use(standardRateLimiter);
+
+// Log rate limit configuration on startup
+logger.info({ rateLimitConfig }, 'Rate limiting enabled');
 
 /**
  * Health check endpoint
@@ -332,11 +407,12 @@ const startServer = async () => {
         port: PORT,
         host: HOST,
         nodeEnv: NODE_ENV,
-        corsOrigin: CORS_ORIGIN,
+        allowedOrigins: ALLOWED_ORIGINS,
       }, 'Server started successfully');
 
       logger.info(`API available at http://${HOST}:${PORT}`);
       logger.info(`WebSocket available at ws://${HOST}:${PORT}`);
+      logger.info({ allowedOrigins: ALLOWED_ORIGINS }, 'CORS configured with allowed origins');
     });
   } catch (error) {
     logger.error({ error }, 'Failed to start server');

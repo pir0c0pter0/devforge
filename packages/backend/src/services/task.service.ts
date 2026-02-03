@@ -1,6 +1,8 @@
 import { v4 as uuidv4 } from 'uuid'
-import type { Task, TaskUpdate, TaskType } from '@claude-docker/shared'
+import type { Task, TaskUpdate, TaskType, TaskEventPayload, TaskStatus } from '@claude-docker/shared'
+import { TaskEvent } from '@claude-docker/shared'
 import { logger } from '../utils/logger'
+import { emitTaskEvent } from './websocket.service'
 
 /**
  * Task service for managing long-running operations
@@ -37,6 +39,10 @@ class TaskService {
     }
     this.tasks.set(task.id, task)
     logger.info({ taskId: task.id, type }, 'Task created')
+
+    // Emit task created event
+    this.emitEvent(task.id, TaskEvent.CREATED, task)
+
     return task
   }
 
@@ -64,6 +70,9 @@ class TaskService {
       return undefined
     }
 
+    const previousStatus: TaskStatus = task.status
+    const previousProgress = task.progress
+
     if (update.status) {
       task.status = update.status
       if (update.status === 'running' && !task.startedAt) {
@@ -79,6 +88,12 @@ class TaskService {
     if (update.error !== undefined) task.error = update.error
 
     logger.debug({ taskId: id, update }, 'Task updated')
+
+    // Emit appropriate event based on what changed
+    const progressChanged = update.progress !== undefined && update.progress !== previousProgress
+    const eventType = progressChanged ? TaskEvent.PROGRESS : TaskEvent.UPDATED
+    this.emitEvent(id, eventType, task, { previousStatus })
+
     return task
   }
 
@@ -110,24 +125,68 @@ class TaskService {
   /**
    * Helper to complete a task
    */
-  complete(id: string, result?: any): Task | undefined {
-    return this.update(id, {
-      status: 'completed',
-      progress: 100,
-      message: 'Concluído!',
-      result,
-    })
+  complete(id: string, result?: unknown): Task | undefined {
+    const task = this.tasks.get(id)
+    if (!task) {
+      logger.warn({ taskId: id }, 'Task not found for completion')
+      return undefined
+    }
+
+    const previousStatus: TaskStatus = task.status
+    task.status = 'completed'
+    task.progress = 100
+    task.message = 'Concluído!'
+    task.result = result
+    task.completedAt = new Date()
+
+    logger.debug({ taskId: id }, 'Task completed')
+
+    // Emit task completed event
+    this.emitEvent(id, TaskEvent.COMPLETED, task, { previousStatus })
+
+    return task
   }
 
   /**
    * Helper to fail a task
    */
   fail(id: string, error: string): Task | undefined {
-    return this.update(id, {
-      status: 'failed',
-      message: 'Falhou',
-      error,
-    })
+    const task = this.tasks.get(id)
+    if (!task) {
+      logger.warn({ taskId: id }, 'Task not found for failure')
+      return undefined
+    }
+
+    const previousStatus: TaskStatus = task.status
+    task.status = 'failed'
+    task.message = 'Falhou'
+    task.error = error
+    task.completedAt = new Date()
+
+    logger.debug({ taskId: id, error }, 'Task failed')
+
+    // Emit task failed event
+    this.emitEvent(id, TaskEvent.FAILED, task, { previousStatus, errorDetails: error })
+
+    return task
+  }
+
+  /**
+   * Emit a task event via WebSocket
+   */
+  private emitEvent(
+    taskId: string,
+    event: TaskEvent,
+    task: Task,
+    meta?: { previousStatus?: TaskStatus; errorDetails?: string; estimatedTimeRemaining?: number }
+  ): void {
+    const payload: TaskEventPayload = {
+      event,
+      task: { ...task },
+      timestamp: new Date(),
+      meta,
+    }
+    emitTaskEvent(taskId, payload)
   }
 
   /**
