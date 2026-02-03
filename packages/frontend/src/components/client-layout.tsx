@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { I18nProvider, useI18n } from '@/lib/i18n'
+import { APP_INFO } from '@/lib/version'
 
 function Header() {
   const { t } = useI18n()
@@ -72,7 +73,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
       <footer className="border-t border-terminal-border mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <p className="text-xs text-terminal-textMuted text-center">
-            <span className="text-terminal-green">$</span> claude-docker-web v1.0.0
+            <span className="text-terminal-green">$</span> {APP_INFO.fullName}
           </p>
         </div>
       </footer>
