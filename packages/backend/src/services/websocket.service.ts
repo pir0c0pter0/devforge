@@ -15,6 +15,7 @@ import type {
 import { config } from '../config'
 import { metricsService } from './metrics.service'
 import { containerRepository } from '../repositories'
+import { terminalService } from './terminal.service'
 
 /**
  * Socket.io server instance
@@ -71,6 +72,7 @@ export const initializeWebSocket = (
   setupLogsNamespace()
   setupCreationNamespace()
   setupTasksNamespace()
+  setupTerminalNamespace()
 
   console.info('[WebSocket] Server initialized successfully')
 
@@ -379,6 +381,105 @@ const setupTasksNamespace = (): void => {
     socket.on('disconnect', () => {
       cleanupSocketTaskSubscriptions(socket.id)
       console.info(`[WebSocket] Client disconnected from /tasks: ${socket.id}`)
+    })
+  })
+}
+
+/**
+ * Map of terminal subscriptions (sessionId -> socket ID)
+ */
+const terminalSubscriptions = new Map<string, string>()
+
+/**
+ * Setup /terminal namespace for interactive container terminal
+ */
+const setupTerminalNamespace = (): void => {
+  if (!io) return
+
+  const terminalNamespace = io.of('/terminal')
+
+  terminalNamespace.on('connection', (socket: Socket) => {
+    console.info(`[WebSocket] Client connected to /terminal: ${socket.id}`)
+
+    let currentSessionId: string | null = null
+
+    socket.on('terminal:connect', async (
+      data: { containerId: string; cols: number; rows: number },
+      callback: (response: { sessionId?: string; error?: string }) => void
+    ) => {
+      try {
+        const session = await terminalService.createSession(
+          data.containerId,
+          data.cols || 80,
+          data.rows || 24,
+          (output) => {
+            socket.emit('terminal:data', { sessionId: session.sessionId, data: output })
+          },
+          (exitCode) => {
+            socket.emit('terminal:close', { sessionId: session.sessionId, exitCode })
+            if (currentSessionId) {
+              terminalSubscriptions.delete(currentSessionId)
+            }
+          }
+        )
+
+        currentSessionId = session.sessionId
+        terminalSubscriptions.set(session.sessionId, socket.id)
+        socket.join(`terminal:${session.sessionId}`)
+
+        console.info(`[WebSocket] Terminal session ${session.sessionId} created for container ${data.containerId}`)
+
+        callback({ sessionId: session.sessionId })
+        socket.emit('terminal:ready', session)
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+        console.error(`[WebSocket] Failed to create terminal session:`, error)
+        callback({ error: errorMessage })
+      }
+    })
+
+    socket.on('terminal:input', (data: { sessionId: string; data: string }) => {
+      if (data.sessionId !== currentSessionId) {
+        console.warn(`[WebSocket] Invalid session ID for input: ${data.sessionId}`)
+        return
+      }
+      terminalService.write(data.sessionId, data.data)
+    })
+
+    socket.on('terminal:resize', async (
+      data: { sessionId: string; cols: number; rows: number },
+      callback?: (response: { success: boolean; error?: string }) => void
+    ) => {
+      try {
+        if (data.sessionId !== currentSessionId) {
+          throw new Error('Invalid session ID')
+        }
+        await terminalService.resize(data.sessionId, data.cols, data.rows)
+        callback?.({ success: true })
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+        console.error(`[WebSocket] Failed to resize terminal:`, error)
+        callback?.({ success: false, error: errorMessage })
+      }
+    })
+
+    socket.on('terminal:disconnect', (sessionId: string) => {
+      if (sessionId === currentSessionId) {
+        terminalService.closeSession(sessionId, 0)
+        socket.leave(`terminal:${sessionId}`)
+        terminalSubscriptions.delete(sessionId)
+        currentSessionId = null
+        console.info(`[WebSocket] Terminal session ${sessionId} closed by client`)
+      }
+    })
+
+    socket.on('disconnect', () => {
+      if (currentSessionId) {
+        terminalService.closeSession(currentSessionId, 143)
+        terminalSubscriptions.delete(currentSessionId)
+        console.info(`[WebSocket] Client disconnected, closed terminal session ${currentSessionId}`)
+      }
+      console.info(`[WebSocket] Client disconnected from /terminal: ${socket.id}`)
     })
   })
 }

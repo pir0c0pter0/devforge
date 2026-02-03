@@ -101,3 +101,14 @@ export {
   SOCKET_EVENTS,
   API_ENDPOINTS,
 } from './constants'
+
+// Export all terminal types
+export type {
+  TerminalSession,
+  TerminalInput,
+  TerminalResize,
+  TerminalOutput,
+  TerminalError,
+  TerminalClose,
+  TerminalConnect,
+} from './types/terminal.types'

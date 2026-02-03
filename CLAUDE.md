@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções
 
-## Versão Atual: 0.0.26-alpha
+## Versão Atual: 0.0.29-alpha
 
 ## Estrutura do Projeto
 
@@ -159,6 +159,44 @@ O sistema detecta automaticamente:
 - `~/.claude/agents/` - Agentes (contados recursivamente)
 - `~/.claude/rules/` - Regras (contadas recursivamente)
 
+## Terminal Interativo (v0.0.29+)
+
+### Arquitetura
+
+O terminal usa WebSocket com xterm.js para shell interativo dentro dos containers:
+
+```
+Frontend (xterm.js) <--WebSocket--> Backend (Socket.io) <--Docker Exec--> Container (/bin/bash)
+```
+
+### Componentes
+
+| Arquivo | Propósito |
+|---------|-----------|
+| `frontend/components/interactive-terminal.tsx` | Componente xterm.js com WebSocket |
+| `backend/services/terminal.service.ts` | Gerenciamento de sessões Docker exec |
+| `backend/services/websocket.service.ts` | Namespace `/terminal` |
+| `shared/types/terminal.types.ts` | Tipos TypeScript |
+
+### Eventos WebSocket
+
+| Evento | Direção | Propósito |
+|--------|---------|-----------|
+| `terminal:connect` | Client→Server | Iniciar sessão (containerId, cols, rows) |
+| `terminal:input` | Client→Server | Enviar input (base64) |
+| `terminal:resize` | Client→Server | Redimensionar terminal |
+| `terminal:disconnect` | Client→Server | Encerrar sessão |
+| `terminal:data` | Server→Client | Output do container (base64) |
+| `terminal:close` | Server→Client | Sessão encerrada |
+| `terminal:error` | Server→Client | Erro na sessão |
+
+### Configurações
+
+- **Timeout de inatividade**: 15 minutos
+- **Máximo de sessões por container**: 5
+- **Shell padrão**: `/bin/bash`
+- **Encoding**: Base64 para dados binários
+
 ## Sistema de WebSocket (v0.0.24+)
 
 ### Arquitetura
@@ -172,6 +210,7 @@ O backend usa Socket.io com namespaces separados para diferentes funcionalidades
 | `/queue` | Fila de instruções | `instruction:*` |
 | `/logs` | Logs do container | `log` |
 | `/creation` | Progresso de criação | `container:creation:progress` |
+| `/terminal` | Terminal interativo | `terminal:*` |
 
 ### Inicialização
 
@@ -253,6 +292,21 @@ ALLOWED_ORIGINS=https://myapp.com,https://api.myapp.com
 ```
 
 ## Histórico de Versões
+
+### v0.0.29-alpha
+- Feat: Terminal interativo via WebSocket + xterm.js
+- Feat: Namespace `/terminal` para sessões shell
+- Feat: Botão Shell na lista de containers navega para aba Terminal
+- Fix: Removido polling automático - sistema 100% live via WebSocket
+- Refactor: Removido `use-task-polling.ts` (não utilizado)
+
+### v0.0.28-alpha
+- Fix: Terminal não recarrega mais a cada 5 segundos
+- Fix: Loading state apenas no primeiro fetch
+
+### v0.0.27-alpha
+- Feat: Aba Terminal na página de detalhes do container
+- Fix: Botão Shell usa navegação em vez de API REST inexistente
 
 ### v0.0.26-alpha
 - Fix: Integração correta do WebSocket com namespaces no index.ts

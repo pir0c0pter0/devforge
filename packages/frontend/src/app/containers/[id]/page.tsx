@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { apiClient } from '@/lib/api-client'
 import { useMetrics } from '@/hooks/use-metrics'
 import { useContainerStore } from '@/stores/container.store'
@@ -12,7 +13,12 @@ import { AnimatedDots } from '@/components/ui/animated-dots'
 import type { Container } from '@/lib/types'
 import clsx from 'clsx'
 
-type TabType = 'overview' | 'metrics' | 'instructions' | 'logs' | 'settings'
+const InteractiveTerminal = dynamic(
+  () => import('@/components/interactive-terminal').then(mod => mod.InteractiveTerminal),
+  { ssr: false, loading: () => <div className="card p-6 text-center">Loading terminal...</div> }
+)
+
+type TabType = 'overview' | 'metrics' | 'instructions' | 'logs' | 'terminal' | 'settings'
 
 interface TabConfig {
   id: TabType
@@ -78,6 +84,20 @@ const tabs: TabConfig[] = [
     ),
   },
   {
+    id: 'terminal',
+    name: 'Terminal',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+        />
+      </svg>
+    ),
+  },
+  {
     id: 'settings',
     name: 'Settings',
     icon: (
@@ -101,11 +121,13 @@ const tabs: TabConfig[] = [
 
 export default function ContainerDetailPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const containerId = params.id as string
+  const initialTab = (searchParams.get('tab') as TabType) || 'overview'
   const [container, setContainer] = useState<Container | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<TabType>('overview')
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab)
   const [vscodeUrl, setVscodeUrl] = useState<string | null>(null)
   const { updateContainer } = useContainerStore()
 
@@ -128,9 +150,6 @@ export default function ContainerDetailPage() {
     }
 
     fetchContainer()
-
-    const interval = setInterval(fetchContainer, 5000)
-    return () => clearInterval(interval)
   }, [containerId])
 
   const handleStart = async () => {
@@ -614,6 +633,40 @@ export default function ContainerDetailPage() {
               {(container.metrics?.memory ?? 0).toFixed(0)} MB
             </p>
           </div>
+        </div>
+      )}
+
+      {activeTab === 'terminal' && (
+        <div className="card overflow-hidden">
+          {container.status === 'running' ? (
+            <InteractiveTerminal
+              containerId={container.id}
+              onClose={() => setActiveTab('overview')}
+              className="h-[500px]"
+            />
+          ) : (
+            <div className="p-6 text-center">
+              <svg
+                className="mx-auto h-12 w-12 text-gray-400 mb-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                />
+              </svg>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                Terminal Unavailable
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Start the container to access the terminal.
+              </p>
+            </div>
+          )}
         </div>
       )}
 

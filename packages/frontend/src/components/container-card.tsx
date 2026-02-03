@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import type { Container, Task } from '@/lib/types'
 import { apiClient } from '@/lib/api-client'
 import { useContainerStore } from '@/stores/container.store'
@@ -16,6 +17,7 @@ interface ContainerCardProps {
 
 export function ContainerCard({ container }: ContainerCardProps) {
   const { t } = useI18n()
+  const router = useRouter()
   const [isDeleting, setIsDeleting] = useState(false)
   const [isStarting, setIsStarting] = useState(false)
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
@@ -132,13 +134,8 @@ export function ContainerCard({ container }: ContainerCardProps) {
     }
   }
 
-  const handleOpenShell = async () => {
-    const response = await apiClient.openShell(container.id)
-    if (response.success && response.data?.url) {
-      window.open(response.data.url, '_blank')
-    } else {
-      setError(response.error || t.container.failedShell)
-    }
+  const handleOpenShell = () => {
+    router.push(`/containers/${container.id}?tab=terminal`)
   }
 
   const handleOpenVSCode = async () => {

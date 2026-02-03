@@ -34,8 +34,6 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
 
   useEffect(() => {
     fetchQueue()
-    const interval = setInterval(fetchQueue, 3000)
-    return () => clearInterval(interval)
   }, [containerId])
 
   const handleSubmit = async (e: React.FormEvent) => {
