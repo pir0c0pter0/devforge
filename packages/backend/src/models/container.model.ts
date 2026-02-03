@@ -29,7 +29,8 @@ export const ContainerStatusSchema = z.enum([
   'restarting',
   'removing',
   'exited',
-  'dead'
+  'dead',
+  'error'
 ]);
 export type ContainerStatus = z.infer<typeof ContainerStatusSchema>;
 

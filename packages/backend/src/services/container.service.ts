@@ -141,6 +141,7 @@ export class ContainerService {
    */
   async create(config: ContainerConfig, taskId?: string): Promise<Container> {
     let dockerContainerId: string | null = null;
+    let containerId: string | null = null;
 
     try {
       // Update task progress - validating
@@ -168,8 +169,28 @@ export class ContainerService {
         repoUrl: safeRepoUrl,
       };
 
-      const containerId = uuidv4();
+      containerId = uuidv4();
       const containerName = `claude-docker-${config.name}-${Date.now()}`;
+
+      // Create database record FIRST with placeholder dockerId
+      // This ensures container appears in list immediately with "creating" status
+      const createDto: CreateContainerDto = {
+        dockerId: `pending-${containerId}`, // Placeholder until Docker container is created
+        name: config.name,
+        template: config.template,
+        mode: config.mode,
+        repoUrl: config.repoUrl,
+        repoType: config.repoType,
+        sshKeyPath: config.sshKeyPath,
+        cpuLimit: config.cpuLimit,
+        memoryLimit: config.memoryLimit,
+        diskLimit: config.diskLimit,
+        config: taskId ? { taskId } : undefined,
+      };
+
+      const initialEntity = containerRepository.create(createDto);
+      containerId = initialEntity.id; // Use the ID from database
+      logger.info({ containerId, taskId }, 'Created initial database record');
 
       // Prepare Docker image based on template
       const image = this.getImageForTemplate(config.template);
@@ -221,6 +242,10 @@ export class ContainerService {
       // Create Docker container
       const dockerContainer = await dockerService.createContainer(createOptions);
       dockerContainerId = dockerContainer.id; // Track for rollback
+
+      // Update database with real Docker ID
+      containerRepository.update(containerId, { dockerId: dockerContainer.id });
+      logger.info({ containerId, dockerId: dockerContainer.id }, 'Updated Docker ID in database');
 
       // Start container temporarily for setup operations
       const needsSetup = config.repoType === 'clone' && config.repoUrl;
@@ -299,36 +324,25 @@ export class ContainerService {
         await dockerService.stopContainer(dockerContainer.id);
       }
 
-      // Update task progress - saving
+      // Update task progress - saving/finalizing
       if (taskId) {
-        taskService.setProgress(taskId, 95, 'Salvando container no banco de dados...');
+        taskService.setProgress(taskId, 95, 'Finalizando criação do container...');
         emitContainerCreationProgress(taskId, {
           taskId,
           containerId,
           stage: 'saving',
           percentage: 95,
-          message: 'Saving container to database...',
+          message: 'Finalizing container creation...',
           timestamp: new Date()
         });
       }
 
-      // Create container record in database with taskId in config
-      const createDto: CreateContainerDto = {
-        dockerId: dockerContainer.id,
-        name: config.name,
-        template: config.template,
-        mode: config.mode,
-        repoUrl: config.repoUrl,
-        repoType: config.repoType,
-        sshKeyPath: config.sshKeyPath,
-        cpuLimit: config.cpuLimit,
-        memoryLimit: config.memoryLimit,
-        diskLimit: config.diskLimit,
-        config: taskId ? { taskId } : undefined,
-      };
-
-      const entity = containerRepository.create(createDto);
-      const container = entityToContainer(entity);
+      // Update container status to stopped (ready to start)
+      const updatedEntity = containerRepository.updateStatus(containerId, 'stopped');
+      if (!updatedEntity) {
+        throw new Error('Failed to update container status');
+      }
+      const container = entityToContainer(updatedEntity);
 
       // Update in-memory cache
       this.containers.set(container.id, container);
@@ -377,6 +391,17 @@ export class ContainerService {
         } catch (cleanupError) {
           logger.error({ error: cleanupError, dockerId: dockerContainerId },
             'Failed to cleanup orphaned Docker container');
+        }
+      }
+
+      // Update database record to error status (or delete if preferred)
+      if (containerId) {
+        try {
+          containerRepository.updateStatus(containerId, 'error');
+          logger.info({ containerId }, 'Updated container status to error');
+        } catch (dbError) {
+          logger.error({ error: dbError, containerId },
+            'Failed to update container status to error');
         }
       }
 
@@ -685,6 +710,60 @@ export class ContainerService {
     } catch (error) {
       logger.error({ error, containerId }, 'Failed to start container');
       throw new Error(`Failed to start container: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Start a container with task tracking
+   */
+  async startWithTask(containerId: string, taskId: string): Promise<Container> {
+    try {
+      // Update task progress
+      taskService.setProgress(taskId, 10, 'Verificando container...');
+
+      // Try cache first, then database
+      let container = this.containers.get(containerId);
+      if (!container) {
+        const entity = containerRepository.findById(containerId);
+        if (entity) {
+          container = entityToContainer(entity);
+          this.containers.set(containerId, container);
+        }
+      }
+
+      if (!container) {
+        taskService.fail(taskId, `Container not found: ${containerId}`);
+        throw new Error(`Container not found: ${containerId}`);
+      }
+
+      taskService.setProgress(taskId, 30, 'Iniciando Docker container...');
+      logger.info({ containerId, dockerId: container.dockerId }, 'Starting container');
+
+      await dockerService.startContainer(container.dockerId);
+
+      taskService.setProgress(taskId, 70, 'Atualizando status...');
+
+      // Update status in database
+      const updatedEntity = containerRepository.updateStatus(containerId, 'running');
+      if (!updatedEntity) {
+        taskService.fail(taskId, 'Failed to update container status');
+        throw new Error('Failed to update container status');
+      }
+
+      const updatedContainer = entityToContainer(updatedEntity);
+      this.containers.set(containerId, updatedContainer);
+
+      taskService.setProgress(taskId, 90, 'Finalizando...');
+      taskService.complete(taskId, { containerId });
+
+      logger.info({ containerId, taskId }, 'Container started successfully with task');
+
+      return updatedContainer;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      taskService.fail(taskId, errorMessage);
+      logger.error({ error, containerId, taskId }, 'Failed to start container');
+      throw new Error(`Failed to start container: ${errorMessage}`);
     }
   }
 

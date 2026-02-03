@@ -15,20 +15,21 @@ interface ContainerCardProps {
 export function ContainerCard({ container }: ContainerCardProps) {
   const { t } = useI18n()
   const [isDeleting, setIsDeleting] = useState(false)
-  const [isPolling, setIsPolling] = useState(false)
-  const [creationTask, setCreationTask] = useState<Task | null>(null)
+  const [isStarting, setIsStarting] = useState(false)
+  const [activeTask, setActiveTask] = useState<Task | null>(null)
   const pollingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const taskPollingRef = useRef<NodeJS.Timeout | null>(null)
+  const startTaskPollingRef = useRef<NodeJS.Timeout | null>(null)
   const { updateContainer, removeContainer, setError } = useContainerStore()
 
-  // Poll task when container is being created
+  // Poll task when container is being created (from creation flow)
   useEffect(() => {
     if (container.status === 'creating' && container.taskId) {
       const pollTask = async () => {
         try {
           const response = await apiClient.getTask(container.taskId!)
           if (response.success && response.data) {
-            setCreationTask(response.data)
+            setActiveTask(response.data)
 
             // If task is done, refresh container status
             if (response.data.status === 'completed' || response.data.status === 'failed') {
@@ -37,6 +38,7 @@ export function ContainerCard({ container }: ContainerCardProps) {
               if (containerResponse.success && containerResponse.data) {
                 updateContainer(container.id, containerResponse.data)
               }
+              setActiveTask(null)
               return // Stop polling
             }
           }
@@ -49,6 +51,9 @@ export function ContainerCard({ container }: ContainerCardProps) {
       }
 
       pollTask()
+    } else if (container.status !== 'creating') {
+      // Clear task when container is no longer creating
+      setActiveTask(null)
     }
 
     return () => {
@@ -60,65 +65,76 @@ export function ContainerCard({ container }: ContainerCardProps) {
 
   useEffect(() => {
     return () => {
-      // Cleanup polling timeout on unmount
+      // Cleanup polling timeouts on unmount
       if (pollingTimeoutRef.current) {
         clearTimeout(pollingTimeoutRef.current)
+      }
+      if (startTaskPollingRef.current) {
+        clearTimeout(startTaskPollingRef.current)
       }
     }
   }, [])
 
   const handleStart = async () => {
-    updateContainer(container.id, { status: 'creating' })
+    setIsStarting(true)
+    setActiveTask({ id: '', type: 'start-container', status: 'pending', progress: 0, message: 'Iniciando...', createdAt: '' })
+
     const response = await apiClient.startContainer(container.id)
 
     if (!response.success) {
       setError(response.error || t.container.failedStart)
-      updateContainer(container.id, { status: 'stopped' })
+      setIsStarting(false)
+      setActiveTask(null)
       return
     }
 
-    // Poll for status until running or error
-    setIsPolling(true)
-    let attempts = 0
-    const maxAttempts = 30 // 30 seconds max
-
-    const pollStatus = async () => {
-      attempts++
-      const statusResponse = await apiClient.getContainer(container.id)
-
-      if (statusResponse.success && statusResponse.data) {
-        const newStatus = statusResponse.data.status
-
-        if (newStatus === 'running') {
-          updateContainer(container.id, { status: 'running' })
-          setIsPolling(false)
-          return
-        }
-
-        if (newStatus === 'error' || newStatus === 'stopped') {
-          updateContainer(container.id, { status: newStatus })
-          setIsPolling(false)
-          if (newStatus === 'error') {
-            setError(t.container.failedStart)
-          }
-          return
-        }
+    // API returns taskId - poll that task for progress
+    const taskId = response.data?.taskId
+    if (!taskId) {
+      // Fallback to old behavior if no taskId
+      setIsStarting(false)
+      setActiveTask(null)
+      const containerResponse = await apiClient.getContainer(container.id)
+      if (containerResponse.success && containerResponse.data) {
+        updateContainer(container.id, containerResponse.data)
       }
+      return
+    }
 
-      // Continue polling if not done and under max attempts
-      if (attempts < maxAttempts) {
-        pollingTimeoutRef.current = setTimeout(pollStatus, 1000)
-      } else {
-        // Timeout - fetch final status
-        const finalResponse = await apiClient.getContainer(container.id)
-        if (finalResponse.success && finalResponse.data) {
-          updateContainer(container.id, { status: finalResponse.data.status })
+    // Poll task for progress
+    const pollStartTask = async () => {
+      try {
+        const taskResponse = await apiClient.getTask(taskId)
+        if (taskResponse.success && taskResponse.data) {
+          setActiveTask(taskResponse.data)
+
+          if (taskResponse.data.status === 'completed') {
+            // Fetch updated container
+            const containerResponse = await apiClient.getContainer(container.id)
+            if (containerResponse.success && containerResponse.data) {
+              updateContainer(container.id, containerResponse.data)
+            }
+            setIsStarting(false)
+            setActiveTask(null)
+            return
+          }
+
+          if (taskResponse.data.status === 'failed') {
+            setError(taskResponse.data.error || t.container.failedStart)
+            setIsStarting(false)
+            setActiveTask(null)
+            return
+          }
         }
-        setIsPolling(false)
+        // Continue polling
+        startTaskPollingRef.current = setTimeout(pollStartTask, 500)
+      } catch (error) {
+        console.error('Error polling start task:', error)
+        startTaskPollingRef.current = setTimeout(pollStartTask, 1000)
       }
     }
 
-    pollStatus()
+    pollStartTask()
   }
 
   const handleStop = async () => {
@@ -208,21 +224,21 @@ export function ContainerCard({ container }: ContainerCardProps) {
                 {t.modes[container.mode]}
               </span>
             </div>
-            {/* Progress bar for creating containers */}
-            {container.status === 'creating' && creationTask && (
+            {/* Progress bar for active operations (creating or starting) */}
+            {activeTask && (
               <div className="mt-3 space-y-1">
                 <div className="flex justify-between text-xs">
                   <span className="text-terminal-textMuted truncate max-w-[200px]">
-                    {creationTask.message}
+                    {activeTask.message}
                   </span>
                   <span className="text-terminal-green font-mono ml-2">
-                    {creationTask.progress}%
+                    {activeTask.progress}%
                   </span>
                 </div>
                 <div className="w-full bg-terminal-bg border border-terminal-border rounded-full h-1.5 overflow-hidden">
                   <div
                     className="h-full bg-terminal-green transition-all duration-300 ease-out"
-                    style={{ width: `${creationTask.progress}%` }}
+                    style={{ width: `${activeTask.progress}%` }}
                   />
                 </div>
               </div>
@@ -329,9 +345,9 @@ export function ContainerCard({ container }: ContainerCardProps) {
             <button
               onClick={handleStart}
               className="btn-primary text-sm py-1.5"
-              disabled={isDeleting || container.status === 'creating' || isPolling}
+              disabled={isDeleting || container.status === 'creating' || isStarting}
             >
-              {(container.status === 'creating' || isPolling) ? (
+              {(container.status === 'creating' || isStarting) ? (
                 <AnimatedDots text={t.container.starting} />
               ) : (
                 t.container.start

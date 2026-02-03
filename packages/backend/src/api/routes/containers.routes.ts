@@ -175,7 +175,7 @@ router.get(
 
 /**
  * POST /api/containers/:id/start
- * Start a container
+ * Start a container (async with task tracking)
  */
 router.post(
   '/:id/start',
@@ -186,11 +186,27 @@ router.post(
 
       logger.info({ containerId: id }, 'Starting container');
 
-      const container = await containerService.start(id);
+      // Create a task for this operation
+      const task = taskService.create('start-container');
+      logger.info({ taskId: task.id, containerId: id }, 'Created task for container start');
 
-      logger.info({ containerId: id }, 'Container started successfully');
+      // Start the task
+      taskService.start(task.id, 'Iniciando container...');
 
-      res.json(successResponse(container, 'Container started successfully'));
+      // Update container config with taskId for frontend tracking
+      containerRepository.update(id, { config: { taskId: task.id } as any });
+
+      // Start container asynchronously
+      containerService.startWithTask(id, task.id)
+        .then((_container) => {
+          logger.info({ containerId: id, taskId: task.id }, 'Container started successfully');
+        })
+        .catch((error) => {
+          logger.error({ error, containerId: id, taskId: task.id }, 'Failed to start container');
+        });
+
+      // Return task immediately for polling
+      res.status(202).json(successResponse({ taskId: task.id }, 'Container start initiated'));
     } catch (error) {
       logger.error({ error, containerId: req.params['id'] }, 'Failed to start container');
 

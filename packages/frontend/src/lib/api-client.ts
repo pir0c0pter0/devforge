@@ -73,8 +73,8 @@ class ApiClient {
     })
   }
 
-  async startContainer(id: string): Promise<ApiResponse<void>> {
-    return this.request<void>(`/api/containers/${id}/start`, {
+  async startContainer(id: string): Promise<ApiResponse<{ taskId: string }>> {
+    return this.request<{ taskId: string }>(`/api/containers/${id}/start`, {
       method: 'POST',
     })
   }
