@@ -1,5 +1,4 @@
 import express, { Request, Response, NextFunction } from 'express';
-import { Server as SocketServer } from 'socket.io';
 import { createServer } from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -7,8 +6,8 @@ import compression from 'compression';
 import dotenv from 'dotenv';
 import { httpLogger, logger } from './utils/logger';
 import { containerService } from './services/container.service';
-import { metricsService } from './services/metrics.service';
 import { dockerService } from './services/docker.service';
+import { initializeWebSocket, getSocketServer } from './services/websocket.service';
 import containersRouter from './api/routes/containers.routes';
 import templatesRouter from './api/routes/templates.routes';
 import diagnosticsRouter from './api/routes/diagnostics.routes';
@@ -83,27 +82,9 @@ const app: express.Application = express();
 const httpServer = createServer(app);
 
 /**
- * Initialize Socket.io with secure CORS configuration
+ * Socket.io server instance (initialized in startServer)
  */
-const io = new SocketServer(httpServer, {
-  cors: {
-    origin: (origin, callback) => {
-      // Allow requests with no origin (same-origin, curl, etc.)
-      if (!origin) {
-        callback(null, true);
-        return;
-      }
-      // Check if origin is in the allowed list
-      if (ALLOWED_ORIGINS.includes(origin)) {
-        callback(null, true);
-        return;
-      }
-      callback(new Error(`Origin ${origin} not allowed by CORS policy`));
-    },
-    methods: ['GET', 'POST'],
-    credentials: true,
-  },
-});
+let io: ReturnType<typeof initializeWebSocket> | null = null;
 
 /**
  * Middleware
@@ -214,130 +195,6 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
 });
 
 /**
- * Socket.io connection handling
- */
-io.on('connection', (socket) => {
-  logger.info({ socketId: socket.id }, 'Client connected to WebSocket');
-
-  /**
-   * Subscribe to container metrics
-   */
-  socket.on('subscribe:metrics', async (data: { containerId: string; interval?: number }) => {
-    const { containerId, interval = 2000 } = data;
-
-    logger.info({ socketId: socket.id, containerId, interval }, 'Client subscribed to metrics');
-
-    // Clear any existing interval before creating a new one
-    if (socket.data.metricsInterval) {
-      clearInterval(socket.data.metricsInterval);
-    }
-
-    const metricsInterval = setInterval(async () => {
-      try {
-        const fullMetrics = await metricsService.getContainerMetrics(containerId);
-
-        // Emit flat metrics format expected by frontend
-        socket.emit('metrics:update', {
-          containerId,
-          timestamp: new Date().toISOString(),
-          cpu: fullMetrics.cpu.usage,
-          memory: fullMetrics.memory.percentage,
-          disk: fullMetrics.disk.percentage,
-        });
-      } catch (error) {
-        logger.error({ error, containerId }, 'Failed to emit metrics');
-
-        socket.emit('metrics:error', {
-          containerId,
-          error: error instanceof Error ? error.message : 'Failed to get metrics',
-        });
-      }
-    }, interval);
-
-    // Store interval ID for cleanup
-    socket.data.metricsInterval = metricsInterval;
-
-    // Clean up on disconnect
-    socket.on('disconnect', () => {
-      clearInterval(metricsInterval);
-      logger.info({ socketId: socket.id, containerId }, 'Client unsubscribed from metrics');
-    });
-  });
-
-  /**
-   * Unsubscribe from container metrics
-   */
-  socket.on('unsubscribe:metrics', () => {
-    if (socket.data.metricsInterval) {
-      clearInterval(socket.data.metricsInterval);
-      socket.data.metricsInterval = null;
-      logger.info({ socketId: socket.id }, 'Client unsubscribed from metrics');
-    }
-  });
-
-  /**
-   * Subscribe to container logs
-   */
-  socket.on('subscribe:logs', async (data: { containerId: string }) => {
-    const { containerId } = data;
-
-    logger.info({ socketId: socket.id, containerId }, 'Client subscribed to logs');
-
-    try {
-      // Send initial logs
-      const logs = await containerService.getLogs(containerId, 100);
-
-      socket.emit('logs:initial', {
-        containerId,
-        logs,
-      });
-
-      // TODO: Implement real-time log streaming
-      // This would require Docker logs streaming API
-
-    } catch (error) {
-      logger.error({ error, containerId }, 'Failed to send initial logs');
-
-      socket.emit('logs:error', {
-        containerId,
-        error: error instanceof Error ? error.message : 'Failed to get logs',
-      });
-    }
-  });
-
-  /**
-   * Container status updates
-   */
-  socket.on('subscribe:status', (data: { containerId: string }) => {
-    const { containerId } = data;
-
-    logger.info({ socketId: socket.id, containerId }, 'Client subscribed to status updates');
-
-    // TODO: Implement container status change events
-    // This would require Docker events API
-  });
-
-  /**
-   * Handle disconnection
-   */
-  socket.on('disconnect', () => {
-    logger.info({ socketId: socket.id }, 'Client disconnected from WebSocket');
-
-    // Clean up any active intervals
-    if (socket.data.metricsInterval) {
-      clearInterval(socket.data.metricsInterval);
-    }
-  });
-
-  /**
-   * Handle errors
-   */
-  socket.on('error', (error) => {
-    logger.error({ error, socketId: socket.id }, 'WebSocket error');
-  });
-});
-
-/**
  * Graceful shutdown handler
  */
 const gracefulShutdown = async (signal: string) => {
@@ -349,9 +206,12 @@ const gracefulShutdown = async (signal: string) => {
   });
 
   // Close Socket.io connections
-  io.close(() => {
-    logger.info('Socket.io server closed');
-  });
+  const socketServer = getSocketServer();
+  if (socketServer) {
+    socketServer.close(() => {
+      logger.info('Socket.io server closed');
+    });
+  }
 
   // Close database connection
   closeDatabase();
@@ -400,6 +260,10 @@ const startServer = async () => {
     // Sync existing containers
     logger.info('Syncing existing containers');
     await containerService.syncContainers();
+
+    // Initialize WebSocket server with namespaces
+    logger.info('Initializing WebSocket server');
+    io = initializeWebSocket(httpServer);
 
     // Start HTTP server
     httpServer.listen(PORT, HOST, () => {
