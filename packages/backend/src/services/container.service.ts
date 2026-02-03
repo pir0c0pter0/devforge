@@ -20,6 +20,7 @@ import {
   type ContainerEntity,
   type CreateContainerDto,
 } from '../repositories';
+import { emitContainerCreationProgress } from './websocket.service';
 import * as path from 'path';
 import * as os from 'os';
 
@@ -46,56 +47,82 @@ const entityToContainer = (entity: ContainerEntity): Container => ({
 });
 
 /**
- * Normalize GitHub repository URL to a consistent format
- * Handles: github.com/user/repo, https://github.com/user/repo, git@github.com:user/repo.git, etc.
+ * Sanitize and validate repository URL to prevent command injection
+ * Only allows GitHub and GitLab HTTPS URLs
  */
-const normalizeGithubUrl = (url: string): string => {
+const sanitizeRepositoryUrl = (url: string): string => {
   if (!url || url.trim() === '') return '';
 
-  let normalized = url.trim();
+  const trimmed = url.trim();
 
-  // Remove trailing slashes
-  normalized = normalized.replace(/\/+$/, '');
-
-  // If it's already a proper HTTPS URL, just clean it up
-  if (normalized.startsWith('https://github.com/')) {
-    // Remove .git suffix if present
-    normalized = normalized.replace(/\.git$/, '');
-    return normalized;
+  // Check for dangerous shell characters
+  const dangerousChars = /[;&|`$(){}[\]<>\\!#]/;
+  if (dangerousChars.test(trimmed)) {
+    throw new Error('URL contém caracteres inválidos');
   }
 
-  // Convert SSH format (git@github.com:user/repo.git) to HTTPS
-  const sshMatch = normalized.match(/^git@github\.com:(.+?)(?:\.git)?$/);
+  // Only allow HTTPS URLs from trusted providers
+  const allowedPatterns = [
+    /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+(?:\.git)?$/,
+    /^https:\/\/gitlab\.com\/[\w.-]+\/[\w.-]+(?:\.git)?$/,
+    /^https:\/\/bitbucket\.org\/[\w.-]+\/[\w.-]+(?:\.git)?$/,
+  ];
+
+  // First normalize the URL
+  let normalized = trimmed;
+
+  // Convert git@ to https://
+  const sshMatch = normalized.match(/^git@(github|gitlab|bitbucket)\.(com|org):(.+?)(?:\.git)?$/);
   if (sshMatch) {
-    return `https://github.com/${sshMatch[1]}`;
+    normalized = `https://${sshMatch[1]}.${sshMatch[2]}/${sshMatch[3]}`;
   }
 
-  // Handle github.com/user/repo without protocol
-  if (normalized.match(/^github\.com\//)) {
+  // Add https:// if missing
+  if (normalized.match(/^(github|gitlab)\.com\//)) {
     normalized = `https://${normalized}`;
-    normalized = normalized.replace(/\.git$/, '');
-    return normalized;
   }
 
-  // Handle http:// (convert to https://)
-  if (normalized.startsWith('http://github.com/')) {
-    normalized = normalized.replace('http://', 'https://');
-    normalized = normalized.replace(/\.git$/, '');
-    return normalized;
+  // Remove .git suffix for validation
+  const cleanUrl = normalized.replace(/\.git$/, '');
+
+  // Validate against allowed patterns
+  const isValid = allowedPatterns.some(pattern => pattern.test(cleanUrl));
+  if (!isValid) {
+    throw new Error('URL de repositório inválida. Use URLs HTTPS do GitHub, GitLab ou Bitbucket.');
   }
 
-  // Handle www.github.com
-  if (normalized.includes('www.github.com')) {
-    normalized = normalized.replace('www.github.com', 'github.com');
-    if (!normalized.startsWith('https://')) {
-      normalized = `https://${normalized.replace(/^https?:\/\//, '')}`;
-    }
-    normalized = normalized.replace(/\.git$/, '');
-    return normalized;
-  }
-
-  // If nothing matched, return as-is (might be a different git provider)
   return normalized;
+};
+
+/**
+ * Sanitize container name to prevent path traversal
+ * Only allows alphanumeric, hyphens and underscores
+ */
+const sanitizeContainerName = (name: string): string => {
+  if (!name || name.trim() === '') {
+    throw new Error('Nome do container é obrigatório');
+  }
+
+  // Remove any path traversal attempts
+  const cleaned = name.trim().replace(/\.\./g, '').replace(/[\/\\]/g, '');
+
+  // Only allow safe characters
+  const sanitized = cleaned.replace(/[^a-zA-Z0-9_-]/g, '');
+
+  if (sanitized.length === 0) {
+    throw new Error('Nome do container deve conter letras ou números');
+  }
+
+  if (sanitized.length > 64) {
+    throw new Error('Nome do container deve ter no máximo 64 caracteres');
+  }
+
+  if (sanitized !== name.trim()) {
+    // Log sanitization for security audit
+    logger.warn({ original: name, sanitized }, 'Container name was sanitized');
+  }
+
+  return sanitized;
 };
 
 /**
@@ -111,16 +138,33 @@ export class ContainerService {
   /**
    * Create a new container with configuration
    */
-  async create(config: ContainerConfig): Promise<Container> {
+  async create(config: ContainerConfig, taskId?: string): Promise<Container> {
     let dockerContainerId: string | null = null;
 
     try {
-      // Normalize GitHub URL if provided
-      if (config.repoUrl) {
-        config = { ...config, repoUrl: normalizeGithubUrl(config.repoUrl) };
+      // Emit validating progress
+      if (taskId) {
+        emitContainerCreationProgress(taskId, {
+          taskId,
+          stage: 'validating',
+          percentage: 5,
+          message: 'Validating container configuration...',
+          timestamp: new Date()
+        });
       }
 
       logger.info({ config }, 'Creating new container');
+
+      // Sanitize inputs for security
+      const safeName = sanitizeContainerName(config.name);
+      const safeRepoUrl = config.repoUrl ? sanitizeRepositoryUrl(config.repoUrl) : undefined;
+
+      // Use sanitized values
+      config = {
+        ...config,
+        name: safeName,
+        repoUrl: safeRepoUrl,
+      };
 
       const containerId = uuidv4();
       const containerName = `claude-docker-${config.name}-${Date.now()}`;
@@ -160,6 +204,17 @@ export class ContainerService {
         },
       };
 
+      // Emit creating progress
+      if (taskId) {
+        emitContainerCreationProgress(taskId, {
+          taskId,
+          stage: 'creating',
+          percentage: 20,
+          message: 'Creating Docker container...',
+          timestamp: new Date()
+        });
+      }
+
       // Create Docker container
       const dockerContainer = await dockerService.createContainer(createOptions);
       dockerContainerId = dockerContainer.id; // Track for rollback
@@ -167,6 +222,18 @@ export class ContainerService {
       // Start container temporarily for setup operations
       const needsSetup = config.repoType === 'clone' && config.repoUrl;
       if (needsSetup) {
+        // Emit starting progress
+        if (taskId) {
+          emitContainerCreationProgress(taskId, {
+            taskId,
+            containerId,
+            stage: 'starting',
+            percentage: 35,
+            message: 'Starting container for setup...',
+            timestamp: new Date()
+          });
+        }
+
         logger.info({ dockerId: dockerContainer.id }, 'Starting container for setup...');
         await dockerService.startContainer(dockerContainer.id);
 
@@ -174,16 +241,64 @@ export class ContainerService {
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
 
+      // Emit configuring progress
+      if (taskId) {
+        emitContainerCreationProgress(taskId, {
+          taskId,
+          containerId,
+          stage: 'configuring',
+          percentage: 75,
+          message: 'Copying Claude configurations...',
+          timestamp: new Date()
+        });
+      }
+
       // Copy Claude configs from host to container
       await this.copyClaudeConfigs(dockerContainer.id);
 
       // Clone repository if specified
       if (config.repoType === 'clone' && config.repoUrl) {
+        // Emit cloning progress
+        if (taskId) {
+          emitContainerCreationProgress(taskId, {
+            taskId,
+            containerId,
+            stage: 'cloning',
+            percentage: 55,
+            message: 'Cloning repository...',
+            timestamp: new Date()
+          });
+        }
+
         await this.cloneRepository(dockerContainer.id, config.repoUrl, config.sshKeyPath);
+
+        // Emit stopping progress
+        if (taskId) {
+          emitContainerCreationProgress(taskId, {
+            taskId,
+            containerId,
+            stage: 'stopping',
+            percentage: 85,
+            message: 'Stopping container after setup...',
+            timestamp: new Date()
+          });
+        }
 
         // Stop container after setup (user will start it when ready)
         logger.info({ dockerId: dockerContainer.id }, 'Stopping container after setup...');
         await dockerService.stopContainer(dockerContainer.id);
+      }
+
+      // Emit saving progress
+      if (taskId) {
+        emitContainerCreationProgress(taskId, {
+          taskId,
+          containerId,
+          stage: 'saving',
+          percentage: 95,
+          message: 'Saving container to database...',
+          timestamp: new Date()
+        });
       }
 
       // Create container record in database
@@ -206,6 +321,18 @@ export class ContainerService {
       // Update in-memory cache
       this.containers.set(container.id, container);
 
+      // Emit ready progress
+      if (taskId) {
+        emitContainerCreationProgress(taskId, {
+          taskId,
+          containerId: container.id,
+          stage: 'ready',
+          percentage: 100,
+          message: 'Container created successfully!',
+          timestamp: new Date()
+        });
+      }
+
       logger.info({
         containerId: container.id,
         dockerId: dockerContainer.id,
@@ -214,6 +341,17 @@ export class ContainerService {
 
       return container;
     } catch (error) {
+      // Emit error progress
+      if (taskId) {
+        emitContainerCreationProgress(taskId, {
+          taskId,
+          stage: 'error',
+          percentage: 0,
+          message: 'Container creation failed',
+          error: error instanceof Error ? error.message : 'Unknown error',
+          timestamp: new Date()
+        });
+      }
       // Cleanup orphaned Docker container if it was created
       if (dockerContainerId) {
         try {
@@ -241,6 +379,10 @@ export class ContainerService {
     try {
       logger.info({ templateId, options }, 'Creating container from template');
 
+      // Sanitize inputs for security
+      const safeName = sanitizeContainerName(options.name);
+      const safeRepoUrl = options.repoUrl ? sanitizeRepositoryUrl(options.repoUrl) : undefined;
+
       const template = getTemplateById(templateId);
 
       if (!template) {
@@ -248,7 +390,7 @@ export class ContainerService {
       }
 
       const containerId = uuidv4();
-      const containerName = `claude-docker-${options.name}-${Date.now()}`;
+      const containerName = `claude-docker-${safeName}-${Date.now()}`;
 
       // Get image from template config
       const image = template.defaultConfig.image;
@@ -258,11 +400,11 @@ export class ContainerService {
 
       // Prepare volume mounts
       const config: ContainerConfig = {
-        name: options.name,
+        name: safeName,
         template: 'both',
         mode: options.mode,
         repoType: options.repoType,
-        repoUrl: options.repoUrl,
+        repoUrl: safeRepoUrl,
         sshKeyPath: options.sshKeyPath,
         cpuLimit: options.cpuLimit ?? template.defaultConfig.resources?.cpuLimit ?? 2,
         memoryLimit: options.memoryLimit ?? template.defaultConfig.resources?.memoryLimit ?? 4096,
@@ -291,7 +433,7 @@ export class ContainerService {
         },
         Labels: {
           'claude-docker.id': containerId,
-          'claude-docker.name': options.name,
+          'claude-docker.name': safeName,
           'claude-docker.template': templateId,
           'claude-docker.mode': options.mode,
           'claude-docker.from-template': 'true',
@@ -305,17 +447,17 @@ export class ContainerService {
       await this.copyClaudeConfigs(dockerContainer.id);
 
       // Clone repository if specified
-      if (options.repoType === 'clone' && options.repoUrl) {
-        await this.cloneRepository(dockerContainer.id, options.repoUrl, options.sshKeyPath);
+      if (options.repoType === 'clone' && safeRepoUrl) {
+        await this.cloneRepository(dockerContainer.id, safeRepoUrl, options.sshKeyPath);
       }
 
       // Create container record in database
       const createDto: CreateContainerDto = {
         dockerId: dockerContainer.id,
-        name: options.name,
+        name: safeName,
         template: 'both',
         mode: options.mode,
-        repoUrl: options.repoUrl,
+        repoUrl: safeRepoUrl,
         repoType: options.repoType,
         sshKeyPath: options.sshKeyPath,
         cpuLimit: config.cpuLimit,
@@ -350,7 +492,7 @@ export class ContainerService {
       logger.info({
         containerId: container.id,
         dockerId: dockerContainer.id,
-        name: options.name,
+        name: safeName,
         templateId,
       }, 'Container created from template successfully');
 
