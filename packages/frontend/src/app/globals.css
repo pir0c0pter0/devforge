@@ -210,4 +210,29 @@ body {
   .status-creating {
     @apply bg-terminal-yellow animate-pulse;
   }
+
+  /* Animated dots loading - fixed width for stable alignment */
+  .loading-dots {
+    display: inline-block;
+    width: 1.5em;
+    text-align: left;
+  }
+
+  .loading-dots::after {
+    content: '.';
+    animation: dots 3s steps(1, end) infinite;
+  }
+
+  @keyframes dots {
+    0%, 20% { content: '.'; }
+    40% { content: '..'; }
+    60%, 100% { content: '...'; }
+  }
+
+  /* Container for text with loading dots - prevents text shift */
+  .loading-text {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+  }
 }

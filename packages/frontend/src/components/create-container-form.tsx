@@ -9,6 +9,58 @@ import type { TemplateType, ContainerMode, RepositoryType } from '@/lib/types'
 import { AnimatedDots } from '@/components/ui/animated-dots'
 import clsx from 'clsx'
 
+/**
+ * Normalize GitHub repository URL to a consistent format
+ */
+const normalizeGithubUrl = (url: string): string => {
+  if (!url || url.trim() === '') return ''
+
+  let normalized = url.trim()
+
+  // Remove trailing slashes
+  normalized = normalized.replace(/\/+$/, '')
+
+  // Remove .git suffix
+  normalized = normalized.replace(/\.git$/, '')
+
+  // Convert SSH format (git@github.com:user/repo) to HTTPS
+  const sshMatch = normalized.match(/^git@github\.com:(.+)$/)
+  if (sshMatch) {
+    return `https://github.com/${sshMatch[1]}`
+  }
+
+  // Handle github.com/user/repo without protocol
+  if (normalized.match(/^github\.com\//)) {
+    return `https://${normalized}`
+  }
+
+  // Handle http:// (convert to https://)
+  if (normalized.startsWith('http://github.com/')) {
+    return normalized.replace('http://', 'https://')
+  }
+
+  // Handle www.github.com
+  if (normalized.includes('www.github.com')) {
+    normalized = normalized.replace('www.github.com', 'github.com')
+    if (!normalized.startsWith('https://')) {
+      normalized = `https://${normalized.replace(/^https?:\/\//, '')}`
+    }
+    return normalized
+  }
+
+  // If already https://github.com, return as-is
+  if (normalized.startsWith('https://github.com/')) {
+    return normalized
+  }
+
+  // If it looks like user/repo format, assume GitHub
+  if (normalized.match(/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+$/)) {
+    return `https://github.com/${normalized}`
+  }
+
+  return normalized
+}
+
 const createContainerSchema = z.object({
   name: z
     .string()
@@ -63,9 +115,19 @@ export function CreateContainerForm() {
     try {
       const validated = createContainerSchema.parse(formData)
 
-      if (validated.repositoryType === 'github' && !validated.repositoryUrl) {
+      // Normalize GitHub URL before validation
+      const normalizedUrl = validated.repositoryUrl
+        ? normalizeGithubUrl(validated.repositoryUrl)
+        : ''
+
+      if (validated.repositoryType === 'github' && !normalizedUrl) {
         setErrors({ repositoryUrl: t.createContainer.repositoryUrlRequired })
         return
+      }
+
+      // Update form with normalized URL so user sees the corrected value
+      if (normalizedUrl && normalizedUrl !== validated.repositoryUrl) {
+        updateFormData('repositoryUrl', normalizedUrl)
       }
 
       setIsSubmitting(true)
@@ -74,7 +136,7 @@ export function CreateContainerForm() {
       setProgressStep('creating')
       await new Promise(resolve => setTimeout(resolve, 500))
 
-      if (validated.repositoryType === 'github' && validated.repositoryUrl) {
+      if (validated.repositoryType === 'github' && normalizedUrl) {
         setProgressStep('starting')
         await new Promise(resolve => setTimeout(resolve, 500))
         setProgressStep('cloning')
@@ -87,7 +149,7 @@ export function CreateContainerForm() {
         template: validated.template,
         mode: validated.mode,
         repositoryType: validated.repositoryType,
-        repositoryUrl: validated.repositoryUrl,
+        repositoryUrl: normalizedUrl,
         limits: validated.limits,
       })
 
@@ -153,6 +215,15 @@ export function CreateContainerForm() {
         [key]: value,
       },
     }))
+  }
+
+  const handleRepositoryUrlBlur = () => {
+    if (formData.repositoryUrl) {
+      const normalized = normalizeGithubUrl(formData.repositoryUrl)
+      if (normalized !== formData.repositoryUrl) {
+        updateFormData('repositoryUrl', normalized)
+      }
+    }
   }
 
   return (
@@ -269,8 +340,9 @@ export function CreateContainerForm() {
             id="repositoryUrl"
             value={formData.repositoryUrl}
             onChange={(e) => updateFormData('repositoryUrl', e.target.value)}
+            onBlur={handleRepositoryUrlBlur}
             className={clsx('input', errors.repositoryUrl && 'border-terminal-red')}
-            placeholder={t.createContainer.repositoryUrlPlaceholder}
+            placeholder="github.com/user/repo ou https://github.com/user/repo"
             disabled={isSubmitting}
           />
           {errors.repositoryUrl && (

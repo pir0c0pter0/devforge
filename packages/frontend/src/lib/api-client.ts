@@ -55,9 +55,20 @@ class ApiClient {
   async createContainer(
     data: CreateContainerRequest
   ): Promise<ApiResponse<Container>> {
+    // Convert frontend format to backend format
+    const backendData = {
+      name: data.name,
+      template: data.template,
+      mode: data.mode,
+      repoType: data.repositoryType === 'github' ? 'clone' : 'empty',
+      repoUrl: data.repositoryUrl || '',
+      cpuLimit: data.limits.cpuCores,
+      memoryLimit: data.limits.memoryMB,
+      diskLimit: data.limits.diskGB * 1024, // Convert GB to MB
+    }
     return this.request<Container>('/api/containers', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify(backendData),
     })
   }
 

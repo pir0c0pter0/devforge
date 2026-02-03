@@ -46,6 +46,59 @@ const entityToContainer = (entity: ContainerEntity): Container => ({
 });
 
 /**
+ * Normalize GitHub repository URL to a consistent format
+ * Handles: github.com/user/repo, https://github.com/user/repo, git@github.com:user/repo.git, etc.
+ */
+const normalizeGithubUrl = (url: string): string => {
+  if (!url || url.trim() === '') return '';
+
+  let normalized = url.trim();
+
+  // Remove trailing slashes
+  normalized = normalized.replace(/\/+$/, '');
+
+  // If it's already a proper HTTPS URL, just clean it up
+  if (normalized.startsWith('https://github.com/')) {
+    // Remove .git suffix if present
+    normalized = normalized.replace(/\.git$/, '');
+    return normalized;
+  }
+
+  // Convert SSH format (git@github.com:user/repo.git) to HTTPS
+  const sshMatch = normalized.match(/^git@github\.com:(.+?)(?:\.git)?$/);
+  if (sshMatch) {
+    return `https://github.com/${sshMatch[1]}`;
+  }
+
+  // Handle github.com/user/repo without protocol
+  if (normalized.match(/^github\.com\//)) {
+    normalized = `https://${normalized}`;
+    normalized = normalized.replace(/\.git$/, '');
+    return normalized;
+  }
+
+  // Handle http:// (convert to https://)
+  if (normalized.startsWith('http://github.com/')) {
+    normalized = normalized.replace('http://', 'https://');
+    normalized = normalized.replace(/\.git$/, '');
+    return normalized;
+  }
+
+  // Handle www.github.com
+  if (normalized.includes('www.github.com')) {
+    normalized = normalized.replace('www.github.com', 'github.com');
+    if (!normalized.startsWith('https://')) {
+      normalized = `https://${normalized.replace(/^https?:\/\//, '')}`;
+    }
+    normalized = normalized.replace(/\.git$/, '');
+    return normalized;
+  }
+
+  // If nothing matched, return as-is (might be a different git provider)
+  return normalized;
+};
+
+/**
  * Business logic layer for container management
  */
 export class ContainerService {
@@ -62,6 +115,11 @@ export class ContainerService {
     let dockerContainerId: string | null = null;
 
     try {
+      // Normalize GitHub URL if provided
+      if (config.repoUrl) {
+        config = { ...config, repoUrl: normalizeGithubUrl(config.repoUrl) };
+      }
+
       logger.info({ config }, 'Creating new container');
 
       const containerId = uuidv4();
@@ -757,8 +815,8 @@ export class ContainerService {
   private getImageForTemplate(template: string): string {
     const imageMap: Record<string, string> = {
       'claude': 'claude-docker/claude:latest',
-      'vscode': 'claude-docker/vscode:latest',
-      'both': 'claude-docker/full:latest',
+      'vscode': 'claude-docker/both:latest', // vscode image not built separately
+      'both': 'claude-docker/both:latest',
     };
 
     return imageMap[template] || 'claude-docker/claude:latest';
@@ -962,10 +1020,17 @@ export class ContainerService {
         );
       }
 
-      // Clone repository
+      // Clean workspace before cloning (remove any existing content)
+      await dockerService.executeCommand(
+        dockerId,
+        ['sh', '-c', 'rm -rf /workspace/* /workspace/.[!.]* 2>/dev/null || true'],
+        { user: 'root' }
+      );
+
+      // Clone repository directly into /workspace
       const result = await dockerService.executeCommand(
         dockerId,
-        ['git', 'clone', repoUrl, '/workspace/repo'],
+        ['git', 'clone', repoUrl, '.'],
         { user: 'root', workingDir: '/workspace' }
       );
 
