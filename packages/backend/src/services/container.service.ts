@@ -100,12 +100,26 @@ export class ContainerService {
       // Create Docker container
       const dockerContainer = await dockerService.createContainer(createOptions);
 
+      // Start container temporarily for setup operations
+      const needsSetup = config.repoType === 'clone' && config.repoUrl;
+      if (needsSetup) {
+        logger.info({ dockerId: dockerContainer.id }, 'Starting container for setup...');
+        await dockerService.startContainer(dockerContainer.id);
+
+        // Wait for container to be ready
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+
       // Copy Claude configs from host to container
       await this.copyClaudeConfigs(dockerContainer.id);
 
       // Clone repository if specified
       if (config.repoType === 'clone' && config.repoUrl) {
         await this.cloneRepository(dockerContainer.id, config.repoUrl, config.sshKeyPath);
+
+        // Stop container after setup (user will start it when ready)
+        logger.info({ dockerId: dockerContainer.id }, 'Stopping container after setup...');
+        await dockerService.stopContainer(dockerContainer.id);
       }
 
       // Create container record in database
