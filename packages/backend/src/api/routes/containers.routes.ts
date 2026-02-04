@@ -479,13 +479,9 @@ router.get(
   async (req: Request, res: Response): Promise<void> => {
     try {
       const id = req.params['id'] as string;
-      const { hours, interval } = req.query as unknown as { hours: number; interval: number };
+      const { hours } = req.query as unknown as { hours: number };
 
-      logger.debug({ containerId: id, hours, interval }, 'Getting container metrics history');
-
-      // Calculate date range
-      const toDate = new Date();
-      const fromDate = new Date(toDate.getTime() - hours * 60 * 60 * 1000);
+      logger.debug({ containerId: id, hours }, 'Getting container metrics history');
 
       // Import metrics repository
       const { metricsRepository } = await import('../../repositories');
@@ -497,21 +493,9 @@ router.get(
         return;
       }
 
-      // Get time series data
-      const timeSeries = metricsRepository.getTimeSeries(id, {
-        fromDate,
-        toDate,
-        intervalMinutes: interval,
-        limit: 300, // Max 300 points for 5 hours at 1 min interval
-      });
-
-      // Transform to frontend format (reverse to chronological order)
-      const history = [...timeSeries].reverse().map((point) => ({
-        timestamp: point.timestamp.toISOString(),
-        cpu: Number(point.cpuPercent.toFixed(2)),
-        memory: Number(point.memoryUsage.toFixed(2)),
-        disk: Number(point.diskUsage.toFixed(2)),
-      }));
+      // Use getHistory which already returns properly formatted data
+      // (cpu as %, memory as %, disk in GB)
+      const history = metricsRepository.getHistory(id, hours);
 
       logger.info({ containerId: id, points: history.length }, 'Metrics history retrieved');
 

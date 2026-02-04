@@ -8,6 +8,7 @@ import { StatusBadge } from './status-badge'
 import { MessageItem } from './message-item'
 import { AnimatedDots } from '@/components/ui/animated-dots'
 import { useI18n } from '@/lib/i18n'
+import { SKILL_CATEGORIES, filterSkills, type ClaudeSkill } from '@/lib/claude-skills'
 
 export interface ClaudeChatProps {
   containerId: string
@@ -27,8 +28,12 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
   } = useClaudeDaemon({ containerId })
 
   const [inputValue, setInputValue] = useState('')
+  const [showSkillSuggestions, setShowSkillSuggestions] = useState(false)
+  const [selectedSkillIndex, setSelectedSkillIndex] = useState(0)
+  const [filteredSkills, setFilteredSkills] = useState<ClaudeSkill[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const suggestionsRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -44,21 +49,83 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
     }
   }, [daemonStatus])
 
+  // Filter skills when input starts with /
+  useEffect(() => {
+    if (inputValue.startsWith('/')) {
+      const skills = filterSkills(inputValue)
+      setFilteredSkills(skills)
+      setShowSkillSuggestions(skills.length > 0)
+      setSelectedSkillIndex(0)
+    } else {
+      setShowSkillSuggestions(false)
+      setFilteredSkills([])
+    }
+  }, [inputValue])
+
+  // Scroll to selected skill
+  useEffect(() => {
+    if (showSkillSuggestions && suggestionsRef.current) {
+      const selectedElement = suggestionsRef.current.children[selectedSkillIndex] as HTMLElement
+      if (selectedElement) {
+        selectedElement.scrollIntoView({ block: 'nearest' })
+      }
+    }
+  }, [selectedSkillIndex, showSkillSuggestions])
+
   const handleSend = useCallback(() => {
     const trimmedInput = inputValue.trim()
     if (!trimmedInput || isLoading || daemonStatus?.status !== 'running') return
 
     sendInstruction(trimmedInput)
     setInputValue('')
+    setShowSkillSuggestions(false)
   }, [inputValue, isLoading, daemonStatus, sendInstruction])
 
+  const handleSelectSkill = useCallback((skill: ClaudeSkill) => {
+    setInputValue(skill.name + ' ')
+    setShowSkillSuggestions(false)
+    inputRef.current?.focus()
+  }, [])
+
   const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Handle skill autocomplete navigation
+    if (showSkillSuggestions && filteredSkills.length > 0) {
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault()
+          setSelectedSkillIndex((prev) => (prev + 1) % filteredSkills.length)
+          return
+        case 'ArrowUp':
+          e.preventDefault()
+          setSelectedSkillIndex((prev) => (prev - 1 + filteredSkills.length) % filteredSkills.length)
+          return
+        case 'Tab':
+          e.preventDefault()
+          if (filteredSkills[selectedSkillIndex]) {
+            handleSelectSkill(filteredSkills[selectedSkillIndex])
+          }
+          return
+        case 'Enter':
+          if (!e.shiftKey) {
+            e.preventDefault()
+            if (filteredSkills[selectedSkillIndex]) {
+              handleSelectSkill(filteredSkills[selectedSkillIndex])
+            }
+          }
+          return
+        case 'Escape':
+          e.preventDefault()
+          setShowSkillSuggestions(false)
+          return
+      }
+    }
+
     // Send on Enter (without Shift)
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSend()
     }
-  }, [handleSend])
+  }, [showSkillSuggestions, filteredSkills, selectedSkillIndex, handleSelectSkill, handleSend])
 
   const handleStartDaemon = useCallback(() => {
     startDaemon()
@@ -136,7 +203,7 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
 
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {messages.length === 0 ? (
+        {messages.length === 0 && !isLoading ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <Bot className="w-12 h-12 text-terminal-textMuted mb-3" />
             <p className="text-terminal-textMuted text-sm">
@@ -178,6 +245,51 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
 
       {/* Input area */}
       <div className="border-t border-terminal-border p-3 bg-terminal-bg">
+        {/* Skill suggestions - above input */}
+        {showSkillSuggestions && filteredSkills.length > 0 && (
+          <div
+            ref={suggestionsRef}
+            className="mb-2 max-h-48 overflow-y-auto bg-terminal-bgLight border border-terminal-border rounded-lg shadow-lg"
+          >
+            {filteredSkills.map((skill, index) => {
+              const category = SKILL_CATEGORIES[skill.category]
+              return (
+                <div
+                  key={skill.name}
+                  className={clsx(
+                    'px-3 py-2 cursor-pointer flex items-center justify-between gap-2 transition-colors',
+                    index === selectedSkillIndex
+                      ? 'bg-terminal-border text-terminal-text'
+                      : 'hover:bg-terminal-bg text-terminal-textMuted'
+                  )}
+                  onClick={() => handleSelectSkill(skill)}
+                  onMouseEnter={() => setSelectedSkillIndex(index)}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-terminal-cyan">{skill.name}</span>
+                      <span className={clsx('text-xs px-1.5 py-0.5 rounded', category.color, 'bg-terminal-bg')}>
+                        {category.label}
+                      </span>
+                    </div>
+                    <p className="text-xs text-terminal-textMuted truncate mt-0.5">
+                      {skill.description}
+                    </p>
+                  </div>
+                  {index === selectedSkillIndex && (
+                    <span className="text-xs text-terminal-textMuted flex-shrink-0">
+                      Enter ↵
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+            <div className="px-3 py-1.5 text-xs text-terminal-textMuted border-t border-terminal-border bg-terminal-bg">
+              ↑↓ navegar • Enter/Tab selecionar • Esc fechar
+            </div>
+          </div>
+        )}
+
         <div className="flex items-end gap-2">
           <div className="flex-1 relative">
             <textarea
@@ -225,7 +337,7 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
 
         {/* Helper text */}
         <p className="text-xs text-terminal-textMuted mt-1.5">
-          {t.claudeChat.pressEnter}
+          {t.claudeChat.pressEnter} • Digite <span className="font-mono text-terminal-cyan">/</span> para skills
         </p>
       </div>
     </div>

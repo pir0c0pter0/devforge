@@ -9,8 +9,6 @@ import {
   Download,
   Pause,
   Play,
-  ChevronDown,
-  ChevronRight,
   Search,
   X,
   Filter,
@@ -75,11 +73,36 @@ const generateLogId = () => `log-${Date.now()}-${++logIdCounter}`
 /**
  * Verifica se o log deve ser filtrado (nao mostrado)
  */
-function shouldFilterLog(type: ClaudeEventType, content: string): boolean {
+function shouldFilterLog(type: ClaudeEventType, content: string, rawData?: Record<string, unknown>): boolean {
   if (!content || !content.trim()) return true
 
   // Filtrar TODOS os logs de sistema
   if (type === 'system') return true
+
+  // Filtrar eventos de user que são tool_result internos
+  if (type === 'user' && rawData) {
+    const message = rawData.message as { role?: string; content?: unknown } | undefined
+    if (message?.content) {
+      // Se o content é um array com tool_result, filtrar
+      if (Array.isArray(message.content)) {
+        const hasToolResult = message.content.some(
+          (item: { type?: string; tool_use_id?: string }) =>
+            item.type === 'tool_result' || item.tool_use_id
+        )
+        if (hasToolResult) return true
+      }
+    }
+  }
+
+  // Filtrar tool_result que contem system-reminder ou dados internos
+  if (type === 'tool_result') {
+    const lower = content.toLowerCase()
+    if (lower.includes('system-reminder') ||
+        lower.includes('tool_use_id') ||
+        lower.includes('tool_use_result')) {
+      return true
+    }
+  }
 
   // Filtrar conteudo muito curto sem significado
   const lower = content.toLowerCase().trim()
@@ -109,9 +132,9 @@ export function ClaudeCodeLogs({ containerId, className }: ClaudeCodeLogsProps) 
     let details: string | null = null
     const type = event.type
 
-    // Filtrar eventos sem conteudo util
+    // Filtrar eventos sem conteudo util (incluindo tool_results internos)
     const content = (data.content as string) || (data.message as string) || ''
-    if (shouldFilterLog(type, content)) {
+    if (shouldFilterLog(type, content, data)) {
       return null
     }
 
@@ -289,8 +312,8 @@ export function ClaudeCodeLogs({ containerId, className }: ClaudeCodeLogsProps) 
       if (data.success && data.data?.logs) {
         const historyLogs: LogEntry[] = data.data.logs
           .map((log: { id: string; type: ClaudeEventType; content: string; metadata?: Record<string, unknown>; recordedAt: string }) => {
-            // Filtrar logs vazios
-            if (shouldFilterLog(log.type, log.content)) {
+            // Filtrar logs vazios e tool_results internos
+            if (shouldFilterLog(log.type, log.content, log.metadata)) {
               return null
             }
 
@@ -348,8 +371,8 @@ export function ClaudeCodeLogs({ containerId, className }: ClaudeCodeLogsProps) 
     })
 
     socket.on('claude:log', (log: { id: string; type: ClaudeEventType; content: string; metadata?: Record<string, unknown>; timestamp: string }) => {
-      // Filtrar logs vazios
-      if (shouldFilterLog(log.type, log.content)) {
+      // Filtrar logs vazios e tool_results internos
+      if (shouldFilterLog(log.type, log.content, log.metadata)) {
         return
       }
 
@@ -579,10 +602,10 @@ export function ClaudeCodeLogs({ containerId, className }: ClaudeCodeLogsProps) 
         </div>
       )}
 
-      {/* Logs - container com scroll interno */}
+      {/* Logs - container estilo xterm.js */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-y-auto font-mono text-sm min-h-0"
+        className="flex-1 overflow-y-auto font-mono text-sm min-h-0 bg-[#1a1a1a]"
       >
         {isLoading ? (
           <div className="flex items-center justify-center h-full text-terminal-textMuted">
@@ -602,62 +625,73 @@ export function ClaudeCodeLogs({ containerId, className }: ClaudeCodeLogsProps) 
             )}
           </div>
         ) : (
-          <div className="p-2 space-y-1">
+          <div className="p-1">
             {filteredLogs.map((log) => (
               <div
                 key={log.id}
                 className={clsx(
-                  'rounded border transition-colors',
+                  'font-mono text-sm leading-relaxed',
                   log.type === 'error' || log.type === 'stderr'
-                    ? 'border-terminal-red/30 bg-terminal-red/5'
-                    : 'border-terminal-border bg-terminal-bgLight/50 hover:bg-terminal-bgLight'
+                    ? 'text-red-400'
+                    : log.type === 'stdin' || log.type === 'user'
+                    ? 'text-green-400'
+                    : log.type === 'assistant' || log.type === 'stdout'
+                    ? 'text-gray-200'
+                    : log.type === 'tool_use'
+                    ? 'text-yellow-400'
+                    : log.type === 'tool_result'
+                    ? 'text-cyan-400'
+                    : log.type === 'result'
+                    ? 'text-purple-400'
+                    : 'text-gray-400'
                 )}
               >
-                {/* Log header */}
+                {/* Log line - estilo terminal */}
                 <div
-                  className="flex items-start gap-2 px-3 py-2 cursor-pointer"
+                  className="flex hover:bg-[#252525] cursor-pointer px-2 py-0.5"
                   onClick={() => log.details && toggleExpand(log.id)}
                 >
-                  {/* Expand button */}
-                  {log.details ? (
-                    <button className="flex-shrink-0 mt-0.5 text-terminal-textMuted">
-                      {log.expanded ? (
-                        <ChevronDown className="w-4 h-4" />
-                      ) : (
-                        <ChevronRight className="w-4 h-4" />
-                      )}
-                    </button>
-                  ) : (
-                    <div className="w-4" />
-                  )}
-
                   {/* Timestamp */}
-                  <span className="flex-shrink-0 text-terminal-textMuted text-xs">
-                    {log.timestamp.toLocaleTimeString()}
+                  <span className="flex-shrink-0 text-gray-500 mr-2 select-none">
+                    [{log.timestamp.toLocaleTimeString()}]
                   </span>
 
-                  {/* Type badge */}
+                  {/* Type prefix */}
                   <span className={clsx(
-                    'flex-shrink-0 px-1.5 py-0.5 rounded text-xs font-medium',
-                    eventTypeColors[log.type]?.bg || 'bg-gray-500/20',
-                    eventTypeColors[log.type]?.text || 'text-gray-400'
+                    'flex-shrink-0 mr-2 select-none',
+                    log.type === 'error' || log.type === 'stderr'
+                      ? 'text-red-500'
+                      : log.type === 'stdin' || log.type === 'user'
+                      ? 'text-green-500'
+                      : log.type === 'assistant' || log.type === 'stdout'
+                      ? 'text-blue-400'
+                      : log.type === 'tool_use'
+                      ? 'text-yellow-500'
+                      : log.type === 'result'
+                      ? 'text-purple-500'
+                      : 'text-gray-500'
                   )}>
-                    {eventTypeColors[log.type]?.label || log.type.toUpperCase()}
+                    {eventTypeColors[log.type]?.label || log.type.toUpperCase()}:
                   </span>
 
-                  {/* Summary */}
-                  <span className="flex-1 text-terminal-text break-all">
+                  {/* Content */}
+                  <span className="flex-1 break-all whitespace-pre-wrap">
                     {log.summary}
                   </span>
+
+                  {/* Expand indicator */}
+                  {log.details && (
+                    <span className="flex-shrink-0 ml-2 text-gray-600">
+                      {log.expanded ? '▼' : '▶'}
+                    </span>
+                  )}
                 </div>
 
                 {/* Expanded details */}
                 {log.expanded && log.details && (
-                  <div className="px-3 pb-3 ml-6">
-                    <pre className="p-2 bg-terminal-bg rounded text-xs text-terminal-text overflow-x-auto whitespace-pre-wrap max-h-80 overflow-y-auto">
-                      {log.details}
-                    </pre>
-                  </div>
+                  <pre className="ml-8 pl-4 border-l-2 border-gray-700 text-xs text-gray-300 whitespace-pre-wrap max-h-80 overflow-y-auto my-1 bg-[#0d0d0d] py-2">
+                    {log.details}
+                  </pre>
                 )}
               </div>
             ))}

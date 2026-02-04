@@ -297,11 +297,8 @@ export function ContainerCard({ container }: ContainerCardProps) {
     return false
   }
 
-  const handleOpenShell = async () => {
-    const canProceed = await askToStartIfStopped()
-    if (canProceed) {
-      router.push(`/containers/${container.id}?tab=terminal`)
-    }
+  const handleOpenDetails = () => {
+    router.push(`/containers/${container.id}`)
   }
 
   const handleOpenInstructions = async () => {
@@ -602,11 +599,11 @@ export function ContainerCard({ container }: ContainerCardProps) {
           )}
 
           <button
-            onClick={handleOpenShell}
+            onClick={handleOpenDetails}
             className="btn-secondary text-sm py-1.5"
             disabled={isDeleting || container.status === 'creating'}
           >
-            {t.container.shell}
+            {t.container.details}
           </button>
 
           <button

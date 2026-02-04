@@ -252,6 +252,9 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
 
   const socketRef = useRef<Socket | null>(null)
   const historyLoadedRef = useRef(false)
+  const lastInstructionRef = useRef<string | null>(null)
+  const retryCountRef = useRef(0)
+  const MAX_RETRIES = 2
 
   // Store callbacks in refs to avoid recreating socket handlers
   const onMessageRef = useRef(onMessage)
@@ -368,6 +371,8 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
       // 'result' = final result, 'assistant' = Claude's response, 'error' = something went wrong
       if (event.type === 'result' || event.type === 'assistant' || event.type === 'error') {
         setIsLoading(false)
+        // Reset retry count on successful response
+        retryCountRef.current = 0
       }
     })
 
@@ -378,17 +383,71 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
       console.log('[ClaudeDaemon] Instruction received by daemon, waiting for response...')
     })
 
-    // Handle errors
-    socket.on('error', (data: { message: string }) => {
-      console.error('[ClaudeDaemon] Error:', data.message)
-      onErrorRef.current?.(data.message)
-      setIsLoading(false)
+    // Handle errors with automatic retry for 400 errors
+    socket.on('error', (data: { message: string; code?: number; status?: number }) => {
+      console.error('[ClaudeDaemon] Error:', data.message, 'Code:', data.code || data.status)
+
+      // Check if it's a 400 error and we have a last instruction to retry
+      const errorCode = data.code || data.status
+      const is400Error = errorCode === 400 || data.message?.includes('400') || data.message?.includes('Bad Request')
+
+      if (is400Error && lastInstructionRef.current && retryCountRef.current < MAX_RETRIES) {
+        console.log('[ClaudeDaemon] 400 error detected, attempting /rewind and retry...')
+        retryCountRef.current++
+
+        // First, send /rewind to go back to last good state
+        socket.emit('instruction:send', {
+          containerId,
+          instruction: '/rewind',
+        })
+
+        // Wait a bit then retry the last instruction
+        setTimeout(() => {
+          if (lastInstructionRef.current && socketRef.current?.connected) {
+            console.log('[ClaudeDaemon] Retrying instruction (attempt', retryCountRef.current, ')')
+            socket.emit('instruction:send', {
+              containerId,
+              instruction: lastInstructionRef.current,
+            })
+          }
+        }, 1500)
+      } else {
+        onErrorRef.current?.(data.message)
+        setIsLoading(false)
+        retryCountRef.current = 0
+      }
     })
 
-    socket.on('daemon:error', (data: { error: string }) => {
+    socket.on('daemon:error', (data: { error: string; code?: number; status?: number }) => {
       console.error('[ClaudeDaemon] Daemon error:', data.error)
-      onErrorRef.current?.(data.error)
-      setIsLoading(false)
+
+      // Check if it's a 400 error
+      const errorCode = data.code || data.status
+      const is400Error = errorCode === 400 || data.error?.includes('400') || data.error?.includes('Bad Request')
+
+      if (is400Error && lastInstructionRef.current && retryCountRef.current < MAX_RETRIES) {
+        console.log('[ClaudeDaemon] 400 error detected, attempting /rewind and retry...')
+        retryCountRef.current++
+
+        socket.emit('instruction:send', {
+          containerId,
+          instruction: '/rewind',
+        })
+
+        setTimeout(() => {
+          if (lastInstructionRef.current && socketRef.current?.connected) {
+            console.log('[ClaudeDaemon] Retrying instruction (attempt', retryCountRef.current, ')')
+            socket.emit('instruction:send', {
+              containerId,
+              instruction: lastInstructionRef.current,
+            })
+          }
+        }, 1500)
+      } else {
+        onErrorRef.current?.(data.error)
+        setIsLoading(false)
+        retryCountRef.current = 0
+      }
     })
 
     return () => {
@@ -417,6 +476,12 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
 
       console.log('[ClaudeDaemon] Sending instruction:', instruction)
       setIsLoading(true)
+
+      // Store last instruction for potential retry (skip if it's a /rewind command)
+      if (!instruction.startsWith('/rewind')) {
+        lastInstructionRef.current = instruction
+        retryCountRef.current = 0
+      }
 
       // Add user message to store immediately
       const messageId = getNextMessageId(containerId)
