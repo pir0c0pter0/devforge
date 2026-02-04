@@ -8,7 +8,7 @@ interface ThinkingIndicatorProps {
   /** Subtext / description */
   subtext?: string
   /** Variant style */
-  variant?: 'default' | 'compact'
+  variant?: 'default' | 'compact' | 'minimal'
 }
 
 /**
@@ -16,6 +16,20 @@ interface ThinkingIndicatorProps {
  * Shows an animated thinking state with pulsing brain/bot icons and wave animation
  */
 export function ThinkingIndicator({ text, subtext, variant = 'default' }: ThinkingIndicatorProps) {
+  // Minimal variant - just dots, very subtle
+  if (variant === 'minimal') {
+    return (
+      <div className="flex items-center gap-1.5 text-terminal-textMuted text-xs">
+        <span>{text}</span>
+        <div className="thinking-wave-minimal">
+          <span className="thinking-wave-dot-minimal" style={{ animationDelay: '0ms' }} />
+          <span className="thinking-wave-dot-minimal" style={{ animationDelay: '150ms' }} />
+          <span className="thinking-wave-dot-minimal" style={{ animationDelay: '300ms' }} />
+        </div>
+      </div>
+    )
+  }
+
   if (variant === 'compact') {
     return (
       <div className="flex items-center gap-2 text-terminal-cyan">

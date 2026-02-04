@@ -202,7 +202,7 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
       </div>
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 relative">
         {messages.length === 0 && !isLoading ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <Bot className="w-12 h-12 text-terminal-textMuted mb-3" />
@@ -218,16 +218,18 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
               <MessageItem key={message.id} message={message} />
             ))}
 
-            {/* Loading indicator - Claude is thinking */}
-            {isLoading && (
-              <ThinkingIndicator
-                text={t.claudeChat.thinking}
-                subtext={t.claudeChat.thinkingSubtext}
-              />
-            )}
-
             <div ref={messagesEndRef} />
           </>
+        )}
+
+        {/* Minimal thinking indicator - fixed bottom left */}
+        {isLoading && (
+          <div className="sticky bottom-0 left-0 pt-2 pb-1">
+            <ThinkingIndicator
+              text={t.claudeChat.thinkingShort}
+              variant="minimal"
+            />
+          </div>
         )}
       </div>
 

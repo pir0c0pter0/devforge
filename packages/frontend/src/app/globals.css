@@ -298,6 +298,27 @@ body {
     animation: thinking-wave-bounce 1s ease-in-out infinite;
   }
 
+  /* Minimal thinking indicator - subtle dots for corner positioning */
+  .thinking-wave-minimal {
+    @apply flex items-center gap-0.5;
+  }
+
+  .thinking-wave-dot-minimal {
+    @apply w-1 h-1 rounded-full bg-terminal-textMuted;
+    animation: thinking-wave-bounce-minimal 1.2s ease-in-out infinite;
+  }
+
+  @keyframes thinking-wave-bounce-minimal {
+    0%, 60%, 100% {
+      opacity: 0.4;
+      transform: translateY(0);
+    }
+    30% {
+      opacity: 1;
+      transform: translateY(-2px);
+    }
+  }
+
   .thinking-progress-bar {
     @apply mt-2 h-1 w-full rounded-full overflow-hidden;
     @apply bg-terminal-border;
