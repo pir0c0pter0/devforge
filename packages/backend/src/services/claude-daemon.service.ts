@@ -165,8 +165,9 @@ class ClaudeDaemonService extends EventEmitter {
       }
 
       // Generate a unique session ID for this container
-      // Prefix with 'container-{containerId}' to isolate from Telegram and other services
-      const sessionId = `container-${containerId}-${randomUUID()}`
+      // Pure UUID for Claude CLI (it validates UUID format)
+      // Isolation is handled by separate in-memory Maps per service
+      const sessionId = randomUUID()
 
       const activeSession: ActiveSession = {
         state,

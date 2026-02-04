@@ -79,9 +79,10 @@ class TelegramClaudeService {
     let session = this.sessions.get(key)
 
     if (!session) {
-      // Prefix with 'telegram-{userId}-' to isolate from Container and other services
+      // Pure UUID for Claude CLI (it validates UUID format)
+      // Isolation is handled by separate in-memory Maps per service
       session = {
-        sessionId: `telegram-${userId}-${randomUUID()}`,
+        sessionId: randomUUID(),
         userId,
         chatId,
         lastActivity: new Date(),
