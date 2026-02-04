@@ -109,7 +109,7 @@ export default function ContainerDetailPage() {
   const [activeTab, setActiveTab] = useState<TabType>(initialTab)
   const [terminalSubTab, setTerminalSubTab] = useState<TerminalSubTab>('shell')
   const [vscodeUrl, setVscodeUrl] = useState<string | null>(null)
-  const { updateContainer, containers } = useContainerStore()
+  const { updateContainer, containers, addContainer } = useContainerStore()
 
   // Get real-time metrics from store (updated via WebSocket)
   const storeContainer = useMemo(() => {
@@ -128,6 +128,13 @@ export default function ContainerDetailPage() {
     }
     return containerBase
   }, [containerBase, storeContainer])
+
+  // Add container to store when loaded from API (so WebSocket updates can find it)
+  useEffect(() => {
+    if (containerBase && !storeContainer) {
+      addContainer(containerBase)
+    }
+  }, [containerBase, storeContainer, addContainer])
 
   useEffect(() => {
     const tabFromUrl = searchParams.get('tab') as TabType | null
