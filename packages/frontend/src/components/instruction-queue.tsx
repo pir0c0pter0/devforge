@@ -5,6 +5,7 @@ import { io, Socket } from 'socket.io-client'
 import { apiClient } from '@/lib/api-client'
 import type { QueueItem, QueueItemStatus, JobDetails } from '@/lib/types'
 import { AnimatedDots } from '@/components/ui/animated-dots'
+import { SkillAutocomplete } from '@/components/skill-autocomplete'
 import { useI18n } from '@/lib/i18n'
 import clsx from 'clsx'
 import { ChevronDown, ChevronUp } from 'lucide-react'
@@ -325,12 +326,11 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
         </h3>
 
         <form onSubmit={handleSubmit} className="flex gap-2">
-          <input
-            type="text"
+          <SkillAutocomplete
             value={newInstruction}
-            onChange={(e) => setNewInstruction(e.target.value)}
+            onChange={setNewInstruction}
+            onSubmit={handleSubmit}
             placeholder={t.instructionQueue.placeholder}
-            className="input flex-1"
             disabled={isSubmitting}
           />
           <button type="submit" className="btn-primary" disabled={isSubmitting}>

@@ -185,6 +185,10 @@ export function ContainerCard({ container }: ContainerCardProps) {
     router.push(`/containers/${container.id}?tab=terminal`)
   }
 
+  const handleOpenInstructions = () => {
+    router.push(`/containers/${container.id}?tab=instructions`)
+  }
+
   const handleOpenVSCode = async () => {
     const response = await apiClient.openVSCode(container.id)
     if (response.success && response.data?.url) {
@@ -402,7 +406,7 @@ export function ContainerCard({ container }: ContainerCardProps) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {container.status === 'running' ? (
             <button
               onClick={handleStop}
@@ -431,6 +435,14 @@ export function ContainerCard({ container }: ContainerCardProps) {
             disabled={container.status !== 'running' || isDeleting}
           >
             {t.container.shell}
+          </button>
+
+          <button
+            onClick={handleOpenInstructions}
+            className="btn-secondary text-sm py-1.5"
+            disabled={container.status !== 'running' || isDeleting}
+          >
+            {t.container.instructions}
           </button>
 
           {(container.template === 'vscode' || container.template === 'both') && (
