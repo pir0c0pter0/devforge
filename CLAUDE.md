@@ -10,6 +10,24 @@
 | **Issues** | https://github.com/pir0c0pter0/claude-docker/issues |
 | **Issue #10** | [CLAUDE.md genérico para containers](https://github.com/pir0c0pter0/claude-docker/issues/10) |
 
+## Regras Importantes
+
+### Telegram: SEMPRE usar Claude CLI, NUNCA API
+
+**OBRIGATÓRIO**: As conversas do Telegram DEVEM usar o Claude Code CLI local (`claude` command), que já está autenticado via OAuth nas configurações do sistema.
+
+**NÃO usar**:
+- `ANTHROPIC_API_KEY` no `.env`
+- `anthropicService` para conversas Telegram
+- Qualquer chamada direta à API Anthropic para o bot Telegram
+
+**Usar**:
+- `telegramClaudeService` (em `telegram/services/claude-cli.service.ts`)
+- Claude Code CLI via `spawn('claude', [...])`
+- Sessões com `--session-id` e `--resume` para continuidade
+
+**Motivo**: O usuário já fez login no Claude Code via configurações. Não precisa de API key separada.
+
 ## Estrutura do Projeto
 
 ```

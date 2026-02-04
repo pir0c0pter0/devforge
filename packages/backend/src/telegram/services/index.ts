@@ -19,3 +19,7 @@ export {
   type ReminderJobData,
   type ScheduleReminderOptions,
 } from './reminder.service';
+
+export {
+  telegramClaudeService,
+} from './claude-cli.service';

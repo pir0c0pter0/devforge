@@ -1,7 +1,7 @@
 import type { BotContext } from './telegram.types';
 import { commandRegistry } from './commands/command.registry';
 import { conversationHandler } from './conversation.handler';
-import { anthropicService } from '../services/anthropic.service';
+import { telegramClaudeService } from './services/claude-cli.service';
 import { conversationService } from './services';
 import { createChildLogger } from '../utils/logger';
 
@@ -155,14 +155,15 @@ export class MessageRouter {
   }
 
   /**
-   * Route message to Claude API for direct conversation with history
-   * Uses persistent conversation storage for context continuity
+   * Route message to Claude CLI for direct conversation
+   * Uses the locally installed Claude Code CLI (already authenticated)
    * Returns true if message was handled
    */
   private async tryRouteToClaudeConversation(ctx: BotContext, text: string): Promise<boolean> {
-    // Check if Anthropic API is available
-    if (!anthropicService.isAvailable()) {
-      logger.debug('Anthropic API not available, falling back to NLU');
+    // Check if Claude CLI is available
+    const cliAvailable = await telegramClaudeService.isAvailable();
+    if (!cliAvailable) {
+      logger.debug('Claude CLI not available, falling back to NLU');
       return false;
     }
 
@@ -213,13 +214,13 @@ export class MessageRouter {
           messageLength: text.length,
           mode: sessionMode,
         },
-        'Routing message to Claude API conversation with history'
+        'Routing message to Claude CLI conversation'
       );
 
       // Show typing indicator
       await ctx.sendChatAction('typing');
 
-      // 1. Get or create conversation
+      // 1. Get or create conversation (for history tracking)
       const conversation = await conversationService.getOrCreateConversation(
         userId,
         chatId,
@@ -234,48 +235,37 @@ export class MessageRouter {
         telegramMessageId
       );
 
-      // 3. Get conversation context for Claude
-      const context = await conversationService.getContextForClaude(conversation.id);
+      // 3. Call Claude CLI (it maintains its own session/context)
+      const response = await telegramClaudeService.chat(userId, chatId, text);
 
-      logger.debug(
-        {
-          conversationId: conversation.id,
-          messageCount: context.messageCount,
-          totalTokens: context.totalTokens,
-          wasTruncated: context.wasTruncated,
-        },
-        'Built context for Claude API'
-      );
-
-      // 4. Call Anthropic with history
-      const response = await anthropicService.chatWithHistory(
-        context.messages.map(m => ({ role: m.role, content: m.content }))
-      );
-
-      // 5. Save assistant response to history
+      // 4. Save assistant response to history
       await conversationService.addMessage(
         conversation.id,
         'assistant',
         response.text
       );
 
-      // 6. Update session with conversation ID
+      // 5. Update session with conversation ID
       if (ctx.session) {
         ctx.session.conversationId = conversation.id;
       }
 
-      // Send response back to user
-      await ctx.reply(response.text, { parse_mode: 'Markdown' });
+      // Send response back to user (try Markdown, fallback to plain text)
+      try {
+        await ctx.reply(response.text, { parse_mode: 'Markdown' });
+      } catch {
+        // Markdown parsing failed, send as plain text
+        await ctx.reply(response.text);
+      }
 
       logger.info(
         {
           userId,
           conversationId: conversation.id,
-          inputTokens: response.inputTokens,
-          outputTokens: response.outputTokens,
-          contextMessages: context.messageCount,
+          cost: response.cost,
+          durationMs: response.durationMs,
         },
-        'Claude API conversation with history completed'
+        'Claude CLI conversation completed'
       );
 
       return true;
@@ -287,12 +277,16 @@ export class MessageRouter {
           userId,
           chatId,
         },
-        'Failed to route to Claude API conversation'
+        'Failed to route to Claude CLI conversation'
       );
 
-      // Don't show API errors to user, fall back to NLU
-      if (errorMessage.includes('ANTHROPIC_API_KEY')) {
-        return false;
+      // Check for auth errors
+      if (errorMessage.includes('not authenticated') || errorMessage.includes('credentials')) {
+        await ctx.reply(
+          '\u{26A0}\u{FE0F} Claude Code nao esta autenticado.\n\n' +
+          'Acesse as Configuracoes do sistema web para fazer login no Claude.'
+        );
+        return true;
       }
 
       await ctx.reply(
