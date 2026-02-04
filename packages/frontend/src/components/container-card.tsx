@@ -7,6 +7,8 @@ import { apiClient } from '@/lib/api-client'
 import { useContainerStore } from '@/stores/container.store'
 import { useI18n } from '@/lib/i18n'
 import { AnimatedDots } from '@/components/ui/animated-dots'
+import { StatusIndicator } from '@/components/ui/status-indicator'
+import type { ContainerStatusType } from '@/components/ui/status-indicator'
 import { useTaskWebSocket } from '@/hooks/use-task-websocket'
 import { useMetrics } from '@/hooks/use-metrics'
 import clsx from 'clsx'
@@ -192,11 +194,14 @@ export function ContainerCard({ container }: ContainerCardProps) {
     }
   }
 
-  const statusColors = {
+  const statusColors: Record<string, string> = {
     running: 'badge-success',
     stopped: 'badge-gray',
     creating: 'badge-warning',
     error: 'badge-danger',
+    exited: 'badge-warning',
+    paused: 'badge-warning',
+    restarting: 'badge-warning',
   }
 
   const templateColors = {
@@ -293,13 +298,11 @@ export function ContainerCard({ container }: ContainerCardProps) {
               </div>
             )}
           </div>
-          <div className={clsx(
-            'status-dot ml-2 mt-1',
-            container.status === 'running' && 'status-running',
-            container.status === 'stopped' && 'status-stopped',
-            container.status === 'error' && 'status-error',
-            container.status === 'creating' && 'status-creating'
-          )} />
+          <StatusIndicator
+          status={container.status as ContainerStatusType}
+          size="md"
+          className="ml-2 mt-1"
+        />
         </div>
 
         <div className="space-y-3 mb-4">

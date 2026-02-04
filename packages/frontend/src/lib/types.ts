@@ -1,4 +1,4 @@
-export type ContainerStatus = 'running' | 'stopped' | 'creating' | 'error'
+export type ContainerStatus = 'running' | 'stopped' | 'creating' | 'error' | 'exited' | 'paused' | 'restarting'
 
 export type TemplateType = 'claude' | 'vscode' | 'both'
 

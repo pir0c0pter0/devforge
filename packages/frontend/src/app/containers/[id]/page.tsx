@@ -246,11 +246,14 @@ export default function ContainerDetailPage() {
     return null
   }
 
-  const statusColors = {
+  const statusColors: Record<string, string> = {
     running: 'badge-success',
     stopped: 'badge-gray',
     creating: 'badge-warning',
     error: 'badge-danger',
+    exited: 'badge-warning',
+    paused: 'badge-warning',
+    restarting: 'badge-warning',
   }
 
   const templateColors = {

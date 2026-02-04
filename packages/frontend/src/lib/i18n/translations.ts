@@ -77,6 +77,9 @@ export const translations = {
       stopped: 'parado',
       creating: 'criando',
       error: 'erro',
+      exited: 'encerrado',
+      paused: 'pausado',
+      restarting: 'reiniciando',
     },
 
     // Templates
@@ -338,6 +341,9 @@ export const translations = {
       stopped: 'stopped',
       creating: 'creating',
       error: 'error',
+      exited: 'exited',
+      paused: 'paused',
+      restarting: 'restarting',
     },
 
     // Templates
