@@ -61,6 +61,17 @@ interface DiagnosticsResult {
   }
 }
 
+interface TelegramStatus {
+  isRunning: boolean
+  mode: 'polling' | 'webhook' | null
+  allowedUsers: number
+  rateLimits?: {
+    read: number
+    write: number
+    critical: number
+  }
+}
+
 const API_URL = process.env['NEXT_PUBLIC_API_URL'] || 'http://localhost:8000'
 
 export default function SettingsPage() {
@@ -77,13 +88,15 @@ export default function SettingsPage() {
   const [diagnosticsResult, setDiagnosticsResult] = useState<DiagnosticsResult | null>(null)
   const [diagnosticsLoading, setDiagnosticsLoading] = useState(false)
   const [showDiagnosticsModal, setShowDiagnosticsModal] = useState(false)
+  const [telegramStatus, setTelegramStatus] = useState<TelegramStatus | null>(null)
 
   const fetchStatus = useCallback(async () => {
     try {
-      const [claudeRes, systemRes, configRes] = await Promise.all([
+      const [claudeRes, systemRes, configRes, telegramRes] = await Promise.all([
         fetch(`${API_URL}/api/settings/claude-status`),
         fetch(`${API_URL}/api/settings/system-status`),
         fetch(`${API_URL}/api/settings/config`),
+        fetch(`${API_URL}/api/telegram/status`),
       ])
 
       if (claudeRes.ok) {
@@ -94,6 +107,10 @@ export default function SettingsPage() {
       }
       if (configRes.ok) {
         setConfig(await configRes.json())
+      }
+      if (telegramRes.ok) {
+        const telegramData = await telegramRes.json()
+        setTelegramStatus(telegramData.data || telegramData)
       }
     } catch (error) {
       console.error('Failed to fetch status:', error)
@@ -525,6 +542,147 @@ export default function SettingsPage() {
               </button>
             )}
 
+          </div>
+        )}
+      </div>
+
+      {/* Telegram Bot Configuration */}
+      <div className="card p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center space-x-3">
+            <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
+              telegramStatus?.isRunning
+                ? 'bg-terminal-green/10 border border-terminal-green/30'
+                : 'bg-terminal-border'
+            }`}>
+              <svg className="w-6 h-6 text-terminal-cyan" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-terminal-text">
+                {t.settings.telegram.title}
+              </h3>
+              <p className="text-sm text-terminal-textMuted">
+                {t.settings.telegram.subtitle}
+              </p>
+            </div>
+          </div>
+          <span className={`badge ${
+            telegramStatus?.isRunning ? 'badge-success' : 'badge-gray'
+          }`}>
+            {telegramStatus?.isRunning ? t.settings.telegram.running : t.settings.telegram.notConfigured}
+          </span>
+        </div>
+
+        {telegramStatus?.isRunning ? (
+          <div className="space-y-4">
+            {/* Bot Status */}
+            <div className="bg-terminal-green/10 border border-terminal-green/30 rounded p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <div className="w-2 h-2 rounded-full bg-terminal-green animate-pulse"></div>
+                  <span className="text-sm text-terminal-green font-medium">
+                    Bot {t.settings.telegram.running}
+                  </span>
+                </div>
+                <span className="text-xs text-terminal-textMuted">
+                  {t.settings.telegram.mode}: {telegramStatus.mode === 'webhook' ? t.settings.telegram.modeWebhook : t.settings.telegram.modePolling}
+                </span>
+              </div>
+            </div>
+
+            {/* Stats Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="stats-card">
+                <p className="stats-label">{t.settings.telegram.allowedUsers}</p>
+                <p className="stats-value">{telegramStatus.allowedUsers}</p>
+              </div>
+              {telegramStatus.rateLimits && (
+                <>
+                  <div className="stats-card">
+                    <p className="stats-label">{t.settings.telegram.rateLimitRead}</p>
+                    <p className="stats-value">{telegramStatus.rateLimits.read}{t.settings.telegram.perMinute}</p>
+                  </div>
+                  <div className="stats-card">
+                    <p className="stats-label">{t.settings.telegram.rateLimitWrite}</p>
+                    <p className="stats-value">{telegramStatus.rateLimits.write}{t.settings.telegram.perMinute}</p>
+                  </div>
+                  <div className="stats-card">
+                    <p className="stats-label">{t.settings.telegram.rateLimitCritical}</p>
+                    <p className="stats-value">{telegramStatus.rateLimits.critical}{t.settings.telegram.perMinute}</p>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Available Commands */}
+            <div className="bg-terminal-bg rounded p-4">
+              <p className="font-medium text-terminal-text mb-3">{t.settings.telegram.commands}</p>
+              <div className="grid grid-cols-2 gap-2 text-sm font-mono">
+                <div className="text-terminal-cyan">{t.settings.telegram.commandHelp}</div>
+                <div className="text-terminal-cyan">{t.settings.telegram.commandList}</div>
+                <div className="text-terminal-cyan">{t.settings.telegram.commandSelect}</div>
+                <div className="text-terminal-cyan">{t.settings.telegram.commandStats}</div>
+                <div className="text-terminal-cyan">{t.settings.telegram.commandQueue}</div>
+                <div className="text-terminal-cyan">{t.settings.telegram.commandExec}</div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* Not configured warning */}
+            <div className="bg-terminal-yellow/10 border border-terminal-yellow/30 rounded p-4">
+              <p className="text-sm text-terminal-yellow">
+                {t.settings.telegram.tokenRequired}
+              </p>
+            </div>
+
+            {/* Setup Instructions */}
+            <div className="bg-terminal-bg rounded p-4">
+              <p className="font-medium text-terminal-text mb-3">
+                {t.settings.telegram.configInstructions}
+              </p>
+              <ol className="space-y-2">
+                <li className="flex items-start space-x-2 text-sm text-terminal-textMuted">
+                  <span className="flex-shrink-0 w-5 h-5 bg-terminal-cyan/10 rounded flex items-center justify-center text-xs font-medium text-terminal-cyan">1</span>
+                  <span>{t.settings.telegram.step1}</span>
+                </li>
+                <li className="flex items-start space-x-2 text-sm text-terminal-textMuted">
+                  <span className="flex-shrink-0 w-5 h-5 bg-terminal-cyan/10 rounded flex items-center justify-center text-xs font-medium text-terminal-cyan">2</span>
+                  <span>{t.settings.telegram.step2}</span>
+                </li>
+                <li className="flex items-start space-x-2 text-sm text-terminal-textMuted">
+                  <span className="flex-shrink-0 w-5 h-5 bg-terminal-cyan/10 rounded flex items-center justify-center text-xs font-medium text-terminal-cyan">3</span>
+                  <span>{t.settings.telegram.step3}</span>
+                </li>
+                <li className="flex items-start space-x-2 text-sm text-terminal-textMuted">
+                  <span className="flex-shrink-0 w-5 h-5 bg-terminal-cyan/10 rounded flex items-center justify-center text-xs font-medium text-terminal-cyan">4</span>
+                  <span>{t.settings.telegram.step4}</span>
+                </li>
+              </ol>
+            </div>
+
+            {/* Environment Variables */}
+            <div className="bg-terminal-bg rounded p-4">
+              <p className="font-medium text-terminal-text mb-3">
+                {t.settings.telegram.envVars}
+              </p>
+              <div className="space-y-2 font-mono text-xs">
+                <div className="flex items-center space-x-2">
+                  <code className="bg-terminal-bgLight px-2 py-1 rounded text-terminal-green">TELEGRAM_BOT_TOKEN</code>
+                  <span className="text-terminal-textMuted">= token do @BotFather</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <code className="bg-terminal-bgLight px-2 py-1 rounded text-terminal-green">TELEGRAM_ALLOWED_USERS</code>
+                  <span className="text-terminal-textMuted">= 123456,789012</span>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-sm text-terminal-textMuted">
+              {t.settings.config.editConfig} <code className="bg-terminal-bg px-2 py-1 rounded text-terminal-green">packages/backend/.env</code>
+            </p>
           </div>
         )}
       </div>
