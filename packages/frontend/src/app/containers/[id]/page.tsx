@@ -18,7 +18,12 @@ const InteractiveTerminal = dynamic(
   { ssr: false, loading: () => <div className="card p-6 text-center">Loading terminal...</div> }
 )
 
-type TabType = 'overview' | 'metrics' | 'instructions' | 'logs' | 'terminal' | 'settings'
+const ClaudeChat = dynamic(
+  () => import('@/components/claude-chat').then(mod => mod.ClaudeChat),
+  { ssr: false, loading: () => <div className="card p-6 text-center">Loading Claude Chat...</div> }
+)
+
+type TabType = 'overview' | 'metrics' | 'instructions' | 'logs' | 'terminal' | 'claude' | 'settings'
 
 interface TabConfig {
   id: TabType
@@ -93,6 +98,20 @@ const tabs: TabConfig[] = [
           strokeLinejoin="round"
           strokeWidth={2}
           d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+        />
+      </svg>
+    ),
+  },
+  {
+    id: 'claude',
+    name: 'Claude',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
         />
       </svg>
     ),
@@ -664,6 +683,36 @@ export default function ContainerDetailPage() {
               </h3>
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 Start the container to access the terminal.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'claude' && (
+        <div className="card overflow-hidden h-[600px]">
+          {container.status === 'running' ? (
+            <ClaudeChat containerId={container.id} />
+          ) : (
+            <div className="p-6 text-center h-full flex flex-col items-center justify-center">
+              <svg
+                className="mx-auto h-12 w-12 text-gray-400 mb-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                />
+              </svg>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                Claude Code Indisponível
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Inicie o container para acessar o Claude Code.
               </p>
             </div>
           )}

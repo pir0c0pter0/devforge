@@ -11,11 +11,15 @@ import type {
   TaskSubscription,
   TaskUnsubscription,
   TaskBatchSubscription,
+  DaemonState,
+  ClaudeEvent,
 } from '@claude-docker/shared'
 import { config } from '../config'
 import { metricsService } from './metrics.service'
 import { containerRepository } from '../repositories'
 import { terminalService } from './terminal.service'
+import { claudeDaemonService } from './claude-daemon.service'
+import { containerService } from './container.service'
 
 /**
  * Socket.io server instance
@@ -73,6 +77,7 @@ export const initializeWebSocket = (
   setupCreationNamespace()
   setupTasksNamespace()
   setupTerminalNamespace()
+  setupClaudeDaemonNamespace()
 
   console.info('[WebSocket] Server initialized successfully')
 
@@ -480,6 +485,182 @@ const setupTerminalNamespace = (): void => {
         console.info(`[WebSocket] Client disconnected, closed terminal session ${currentSessionId}`)
       }
       console.info(`[WebSocket] Client disconnected from /terminal: ${socket.id}`)
+    })
+  })
+}
+
+/**
+ * Map of claude daemon subscriptions (containerId -> Set of socket IDs)
+ */
+const claudeDaemonSubscriptions = new Map<string, Set<string>>()
+
+/**
+ * Add claude daemon subscription tracking
+ */
+const addClaudeDaemonSubscription = (containerId: string, socketId: string): void => {
+  if (!claudeDaemonSubscriptions.has(containerId)) {
+    claudeDaemonSubscriptions.set(containerId, new Set())
+  }
+  claudeDaemonSubscriptions.get(containerId)?.add(socketId)
+}
+
+/**
+ * Remove claude daemon subscription tracking
+ */
+const removeClaudeDaemonSubscription = (containerId: string, socketId: string): void => {
+  const subs = claudeDaemonSubscriptions.get(containerId)
+  if (subs) {
+    subs.delete(socketId)
+    if (subs.size === 0) {
+      claudeDaemonSubscriptions.delete(containerId)
+    }
+  }
+}
+
+/**
+ * Cleanup all claude daemon subscriptions for a socket
+ */
+const cleanupSocketClaudeDaemonSubscriptions = (socketId: string): void => {
+  for (const [containerId, sockets] of claudeDaemonSubscriptions.entries()) {
+    sockets.delete(socketId)
+    if (sockets.size === 0) {
+      claudeDaemonSubscriptions.delete(containerId)
+    }
+  }
+}
+
+/**
+ * Setup /claude-daemon namespace for Claude Code daemon communication
+ */
+const setupClaudeDaemonNamespace = (): void => {
+  if (!io) return
+
+  const claudeDaemonNamespace = io.of('/claude-daemon')
+
+  // Forward events from daemon service to WebSocket clients
+  claudeDaemonService.on('claude:event', ({ containerId, event }: { containerId: string; event: ClaudeEvent }) => {
+    claudeDaemonNamespace.to(`claude:${containerId}`).emit('claude:output' as any, event)
+  })
+
+  claudeDaemonService.on('daemon:started', ({ containerId, state }: { containerId: string; state: DaemonState }) => {
+    claudeDaemonNamespace.to(`claude:${containerId}`).emit('daemon:status' as any, state)
+  })
+
+  claudeDaemonService.on('daemon:stopped', ({ containerId }: { containerId: string }) => {
+    claudeDaemonNamespace.to(`claude:${containerId}`).emit('daemon:status' as any, {
+      containerId,
+      status: 'stopped',
+    })
+  })
+
+  claudeDaemonService.on('daemon:error', ({ containerId, error }: { containerId: string; error: string }) => {
+    claudeDaemonNamespace.to(`claude:${containerId}`).emit('daemon:error' as any, { error })
+  })
+
+  claudeDaemonNamespace.on('connection', (socket: Socket) => {
+    console.info(`[WebSocket] Client connected to /claude-daemon: ${socket.id}`)
+
+    let currentContainerId: string | null = null
+
+    // Subscribe to container output
+    socket.on('output:subscribe', ({ containerId }: { containerId: string }) => {
+      currentContainerId = containerId
+      socket.join(`claude:${containerId}`)
+      addClaudeDaemonSubscription(containerId, socket.id)
+      console.info(`[WebSocket] Client ${socket.id} subscribed to claude daemon ${containerId}`)
+
+      // Send current status
+      const status = claudeDaemonService.getStatus(containerId)
+      if (status) {
+        socket.emit('daemon:status' as any, status)
+      } else {
+        socket.emit('daemon:status' as any, { containerId, status: 'stopped', instructionCount: 0 })
+      }
+    })
+
+    // Unsubscribe from container output
+    socket.on('output:unsubscribe', ({ containerId }: { containerId: string }) => {
+      socket.leave(`claude:${containerId}`)
+      removeClaudeDaemonSubscription(containerId, socket.id)
+      if (currentContainerId === containerId) {
+        currentContainerId = null
+      }
+      console.info(`[WebSocket] Client ${socket.id} unsubscribed from claude daemon ${containerId}`)
+    })
+
+    // Send instruction to daemon
+    socket.on('instruction:send', async ({ containerId, instruction }: { containerId: string; instruction: string }) => {
+      try {
+        // Validate input
+        if (!instruction || typeof instruction !== 'string') {
+          socket.emit('error' as any, { message: 'Instrução inválida' })
+          return
+        }
+
+        if (instruction.length > 100000) {
+          socket.emit('error' as any, { message: 'Instrução muito longa (máx 100k caracteres)' })
+          return
+        }
+
+        await claudeDaemonService.sendInstruction(containerId, instruction)
+
+        // Confirm receipt
+        socket.emit('instruction:received' as any, {
+          containerId,
+          timestamp: new Date(),
+        })
+      } catch (error) {
+        socket.emit('error' as any, {
+          message: error instanceof Error ? error.message : 'Falha ao enviar instrução',
+        })
+      }
+    })
+
+    // Start daemon
+    socket.on('daemon:start', async ({ containerId }: { containerId: string }) => {
+      try {
+        // Get container info
+        const container = await containerService.getById(containerId)
+        if (!container) {
+          socket.emit('error' as any, { message: 'Container não encontrado' })
+          return
+        }
+
+        if (container.status !== 'running') {
+          socket.emit('error' as any, { message: 'Container não está rodando' })
+          return
+        }
+
+        const state = await claudeDaemonService.startDaemon(containerId, container.dockerId)
+        socket.emit('daemon:status' as any, state)
+      } catch (error) {
+        socket.emit('error' as any, {
+          message: error instanceof Error ? error.message : 'Falha ao iniciar daemon',
+        })
+      }
+    })
+
+    // Stop daemon
+    socket.on('daemon:stop', async ({ containerId }: { containerId: string }) => {
+      try {
+        await claudeDaemonService.stopDaemon(containerId)
+        socket.emit('daemon:status' as any, { containerId, status: 'stopped', instructionCount: 0 })
+      } catch (error) {
+        socket.emit('error' as any, {
+          message: error instanceof Error ? error.message : 'Falha ao parar daemon',
+        })
+      }
+    })
+
+    // Get daemon status
+    socket.on('daemon:get-status', ({ containerId }: { containerId: string }) => {
+      const status = claudeDaemonService.getStatus(containerId)
+      socket.emit('daemon:status' as any, status || { containerId, status: 'stopped', instructionCount: 0 })
+    })
+
+    socket.on('disconnect', () => {
+      cleanupSocketClaudeDaemonSubscriptions(socket.id)
+      console.info(`[WebSocket] Client disconnected from /claude-daemon: ${socket.id}`)
     })
   })
 }

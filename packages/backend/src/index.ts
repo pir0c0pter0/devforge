@@ -13,6 +13,7 @@ import templatesRouter from './api/routes/templates.routes';
 import diagnosticsRouter from './api/routes/diagnostics.routes';
 import settingsRouter from './api/routes/settings.routes';
 import tasksRouter from './api/routes/tasks.routes';
+import claudeDaemonRouter from './api/routes/claude-daemon.routes';
 import { initializeDatabase, closeDatabase, isDatabaseHealthy } from './database';
 import { runMigrations, getDatabaseStats } from './database/migrations';
 import {
@@ -150,6 +151,7 @@ app.use('/api/templates', templatesRouter);
 app.use('/api/diagnostics', diagnosticsRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/tasks', tasksRouter);
+app.use('/api/claude-daemon', claudeDaemonRouter);
 
 /**
  * Root endpoint
@@ -166,6 +168,7 @@ app.get('/', (_req: Request, res: Response) => {
       diagnostics: '/api/diagnostics',
       settings: '/api/settings',
       tasks: '/api/tasks',
+      claudeDaemon: '/api/claude-daemon',
     },
   });
 });

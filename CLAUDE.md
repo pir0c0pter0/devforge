@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções
 
-## Versão Atual: 0.0.33-alpha
+## Versão Atual: 0.0.34-alpha
 
 ## Estrutura do Projeto
 
@@ -698,6 +698,17 @@ ALLOWED_ORIGINS=https://myapp.com,https://api.myapp.com
 ```
 
 ## Histórico de Versões
+
+### v0.0.34-alpha
+- Feat: **Claude Code Daemon** - Interface web para Claude Code autônomo (Issue #5)
+- Feat: Backend `claude-daemon.service.ts` para gerenciamento de daemons
+- Feat: WebSocket namespace `/claude-daemon` para comunicação em tempo real
+- Feat: REST API `/api/claude-daemon` para controle de daemons
+- Feat: Hook `useClaudeDaemon` para frontend React
+- Feat: Componentes `ClaudeChat`, `StatusBadge`, `MessageItem`
+- Feat: Nova aba "Claude" na página de detalhes do container
+- Feat: Suporte a instruções via WebSocket com streaming JSON
+- Feat: Claude Code roda com `--dangerously-skip-permissions` em modo autônomo
 
 ### v0.0.33-alpha
 - Fix: Credenciais Claude (.credentials.json) agora são copiadas via docker cp (além do mount)

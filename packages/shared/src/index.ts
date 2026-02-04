@@ -112,3 +112,24 @@ export type {
   TerminalClose,
   TerminalConnect,
 } from './types/terminal.types'
+
+// Export all Claude Daemon types
+export type {
+  DaemonStatus,
+  DaemonState,
+  ClaudeEventType,
+  ClaudeEvent,
+  ClaudeMessageType,
+  ClaudeMessage,
+  SendInstructionRequest,
+  InstructionReceivedResponse,
+  DaemonControlRequest,
+  DaemonStatusResponse,
+  ClaudeDaemonClientToServerEvents,
+  ClaudeDaemonServerToClientEvents,
+  ClaudeStreamInput,
+  ClaudeResult,
+  ClaudeToolUse,
+  ClaudeToolResult,
+  ClaudeAssistantMessage,
+} from './types/claude-daemon.types'
