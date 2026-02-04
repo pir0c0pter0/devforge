@@ -134,7 +134,7 @@ export class MetricsService {
 
   /**
    * Get disk usage for a container
-   * Uses 'du' to measure actual workspace usage (not filesystem size)
+   * Uses 'du' to measure actual workspace + home usage (not filesystem size)
    */
   private async getDiskUsage(containerId: string): Promise<{
     usage: number;
@@ -142,30 +142,40 @@ export class MetricsService {
     percentage: number;
   }> {
     try {
-      // Execute du command to get actual workspace disk usage in MB
-      // Note: df shows filesystem total which includes host disk, du shows actual usage
-      const result = await dockerService.executeCommand(
-        containerId,
-        ['du', '-sm', '/workspace'],
-        { user: 'root' }
-      );
+      // Measure both /workspace and /home/developer to match disk-metrics.service
+      let totalUsage = 0;
 
-      // Parse du output
-      // Example output:
-      // 1234    /workspace
-      const output = result.stdout.trim();
-      const parts = output.split(/\s+/);
-
-      if (parts.length < 1) {
-        return { usage: 0, limit: 0, percentage: 0 };
+      // Get /workspace size
+      try {
+        const workspaceResult = await dockerService.executeCommand(
+          containerId,
+          ['du', '-sm', '/workspace'],
+          { user: 'root' }
+        );
+        if (workspaceResult.exitCode === 0) {
+          const parts = workspaceResult.stdout.trim().split(/\s+/);
+          totalUsage += parseInt(parts[0] || '0', 10) || 0;
+        }
+      } catch {
+        // Workspace might not exist
       }
 
-      const usedStr = parts[0];
-      if (!usedStr) {
-        return { usage: 0, limit: 0, percentage: 0 };
+      // Get /home/developer size
+      try {
+        const homeResult = await dockerService.executeCommand(
+          containerId,
+          ['du', '-sm', '/home/developer'],
+          { user: 'root' }
+        );
+        if (homeResult.exitCode === 0) {
+          const parts = homeResult.stdout.trim().split(/\s+/);
+          totalUsage += parseInt(parts[0] || '0', 10) || 0;
+        }
+      } catch {
+        // Home might not exist
       }
 
-      const used = parseInt(usedStr, 10) || 0;
+      const used = totalUsage;
 
       // Note: limit and percentage will be calculated in container.service
       // based on configured disk limit (not filesystem limit)
