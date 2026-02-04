@@ -480,6 +480,7 @@ export const translations = {
       confirm: 'Confirmar',
       close: 'Fechar',
       required: 'obrigatório',
+      refresh: 'Atualizar',
     },
 
     // Modals
@@ -980,6 +981,7 @@ export const translations = {
       confirm: 'Confirm',
       close: 'Close',
       required: 'required',
+      refresh: 'Refresh',
     },
 
     // Modals

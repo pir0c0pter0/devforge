@@ -9,6 +9,7 @@ import { useContainerStore } from '@/stores/container.store'
 import { useI18n } from '@/lib/i18n'
 import { MetricsChart } from '@/components/metrics-chart'
 import { InstructionQueue } from '@/components/instruction-queue'
+import { DiskMetricsCard } from '@/components/disk-metrics-card'
 import { ContainerDetailSkeleton } from '@/components/ui/skeleton'
 import { AnimatedDots } from '@/components/ui/animated-dots'
 import type { Container } from '@/lib/types'
@@ -342,20 +343,13 @@ export default function ContainerDetailPage() {
               })()}
             </div>
 
-            <div className="card p-6">
-              <h3 className="text-sm font-medium text-terminal-textMuted mb-1">{t.containerDetail.diskUsage}</h3>
-              <p className="text-2xl font-bold text-terminal-text">{(container.metrics?.disk ?? 0).toFixed(2)} GB</p>
-              {(() => {
-                const diskLimit = container.limits?.diskGB ?? 1
-                const diskPercent = diskLimit > 0 ? ((container.metrics?.disk ?? 0) / diskLimit) * 100 : 0
-                return (
-                  <div className="w-full bg-terminal-border rounded-full h-2 mt-2">
-                    <div className={clsx('h-2 rounded-full transition-all', diskPercent > 80 ? 'bg-terminal-red' : diskPercent > 60 ? 'bg-terminal-yellow' : 'bg-terminal-green')} style={{ width: `${Math.min(diskPercent, 100)}%` }} />
-                  </div>
-                )
-              })()}
-              <p className="text-xs text-terminal-textMuted mt-1">{container.limits?.diskGB ?? 0} {t.containerDetail.gbLimit}</p>
-            </div>
+            <DiskMetricsCard
+              containerId={container.id}
+              containerName={container.name}
+              diskUsageGB={container.metrics?.disk ?? 0}
+              diskLimitGB={container.limits?.diskGB ?? 10}
+              containerStatus={container.status}
+            />
           </div>
 
           {/* VS Code Embed */}
