@@ -176,8 +176,8 @@ router.post('/telegram-config', strictRateLimiter, async (req: Request, res: Res
       }
     }
 
-    // Find .env file path
-    const envPath = path.resolve(__dirname, '../../../../.env');
+    // Find .env file path (backend/.env is 3 levels up from routes)
+    const envPath = path.resolve(__dirname, '../../../.env');
 
     let envContent = '';
     if (fs.existsSync(envPath)) {
@@ -215,6 +215,7 @@ router.post('/telegram-config', strictRateLimiter, async (req: Request, res: Res
     if (process.env['TELEGRAM_BOT_TOKEN']) {
       try {
         await telegramService.stop();
+        telegramService.reloadConfig(); // Reload config from updated process.env
         await telegramService.start();
         logger.info('Telegram bot restarted with new configuration');
       } catch (restartError) {
