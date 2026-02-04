@@ -221,7 +221,7 @@ export default function ContainerDetailPage() {
   if (error && !container) {
     return (
       <div className="card p-6">
-        <div className="text-center text-danger-600">
+        <div className="text-center text-terminal-red">
           <svg
             className="mx-auto h-12 w-12 mb-4"
             fill="none"
@@ -273,7 +273,7 @@ export default function ContainerDetailPage() {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-3 mb-2">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+            <h2 className="text-2xl font-bold text-terminal-text">
               {container.name}
             </h2>
             <span className={clsx('badge', statusColors[container.status])}>
@@ -292,7 +292,7 @@ export default function ContainerDetailPage() {
                 href={container.repositoryUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="badge badge-gray hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                className="badge badge-gray hover:bg-terminal-border transition-colors"
               >
                 <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
@@ -335,13 +335,13 @@ export default function ContainerDetailPage() {
       </div>
 
       {error && (
-        <div className="bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800 rounded-lg p-4">
-          <p className="text-sm text-danger-800 dark:text-danger-200">{error}</p>
+        <div className="bg-terminal-red/10 border border-terminal-red/30 rounded-lg p-4">
+          <p className="text-sm text-terminal-red">{error}</p>
         </div>
       )}
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 dark:border-gray-700">
+      <div className="border-b border-terminal-border">
         <nav className="-mb-px flex space-x-8">
           {tabs.map((tab) => (
             <button
@@ -350,8 +350,8 @@ export default function ContainerDetailPage() {
               className={clsx(
                 'flex items-center gap-2 py-4 px-1 border-b-2 font-medium text-sm transition-colors',
                 activeTab === tab.id
-                  ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                  ? 'border-terminal-green text-terminal-green'
+                  : 'border-transparent text-terminal-textMuted hover:text-terminal-text hover:border-terminal-border'
               )}
             >
               {tab.icon}
@@ -367,35 +367,35 @@ export default function ContainerDetailPage() {
           {/* Quick Stats */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="card p-6">
-              <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+              <h3 className="text-sm font-medium text-terminal-textMuted mb-1">
                 CPU Usage
               </h3>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+              <p className="text-2xl font-bold text-terminal-text">
                 {(container.metrics?.cpu ?? 0).toFixed(1)}%
               </p>
-              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mt-2">
+              <div className="w-full bg-terminal-border rounded-full h-2 mt-2">
                 <div
                   className={clsx(
                     'h-2 rounded-full transition-all',
                     (container.metrics?.cpu ?? 0) > 80
-                      ? 'bg-danger-600'
+                      ? 'bg-terminal-red'
                       : (container.metrics?.cpu ?? 0) > 60
-                      ? 'bg-warning-600'
-                      : 'bg-success-600'
+                      ? 'bg-terminal-yellow'
+                      : 'bg-terminal-green'
                   )}
                   style={{ width: `${Math.min(container.metrics?.cpu ?? 0, 100)}%` }}
                 />
               </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              <p className="text-xs text-terminal-textMuted mt-1">
                 {container.limits?.cpuCores ?? 0} cores allocated
               </p>
             </div>
 
             <div className="card p-6">
-              <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+              <h3 className="text-sm font-medium text-terminal-textMuted mb-1">
                 Memory Usage
               </h3>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+              <p className="text-2xl font-bold text-terminal-text">
                 {(container.metrics?.memory ?? 0).toFixed(0)} MB
               </p>
               {(() => {
@@ -403,20 +403,20 @@ export default function ContainerDetailPage() {
                 const memPercent = memLimit > 0 ? ((container.metrics?.memory ?? 0) / memLimit) * 100 : 0
                 return (
                   <>
-                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mt-2">
+                    <div className="w-full bg-terminal-border rounded-full h-2 mt-2">
                       <div
                         className={clsx(
                           'h-2 rounded-full transition-all',
                           memPercent > 80
-                            ? 'bg-danger-600'
+                            ? 'bg-terminal-red'
                             : memPercent > 60
-                            ? 'bg-warning-600'
-                            : 'bg-success-600'
+                            ? 'bg-terminal-yellow'
+                            : 'bg-terminal-green'
                         )}
                         style={{ width: `${Math.min(memPercent, 100)}%` }}
                       />
                     </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    <p className="text-xs text-terminal-textMuted mt-1">
                       {container.limits?.memoryMB ?? 0} MB limit
                     </p>
                   </>
@@ -425,32 +425,32 @@ export default function ContainerDetailPage() {
             </div>
 
             <div className="card p-6">
-              <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+              <h3 className="text-sm font-medium text-terminal-textMuted mb-1">
                 Disk Usage
               </h3>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+              <p className="text-2xl font-bold text-terminal-text">
                 {(container.metrics?.disk ?? 0).toFixed(2)} GB
               </p>
               {(() => {
                 const diskLimit = container.limits?.diskGB ?? 1
                 const diskPercent = diskLimit > 0 ? ((container.metrics?.disk ?? 0) / diskLimit) * 100 : 0
                 return (
-                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mt-2">
+                  <div className="w-full bg-terminal-border rounded-full h-2 mt-2">
                     <div
                       className={clsx(
                         'h-2 rounded-full transition-all',
                         diskPercent > 80
-                          ? 'bg-danger-600'
+                          ? 'bg-terminal-red'
                           : diskPercent > 60
-                          ? 'bg-warning-600'
-                          : 'bg-success-600'
+                          ? 'bg-terminal-yellow'
+                          : 'bg-terminal-green'
                       )}
                       style={{ width: `${Math.min(diskPercent, 100)}%` }}
                     />
                   </div>
                 )
               })()}
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              <p className="text-xs text-terminal-textMuted mt-1">
                 {container.limits?.diskGB ?? 0} GB limit
               </p>
             </div>
@@ -459,12 +459,12 @@ export default function ContainerDetailPage() {
           {/* VS Code Embed */}
           {vscodeUrl && container.status === 'running' && (
             <div className="card overflow-hidden">
-              <div className="bg-gray-100 dark:bg-gray-800 px-4 py-2 flex items-center justify-between border-b border-gray-200 dark:border-gray-700">
+              <div className="bg-terminal-bgLight px-4 py-2 flex items-center justify-between border-b border-terminal-border">
                 <div className="flex items-center gap-2">
                   <svg className="w-5 h-5 text-blue-600" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M23.15 2.587L18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z" />
                   </svg>
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <span className="text-sm font-medium text-terminal-text">
                     VS Code Web
                   </span>
                 </div>
@@ -489,37 +489,37 @@ export default function ContainerDetailPage() {
           {/* Container Info */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="card p-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              <h3 className="text-lg font-semibold text-terminal-text mb-4">
                 Container Info
               </h3>
               <dl className="space-y-3">
                 <div>
-                  <dt className="text-sm font-medium text-gray-600 dark:text-gray-400">ID</dt>
-                  <dd className="text-sm text-gray-900 dark:text-white font-mono">
+                  <dt className="text-sm font-medium text-terminal-textMuted">ID</dt>
+                  <dd className="text-sm text-terminal-text font-mono">
                     {container.id}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                  <dt className="text-sm font-medium text-terminal-textMuted">
                     Created At
                   </dt>
-                  <dd className="text-sm text-gray-900 dark:text-white">
+                  <dd className="text-sm text-terminal-text">
                     {new Date(container.createdAt).toLocaleString()}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                  <dt className="text-sm font-medium text-terminal-textMuted">
                     Active Agents
                   </dt>
-                  <dd className="text-sm text-gray-900 dark:text-white">
+                  <dd className="text-sm text-terminal-text">
                     {container.activeAgents}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                  <dt className="text-sm font-medium text-terminal-textMuted">
                     Queue Length
                   </dt>
-                  <dd className="text-sm text-gray-900 dark:text-white">
+                  <dd className="text-sm text-terminal-text">
                     {container.queueLength}
                   </dd>
                 </div>
@@ -534,7 +534,7 @@ export default function ContainerDetailPage() {
       {activeTab === 'metrics' && (
         <div className="space-y-6">
           <div className="card p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            <h3 className="text-lg font-semibold text-terminal-text mb-4">
               Real-time Metrics
             </h3>
             <MetricsChart container={container} />
@@ -542,25 +542,25 @@ export default function ContainerDetailPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="card p-6">
-              <h4 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-3">
+              <h4 className="text-sm font-medium text-terminal-textMuted mb-3">
                 Resource Limits
               </h4>
               <dl className="space-y-2">
                 <div className="flex justify-between">
-                  <dt className="text-sm text-gray-600 dark:text-gray-400">CPU Cores</dt>
-                  <dd className="text-sm font-medium text-gray-900 dark:text-white">
+                  <dt className="text-sm text-terminal-textMuted">CPU Cores</dt>
+                  <dd className="text-sm font-medium text-terminal-text">
                     {container.limits?.cpuCores ?? 0}
                   </dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-sm text-gray-600 dark:text-gray-400">Memory</dt>
-                  <dd className="text-sm font-medium text-gray-900 dark:text-white">
+                  <dt className="text-sm text-terminal-textMuted">Memory</dt>
+                  <dd className="text-sm font-medium text-terminal-text">
                     {container.limits?.memoryMB ?? 0} MB
                   </dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-sm text-gray-600 dark:text-gray-400">Disk</dt>
-                  <dd className="text-sm font-medium text-gray-900 dark:text-white">
+                  <dt className="text-sm text-terminal-textMuted">Disk</dt>
+                  <dd className="text-sm font-medium text-terminal-text">
                     {container.limits?.diskGB ?? 0} GB
                   </dd>
                 </div>
@@ -568,25 +568,25 @@ export default function ContainerDetailPage() {
             </div>
 
             <div className="card p-6">
-              <h4 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-3">
+              <h4 className="text-sm font-medium text-terminal-textMuted mb-3">
                 Current Usage
               </h4>
               <dl className="space-y-2">
                 <div className="flex justify-between">
-                  <dt className="text-sm text-gray-600 dark:text-gray-400">CPU</dt>
-                  <dd className="text-sm font-medium text-gray-900 dark:text-white">
+                  <dt className="text-sm text-terminal-textMuted">CPU</dt>
+                  <dd className="text-sm font-medium text-terminal-text">
                     {(container.metrics?.cpu ?? 0).toFixed(1)}%
                   </dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-sm text-gray-600 dark:text-gray-400">Memory</dt>
-                  <dd className="text-sm font-medium text-gray-900 dark:text-white">
+                  <dt className="text-sm text-terminal-textMuted">Memory</dt>
+                  <dd className="text-sm font-medium text-terminal-text">
                     {(container.metrics?.memory ?? 0).toFixed(0)} MB
                   </dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-sm text-gray-600 dark:text-gray-400">Disk</dt>
-                  <dd className="text-sm font-medium text-gray-900 dark:text-white">
+                  <dt className="text-sm text-terminal-textMuted">Disk</dt>
+                  <dd className="text-sm font-medium text-terminal-text">
                     {(container.metrics?.disk ?? 0).toFixed(2)} GB
                   </dd>
                 </div>
@@ -594,19 +594,19 @@ export default function ContainerDetailPage() {
             </div>
 
             <div className="card p-6">
-              <h4 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-3">
+              <h4 className="text-sm font-medium text-terminal-textMuted mb-3">
                 Usage Percentage
               </h4>
               <dl className="space-y-2">
                 <div className="flex justify-between">
-                  <dt className="text-sm text-gray-600 dark:text-gray-400">CPU</dt>
-                  <dd className="text-sm font-medium text-gray-900 dark:text-white">
+                  <dt className="text-sm text-terminal-textMuted">CPU</dt>
+                  <dd className="text-sm font-medium text-terminal-text">
                     {(container.metrics?.cpu ?? 0).toFixed(1)}%
                   </dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-sm text-gray-600 dark:text-gray-400">Memory</dt>
-                  <dd className="text-sm font-medium text-gray-900 dark:text-white">
+                  <dt className="text-sm text-terminal-textMuted">Memory</dt>
+                  <dd className="text-sm font-medium text-terminal-text">
                     {(() => {
                       const memLimit = container.limits?.memoryMB ?? 1
                       return memLimit > 0 ? (((container.metrics?.memory ?? 0) / memLimit) * 100).toFixed(1) : '0.0'
@@ -614,8 +614,8 @@ export default function ContainerDetailPage() {
                   </dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-sm text-gray-600 dark:text-gray-400">Disk</dt>
-                  <dd className="text-sm font-medium text-gray-900 dark:text-white">
+                  <dt className="text-sm text-terminal-textMuted">Disk</dt>
+                  <dd className="text-sm font-medium text-terminal-text">
                     {(() => {
                       const diskLimit = container.limits?.diskGB ?? 1
                       return diskLimit > 0 ? (((container.metrics?.disk ?? 0) / diskLimit) * 100).toFixed(1) : '0.0'
@@ -636,17 +636,17 @@ export default function ContainerDetailPage() {
 
       {activeTab === 'logs' && (
         <div className="card p-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          <h3 className="text-lg font-semibold text-terminal-text mb-4">
             Container Logs
           </h3>
-          <div className="bg-gray-900 rounded-lg p-4 font-mono text-sm text-gray-100 h-96 overflow-y-auto">
-            <p className="text-gray-500">
+          <div className="bg-terminal-bg rounded-lg p-4 font-mono text-sm text-terminal-text h-96 overflow-y-auto">
+            <p className="text-terminal-textMuted">
               [Log streaming will be implemented with WebSocket connection]
             </p>
-            <p className="text-gray-400 mt-2">
+            <p className="text-terminal-textMuted mt-2">
               {new Date().toISOString()} - Container {container.name} is {container.status}
             </p>
-            <p className="text-gray-400">
+            <p className="text-terminal-textMuted">
               {new Date().toISOString()} - CPU: {(container.metrics?.cpu ?? 0).toFixed(1)}% | Memory:{' '}
               {(container.metrics?.memory ?? 0).toFixed(0)} MB
             </p>
@@ -659,7 +659,7 @@ export default function ContainerDetailPage() {
           {container.status === 'running' ? (
             <>
               {/* Sub-tabs for Terminal */}
-              <div className="flex border-b border-gray-200 dark:border-terminal-border bg-gray-50 dark:bg-terminal-bg">
+              <div className="flex border-b border-terminal-border bg-terminal-bg">
                 <button
                   onClick={() => setTerminalSubTab('shell')}
                   className={clsx(
@@ -708,7 +708,7 @@ export default function ContainerDetailPage() {
           ) : (
             <div className="p-6 text-center">
               <svg
-                className="mx-auto h-12 w-12 text-gray-400 mb-4"
+                className="mx-auto h-12 w-12 text-terminal-textMuted mb-4"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -720,10 +720,10 @@ export default function ContainerDetailPage() {
                   d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
                 />
               </svg>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              <h3 className="text-lg font-semibold text-terminal-text mb-2">
                 Terminal Unavailable
               </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
+              <p className="text-sm text-terminal-textMuted">
                 Start the container to access the terminal.
               </p>
             </div>
@@ -734,7 +734,7 @@ export default function ContainerDetailPage() {
       {activeTab === 'settings' && (
         <div className="space-y-6">
           <div className="card p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            <h3 className="text-lg font-semibold text-terminal-text mb-4">
               Container Settings
             </h3>
             <div className="space-y-4">
@@ -772,7 +772,7 @@ export default function ContainerDetailPage() {
           </div>
 
           <div className="card p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            <h3 className="text-lg font-semibold text-terminal-text mb-4">
               Resource Limits
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -807,16 +807,16 @@ export default function ContainerDetailPage() {
                 />
               </div>
             </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-4">
+            <p className="text-sm text-terminal-textMuted mt-4">
               Resource limits cannot be modified while the container is running.
             </p>
           </div>
 
-          <div className="card p-6 border-danger-200 dark:border-danger-800">
-            <h3 className="text-lg font-semibold text-danger-600 dark:text-danger-400 mb-4">
+          <div className="card p-6 border-terminal-red/30">
+            <h3 className="text-lg font-semibold text-terminal-red mb-4">
               Danger Zone
             </h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            <p className="text-sm text-terminal-textMuted mb-4">
               Once you delete a container, there is no going back. Please be certain.
             </p>
             <button className="btn-danger">Delete Container</button>

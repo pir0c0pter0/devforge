@@ -103,13 +103,13 @@ export function Sidebar() {
   return (
     <aside
       className={clsx(
-        'fixed left-0 top-0 h-full bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-all duration-300 z-40',
+        'fixed left-0 top-0 h-full bg-terminal-bgLight border-r border-terminal-border transition-all duration-300 z-40',
         isCollapsed ? 'w-16' : 'w-64'
       )}
     >
       <div className="flex flex-col h-full">
         {/* Header */}
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+        <div className="p-4 border-b border-terminal-border">
           <div className="flex items-center justify-between">
             <div className={clsx('flex items-center space-x-3', isCollapsed && 'justify-center')}>
               <div className="w-10 h-10 bg-primary-600 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -129,17 +129,17 @@ export function Sidebar() {
               </div>
               {!isCollapsed && (
                 <div className="min-w-0">
-                  <h1 className="text-lg font-bold text-gray-900 dark:text-white truncate">
+                  <h1 className="text-lg font-bold text-terminal-text truncate">
                     Claude Docker
                   </h1>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Manager</p>
+                  <p className="text-xs text-terminal-textMuted">Manager</p>
                 </div>
               )}
             </div>
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
               className={clsx(
-                'p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors',
+                'p-1.5 rounded-lg text-terminal-textMuted hover:bg-terminal-bg transition-colors',
                 isCollapsed && 'mx-auto'
               )}
             >
@@ -173,8 +173,8 @@ export function Sidebar() {
                 className={clsx(
                   'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors',
                   isActive
-                    ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400'
-                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700',
+                    ? 'bg-terminal-green/10 text-terminal-green'
+                    : 'text-terminal-text hover:bg-terminal-bg hover:text-terminal-green',
                   isCollapsed && 'justify-center'
                 )}
                 title={isCollapsed ? item.name : undefined}
@@ -188,7 +188,7 @@ export function Sidebar() {
 
         {/* Quick Actions */}
         {!isCollapsed && (
-          <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="p-4 border-t border-terminal-border">
             <Link
               href="/containers/new"
               className="btn-primary w-full flex items-center justify-center gap-2"
@@ -207,21 +207,21 @@ export function Sidebar() {
         )}
 
         {/* User Section */}
-        <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="p-4 border-t border-terminal-border">
           <div className={clsx('flex items-center', isCollapsed ? 'justify-center' : 'gap-3')}>
-            <div className="w-9 h-9 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center flex-shrink-0">
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            <div className="w-9 h-9 bg-terminal-border rounded-full flex items-center justify-center flex-shrink-0">
+              <span className="text-sm font-medium text-terminal-text">
                 {user?.username?.charAt(0).toUpperCase() || 'U'}
               </span>
             </div>
             {!isCollapsed && (
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                <p className="text-sm font-medium text-terminal-text truncate">
                   {user?.username || 'User'}
                 </p>
                 <button
                   onClick={logout}
-                  className="text-xs text-gray-500 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                  className="text-xs text-terminal-textMuted hover:text-terminal-green transition-colors"
                 >
                   Sign out
                 </button>

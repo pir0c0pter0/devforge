@@ -105,10 +105,10 @@ export default function MetricsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+        <h2 className="text-2xl font-bold text-terminal-text mb-2">
           Metrics Dashboard
         </h2>
-        <p className="text-gray-600 dark:text-gray-400">
+        <p className="text-terminal-textMuted">
           Monitor aggregate resource usage across all containers
         </p>
       </div>
@@ -118,13 +118,13 @@ export default function MetricsPage() {
         <div className="card p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+              <p className="text-sm font-medium text-terminal-textMuted">
                 Total CPU Usage
               </p>
-              <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">
+              <p className="text-3xl font-bold text-terminal-text mt-2">
                 {totalCpuUsage.toFixed(1)}%
               </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              <p className="text-xs text-terminal-textMuted mt-1">
                 Across {runningContainers.length} running containers
               </p>
             </div>
@@ -149,19 +149,19 @@ export default function MetricsPage() {
         <div className="card p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+              <p className="text-sm font-medium text-terminal-textMuted">
                 Total Memory
               </p>
-              <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">
+              <p className="text-3xl font-bold text-terminal-text mt-2">
                 {(totalMemoryUsage / 1024).toFixed(1)} GB
               </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              <p className="text-xs text-terminal-textMuted mt-1">
                 of {(totalMemoryLimit / 1024).toFixed(1)} GB allocated
               </p>
             </div>
-            <div className="w-12 h-12 bg-success-100 dark:bg-success-900 rounded-lg flex items-center justify-center">
+            <div className="w-12 h-12 bg-terminal-green/10 rounded-lg flex items-center justify-center">
               <svg
-                className="w-6 h-6 text-success-600 dark:text-success-400"
+                className="w-6 h-6 text-terminal-green"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -180,19 +180,19 @@ export default function MetricsPage() {
         <div className="card p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+              <p className="text-sm font-medium text-terminal-textMuted">
                 Total Disk Usage
               </p>
-              <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">
+              <p className="text-3xl font-bold text-terminal-text mt-2">
                 {totalDiskUsage.toFixed(1)} GB
               </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              <p className="text-xs text-terminal-textMuted mt-1">
                 of {totalDiskLimit.toFixed(0)} GB allocated
               </p>
             </div>
-            <div className="w-12 h-12 bg-warning-100 dark:bg-warning-900 rounded-lg flex items-center justify-center">
+            <div className="w-12 h-12 bg-terminal-yellow/10 rounded-lg flex items-center justify-center">
               <svg
-                className="w-6 h-6 text-warning-600 dark:text-warning-400"
+                className="w-6 h-6 text-terminal-yellow"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -211,19 +211,19 @@ export default function MetricsPage() {
         <div className="card p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+              <p className="text-sm font-medium text-terminal-textMuted">
                 Container Status
               </p>
-              <p className="text-3xl font-bold text-success-600 dark:text-success-400 mt-2">
+              <p className="text-3xl font-bold text-terminal-green mt-2">
                 {runningContainers.length}/{containers.length}
               </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              <p className="text-xs text-terminal-textMuted mt-1">
                 containers running
               </p>
             </div>
-            <div className="w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center">
+            <div className="w-12 h-12 bg-terminal-bgLight rounded-lg flex items-center justify-center">
               <svg
-                className="w-6 h-6 text-gray-600 dark:text-gray-400"
+                className="w-6 h-6 text-terminal-textMuted"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -243,19 +243,19 @@ export default function MetricsPage() {
       {/* Historical Usage Chart */}
       {historicalData.length > 1 && (
         <div className="card p-6">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          <h3 className="text-lg font-semibold text-terminal-text mb-4">
             Resource Usage Over Time
           </h3>
           <ResponsiveContainer width="100%" height={300}>
             <AreaChart data={historicalData}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-300 dark:stroke-gray-700" />
+              <CartesianGrid strokeDasharray="3 3" className="stroke-terminal-border" />
               <XAxis
                 dataKey="time"
-                className="text-xs text-gray-600 dark:text-gray-400"
+                className="text-xs text-terminal-textMuted"
                 tick={{ fill: 'currentColor' }}
               />
               <YAxis
-                className="text-xs text-gray-600 dark:text-gray-400"
+                className="text-xs text-terminal-textMuted"
                 tick={{ fill: 'currentColor' }}
                 domain={[0, 100]}
                 label={{ value: '%', position: 'insideLeft' }}
@@ -295,7 +295,7 @@ export default function MetricsPage() {
         {/* Container Status Pie Chart */}
         {statusData.length > 0 && (
           <div className="card p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            <h3 className="text-lg font-semibold text-terminal-text mb-4">
               Container Status Distribution
             </h3>
             <ResponsiveContainer width="100%" height={250}>
@@ -323,22 +323,22 @@ export default function MetricsPage() {
         {/* Per-Container Usage */}
         {containerMetricsData.length > 0 && (
           <div className="card p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            <h3 className="text-lg font-semibold text-terminal-text mb-4">
               Per-Container Resource Usage
             </h3>
             <ResponsiveContainer width="100%" height={250}>
               <LineChart data={containerMetricsData}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-gray-300 dark:stroke-gray-700" />
+                <CartesianGrid strokeDasharray="3 3" className="stroke-terminal-border" />
                 <XAxis
                   dataKey="name"
-                  className="text-xs text-gray-600 dark:text-gray-400"
+                  className="text-xs text-terminal-textMuted"
                   tick={{ fill: 'currentColor', fontSize: 10 }}
                   angle={-45}
                   textAnchor="end"
                   height={60}
                 />
                 <YAxis
-                  className="text-xs text-gray-600 dark:text-gray-400"
+                  className="text-xs text-terminal-textMuted"
                   tick={{ fill: 'currentColor' }}
                   domain={[0, 100]}
                 />
@@ -374,26 +374,26 @@ export default function MetricsPage() {
 
       {/* Top Resource Consumers */}
       <div className="card p-6">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+        <h3 className="text-lg font-semibold text-terminal-text mb-4">
           Top Resource Consumers
         </h3>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-700">
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">
+              <tr className="border-b border-terminal-border">
+                <th className="text-left py-3 px-4 text-sm font-medium text-terminal-textMuted">
                   Container
                 </th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">
+                <th className="text-left py-3 px-4 text-sm font-medium text-terminal-textMuted">
                   Status
                 </th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">
+                <th className="text-left py-3 px-4 text-sm font-medium text-terminal-textMuted">
                   CPU
                 </th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">
+                <th className="text-left py-3 px-4 text-sm font-medium text-terminal-textMuted">
                   Memory
                 </th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">
+                <th className="text-left py-3 px-4 text-sm font-medium text-terminal-textMuted">
                   Disk
                 </th>
               </tr>
@@ -405,10 +405,10 @@ export default function MetricsPage() {
                 .map((container) => (
                   <tr
                     key={container.id}
-                    className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                    className="border-b border-terminal-border hover:bg-terminal-bg"
                   >
                     <td className="py-3 px-4">
-                      <span className="font-medium text-gray-900 dark:text-white">
+                      <span className="font-medium text-terminal-text">
                         {container.name}
                       </span>
                     </td>
@@ -427,20 +427,20 @@ export default function MetricsPage() {
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
-                        <div className="w-16 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                        <div className="w-16 bg-terminal-border rounded-full h-2">
                           <div
                             className={clsx(
                               'h-2 rounded-full',
                               (container.metrics?.cpu ?? 0) > 80
-                                ? 'bg-danger-600'
+                                ? 'bg-terminal-red'
                                 : (container.metrics?.cpu ?? 0) > 60
-                                ? 'bg-warning-600'
-                                : 'bg-success-600'
+                                ? 'bg-terminal-yellow'
+                                : 'bg-terminal-green'
                             )}
                             style={{ width: `${Math.min(container.metrics?.cpu ?? 0, 100)}%` }}
                           />
                         </div>
-                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                        <span className="text-sm text-terminal-textMuted">
                           {(container.metrics?.cpu ?? 0).toFixed(1)}%
                         </span>
                       </div>
@@ -451,20 +451,20 @@ export default function MetricsPage() {
                         const memPercent = memLimit > 0 ? ((container.metrics?.memory ?? 0) / memLimit) * 100 : 0
                         return (
                           <div className="flex items-center gap-2">
-                            <div className="w-16 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div className="w-16 bg-terminal-border rounded-full h-2">
                               <div
                                 className={clsx(
                                   'h-2 rounded-full',
                                   memPercent > 80
-                                    ? 'bg-danger-600'
+                                    ? 'bg-terminal-red'
                                     : memPercent > 60
-                                    ? 'bg-warning-600'
-                                    : 'bg-success-600'
+                                    ? 'bg-terminal-yellow'
+                                    : 'bg-terminal-green'
                                 )}
                                 style={{ width: `${Math.min(memPercent, 100)}%` }}
                               />
                             </div>
-                            <span className="text-sm text-gray-600 dark:text-gray-400">
+                            <span className="text-sm text-terminal-textMuted">
                               {(container.metrics?.memory ?? 0).toFixed(0)} MB
                             </span>
                           </div>
@@ -472,7 +472,7 @@ export default function MetricsPage() {
                       })()}
                     </td>
                     <td className="py-3 px-4">
-                      <span className="text-sm text-gray-600 dark:text-gray-400">
+                      <span className="text-sm text-terminal-textMuted">
                         {(container.metrics?.disk ?? 0).toFixed(2)} GB
                       </span>
                     </td>

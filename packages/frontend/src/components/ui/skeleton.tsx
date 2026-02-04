@@ -10,7 +10,7 @@ export function Skeleton({ className }: SkeletonProps) {
   return (
     <div
       className={clsx(
-        'animate-pulse rounded-md bg-gray-200 dark:bg-gray-700',
+        'animate-pulse rounded-md bg-terminal-border',
         className
       )}
     />

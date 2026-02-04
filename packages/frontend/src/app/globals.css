@@ -90,11 +90,11 @@ body {
   }
 
   .btn-danger {
-    @apply bg-danger-600/20 hover:bg-danger-600/30 text-danger-500 font-medium py-2 px-4 rounded transition-all border border-danger-600/50;
+    @apply bg-terminal-red/20 hover:bg-terminal-red/30 text-terminal-red font-medium py-2 px-4 rounded transition-all border border-terminal-red/50;
   }
 
   .btn-danger:hover {
-    @apply border-danger-500;
+    @apply border-terminal-red;
     box-shadow: 0 0 12px rgba(248, 81, 73, 0.3);
   }
 
@@ -128,11 +128,11 @@ body {
   }
 
   .badge-danger {
-    @apply bg-danger-900/30 text-terminal-red border-danger-700/50;
+    @apply bg-terminal-red/10 text-terminal-red border-terminal-red/30;
   }
 
   .badge-warning {
-    @apply bg-warning-900/30 text-terminal-yellow border-warning-700/50;
+    @apply bg-terminal-yellow/10 text-terminal-yellow border-terminal-yellow/30;
   }
 
   .badge-primary {

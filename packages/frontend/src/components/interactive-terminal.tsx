@@ -204,7 +204,7 @@ export function InteractiveTerminal({ containerId, onClose, className }: Interac
   return (
     <div className={clsx('terminal-container flex flex-col', className)}>
       {/* Header */}
-      <div className="bg-gray-800 px-4 py-2 flex items-center justify-between rounded-t-lg border-b border-gray-700">
+      <div className="bg-terminal-bgLight px-4 py-2 flex items-center justify-between rounded-t-lg border-b border-terminal-border">
         <div className="flex items-center gap-2">
           <div className="flex gap-1.5">
             <button
@@ -215,7 +215,7 @@ export function InteractiveTerminal({ containerId, onClose, className }: Interac
             <div className="w-3 h-3 rounded-full bg-yellow-500" />
             <div className="w-3 h-3 rounded-full bg-green-500" />
           </div>
-          <span className="text-sm text-gray-300 ml-2 font-mono">
+          <span className="text-sm text-terminal-textMuted ml-2 font-mono">
             Terminal {sessionId ? `(${sessionId.substring(0, 8)})` : ''}
           </span>
         </div>

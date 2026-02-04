@@ -124,10 +124,10 @@ export default function TemplatesPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+        <h2 className="text-2xl font-bold text-terminal-text mb-2">
           Container Templates
         </h2>
-        <p className="text-gray-600 dark:text-gray-400">
+        <p className="text-terminal-textMuted">
           Quick-start containers with pre-configured development environments
         </p>
       </div>
@@ -136,7 +136,7 @@ export default function TemplatesPage() {
       <div className="relative max-w-md">
         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
           <svg
-            className="h-5 w-5 text-gray-400"
+            className="h-5 w-5 text-terminal-textMuted"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -173,21 +173,21 @@ export default function TemplatesPage() {
               <div
                 className={clsx(
                   'w-14 h-14 rounded-lg flex items-center justify-center flex-shrink-0',
-                  'bg-gray-100 dark:bg-gray-700',
+                  'bg-terminal-bgLight',
                   template.color
                 )}
               >
                 {template.icon}
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                <h3 className="text-lg font-semibold text-terminal-text">
                   {template.name}
                 </h3>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {template.tags.map((tag) => (
                     <span
                       key={tag}
-                      className="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded"
+                      className="text-xs px-2 py-0.5 bg-terminal-bgLight text-terminal-textMuted rounded"
                     >
                       {tag}
                     </span>
@@ -196,11 +196,11 @@ export default function TemplatesPage() {
               </div>
             </div>
 
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 line-clamp-2">
+            <p className="text-sm text-terminal-textMuted mb-4 line-clamp-2">
               {template.description}
             </p>
 
-            <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between text-xs text-terminal-textMuted mb-4 pb-4 border-b border-terminal-border">
               <span>{template.defaultLimits.cpuCores} CPU</span>
               <span>{template.defaultLimits.memoryMB} MB RAM</span>
               <span>{template.defaultLimits.diskGB} GB Disk</span>
@@ -230,7 +230,7 @@ export default function TemplatesPage() {
       {filteredTemplates.length === 0 && (
         <div className="text-center py-12">
           <svg
-            className="mx-auto h-12 w-12 text-gray-400 mb-4"
+            className="mx-auto h-12 w-12 text-terminal-textMuted mb-4"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -242,10 +242,10 @@ export default function TemplatesPage() {
               d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
             />
           </svg>
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-1">
+          <h3 className="text-lg font-medium text-terminal-text mb-1">
             No templates found
           </h3>
-          <p className="text-gray-600 dark:text-gray-400">
+          <p className="text-terminal-textMuted">
             Try adjusting your search query
           </p>
         </div>

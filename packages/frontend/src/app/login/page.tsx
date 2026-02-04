@@ -21,7 +21,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-terminal-bg py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
           <div className="mx-auto w-16 h-16 bg-primary-600 rounded-xl flex items-center justify-center mb-6">
@@ -39,10 +39,10 @@ export default function LoginPage() {
               />
             </svg>
           </div>
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
+          <h2 className="text-3xl font-bold text-terminal-text">
             Claude Docker Manager
           </h2>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+          <p className="mt-2 text-sm text-terminal-textMuted">
             Sign in to manage your containers
           </p>
         </div>
@@ -50,10 +50,10 @@ export default function LoginPage() {
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="card p-6 space-y-4">
             {error && (
-              <div className="bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800 rounded-lg p-4">
+              <div className="bg-terminal-red/10 border border-terminal-red/30 rounded-lg p-4">
                 <div className="flex items-center">
                   <svg
-                    className="w-5 h-5 text-danger-600 dark:text-danger-400 mr-2"
+                    className="w-5 h-5 text-terminal-red mr-2"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -65,7 +65,7 @@ export default function LoginPage() {
                       d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                     />
                   </svg>
-                  <p className="text-sm text-danger-800 dark:text-danger-200">{error}</p>
+                  <p className="text-sm text-terminal-red">{error}</p>
                 </div>
               </div>
             )}
@@ -120,7 +120,7 @@ export default function LoginPage() {
           </div>
         </form>
 
-        <p className="text-center text-xs text-gray-500 dark:text-gray-400">
+        <p className="text-center text-xs text-terminal-textMuted">
           Container orchestration with Claude AI
         </p>
       </div>

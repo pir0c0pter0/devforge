@@ -57,7 +57,7 @@ export function MetricsChart({ container }: MetricsChartProps) {
 
   if (data.length === 0) {
     return (
-      <div className="h-64 flex items-center justify-center text-gray-500 dark:text-gray-400">
+      <div className="h-64 flex items-center justify-center text-terminal-textMuted">
         Waiting for metrics data...
       </div>
     )
@@ -66,25 +66,26 @@ export function MetricsChart({ container }: MetricsChartProps) {
   return (
     <ResponsiveContainer width="100%" height={300}>
       <LineChart data={data}>
-        <CartesianGrid strokeDasharray="3 3" className="stroke-gray-300 dark:stroke-gray-700" />
+        <CartesianGrid strokeDasharray="3 3" className="stroke-terminal-border" />
         <XAxis
           dataKey="time"
-          className="text-xs text-gray-600 dark:text-gray-400"
+          className="text-xs text-terminal-textMuted"
           tick={{ fill: 'currentColor' }}
         />
         <YAxis
-          className="text-xs text-gray-600 dark:text-gray-400"
+          className="text-xs text-terminal-textMuted"
           tick={{ fill: 'currentColor' }}
           domain={[0, 100]}
           label={{ value: '%', position: 'insideLeft' }}
         />
         <Tooltip
           contentStyle={{
-            backgroundColor: 'rgba(255, 255, 255, 0.9)',
-            border: '1px solid #e5e7eb',
+            backgroundColor: '#161b22',
+            border: '1px solid #30363d',
             borderRadius: '0.5rem',
           }}
-          labelStyle={{ color: '#374151' }}
+          labelStyle={{ color: '#c9d1d9' }}
+          itemStyle={{ color: '#c9d1d9' }}
         />
         <Legend />
         <Line

@@ -200,7 +200,7 @@ export function CreateContainerForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {generalError && (
-        <div className="bg-danger-900/20 border border-danger-600/50 rounded p-4">
+        <div className="bg-terminal-red/10 border border-terminal-red/30 rounded p-4">
           <p className="text-sm text-terminal-red">{generalError}</p>
         </div>
       )}

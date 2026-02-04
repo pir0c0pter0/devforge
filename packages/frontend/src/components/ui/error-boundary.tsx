@@ -44,9 +44,9 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       return (
         <div className="card p-8 max-w-lg mx-auto mt-12">
           <div className="text-center">
-            <div className="mx-auto w-16 h-16 bg-danger-100 dark:bg-danger-900/20 rounded-full flex items-center justify-center mb-4">
+            <div className="mx-auto w-16 h-16 bg-terminal-red/10 rounded-full flex items-center justify-center mb-4">
               <svg
-                className="w-8 h-8 text-danger-600 dark:text-danger-400"
+                className="w-8 h-8 text-terminal-red"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -59,18 +59,18 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                 />
               </svg>
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+            <h3 className="text-lg font-semibold text-terminal-text mb-2">
               Something went wrong
             </h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-4">
+            <p className="text-terminal-textMuted mb-4">
               An unexpected error occurred. Please try again.
             </p>
             {this.state.error && (
               <details className="text-left mb-4">
-                <summary className="text-sm text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-700 dark:hover:text-gray-200">
+                <summary className="text-sm text-terminal-textMuted cursor-pointer hover:text-terminal-text">
                   Error details
                 </summary>
-                <pre className="mt-2 p-3 bg-gray-100 dark:bg-gray-800 rounded text-xs overflow-auto max-h-32">
+                <pre className="mt-2 p-3 bg-terminal-bgLight rounded text-xs overflow-auto max-h-32">
                   {this.state.error.message}
                 </pre>
               </details>
