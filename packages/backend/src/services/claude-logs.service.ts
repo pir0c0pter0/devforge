@@ -2,6 +2,7 @@ import { EventEmitter } from 'events'
 import { randomUUID } from 'crypto'
 import { createChildLogger } from '../utils/logger'
 import { claudeLogsRepository } from '../repositories'
+import { redactSensitiveData, containsSensitiveData } from '../utils/redact'
 import type {
   ClaudeLogType,
   ClaudeLogEntry,
@@ -104,11 +105,20 @@ class ClaudeLogsService extends EventEmitter {
       return null
     }
 
+    // Redact sensitive data from stdout/stderr only (not stdin - user input)
+    let redactedContent = content
+    if (type === 'stdout' || type === 'stderr') {
+      if (containsSensitiveData(content)) {
+        logger.info({ containerId, type }, 'Sensitive data detected and redacted from log entry')
+      }
+      redactedContent = redactSensitiveData(content)
+    }
+
     const entry: ClaudeLogEntry = {
       id: randomUUID(),
       timestamp: new Date(),
       type,
-      content,
+      content: redactedContent,
       metadata,
     }
 
@@ -117,7 +127,7 @@ class ClaudeLogsService extends EventEmitter {
       claudeLogsRepository.create({
         containerId,
         type,
-        content,
+        content: redactedContent,
         metadata: metadata as Record<string, unknown>,
       })
     } catch (error) {
@@ -151,11 +161,20 @@ class ClaudeLogsService extends EventEmitter {
         continue
       }
 
+      // Redact sensitive data from stdout/stderr only (not stdin - user input)
+      let redactedContent = entry.content
+      if (entry.type === 'stdout' || entry.type === 'stderr') {
+        if (containsSensitiveData(entry.content)) {
+          logger.info({ containerId, type: entry.type }, 'Sensitive data detected and redacted from batch log entry')
+        }
+        redactedContent = redactSensitiveData(entry.content)
+      }
+
       const logEntry: ClaudeLogEntry = {
         id: randomUUID(),
         timestamp: new Date(),
         type: entry.type,
-        content: entry.content,
+        content: redactedContent,
         metadata: entry.metadata,
       }
 
@@ -163,7 +182,7 @@ class ClaudeLogsService extends EventEmitter {
       toInsert.push({
         containerId,
         type: entry.type,
-        content: entry.content,
+        content: redactedContent,
         metadata: entry.metadata as Record<string, unknown>,
       })
 

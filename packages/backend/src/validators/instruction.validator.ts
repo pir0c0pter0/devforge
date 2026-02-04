@@ -70,6 +70,27 @@ const DANGEROUS_PATTERNS = [
   // Network scanning
   /nmap/i,
   /masscan/i,
+
+  // Command substitution (CWE-78)
+  /\$\([^)]+\)/,  // $(command)
+  /`[^`]+`/,      // `command`
+
+  // Shell metacharacters in dangerous contexts
+  /;\s*\w/,       // ; command
+  /\|\s*\w/,      // | command (pipe to another command)
+  /&&\s*\w/,      // && command
+  /\|\|\s*\w/,    // || command
+
+  // Process substitution
+  /<\([^)]+\)/,   // <(command)
+  />\([^)]+\)/,   // >(command)
+
+  // Null byte injection
+  /\x00/,         // Null byte
+  /\\0/,          // Escaped null byte
+
+  // Here document exploitation
+  /<<[<-]?\s*\w+/,  // Heredoc
 ]
 
 /**

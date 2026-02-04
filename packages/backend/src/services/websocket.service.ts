@@ -1,5 +1,6 @@
 import { Server as HttpServer } from 'http'
 import { Server, Socket } from 'socket.io'
+import { createWebSocketRateLimitMiddleware, cleanupSocketRateLimit } from '../middleware/websocket-rate-limit'
 import type {
   ServerToClientEvents,
   ClientToServerEvents,
@@ -73,6 +74,9 @@ export const initializeWebSocket = (
     pingTimeout: 60000,
     pingInterval: 25000,
   })
+
+  // Apply rate limiting middleware
+  io.use(createWebSocketRateLimitMiddleware())
 
   // Setup namespaces and event handlers
   setupMetricsNamespace()
@@ -204,6 +208,7 @@ const setupMetricsNamespace = (): void => {
       }
 
       cleanupSocketSubscriptions(socket.id)
+      cleanupSocketRateLimit(socket.id)
 
       // Stop metrics collection for containers with no more subscribers
       for (const containerId of subscribedContainers) {
@@ -253,6 +258,7 @@ const setupQueueNamespace = (): void => {
 
     socket.on('disconnect', () => {
       cleanupSocketSubscriptions(socket.id)
+      cleanupSocketRateLimit(socket.id)
       console.info(`[WebSocket] Client disconnected from /queue: ${socket.id}`)
     })
   })
@@ -283,6 +289,7 @@ const setupLogsNamespace = (): void => {
 
     socket.on('disconnect', () => {
       cleanupSocketSubscriptions(socket.id)
+      cleanupSocketRateLimit(socket.id)
       console.info(`[WebSocket] Client disconnected from /logs: ${socket.id}`)
     })
   })
@@ -408,6 +415,7 @@ const setupDockerLogsNamespace = (): void => {
 
     socket.on('disconnect', () => {
       cleanupSocketDockerLogsSubscriptions(socket.id)
+      cleanupSocketRateLimit(socket.id)
       console.info(`[WebSocket] Client disconnected from /docker-logs: ${socket.id}`)
     })
   })
@@ -435,6 +443,7 @@ const setupCreationNamespace = (): void => {
     })
 
     socket.on('disconnect', () => {
+      cleanupSocketRateLimit(socket.id)
       console.info(`[WebSocket] Client disconnected from /creation: ${socket.id}`)
     })
   })
@@ -518,6 +527,7 @@ const setupTasksNamespace = (): void => {
 
     socket.on('disconnect', () => {
       cleanupSocketTaskSubscriptions(socket.id)
+      cleanupSocketRateLimit(socket.id)
       console.info(`[WebSocket] Client disconnected from /tasks: ${socket.id}`)
     })
   })
@@ -617,6 +627,7 @@ const setupTerminalNamespace = (): void => {
         terminalSubscriptions.delete(currentSessionId)
         console.info(`[WebSocket] Client disconnected, closed terminal session ${currentSessionId}`)
       }
+      cleanupSocketRateLimit(socket.id)
       console.info(`[WebSocket] Client disconnected from /terminal: ${socket.id}`)
     })
   })
@@ -858,6 +869,7 @@ const setupClaudeDaemonNamespace = (): void => {
 
     socket.on('disconnect', () => {
       cleanupSocketClaudeDaemonSubscriptions(socket.id)
+      cleanupSocketRateLimit(socket.id)
       console.info(`[WebSocket] Client disconnected from /claude-daemon: ${socket.id}`)
     })
   })

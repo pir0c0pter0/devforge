@@ -6,6 +6,7 @@ import { dockerLogger as logger } from '../utils/logger'
 import { containerRepository } from '../repositories'
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { claudeLogsService } from './claude-logs.service'
+import { circuitBreakers, CircuitOpenError } from './circuit-breaker.service'
 import type {
   DaemonState,
   ClaudeEvent,
@@ -314,6 +315,13 @@ class ClaudeDaemonService extends EventEmitter {
       }
     }
 
+    // Check circuit breaker before processing
+    if (!circuitBreakers.claudeDaemon.canExecute()) {
+      const stats = circuitBreakers.claudeDaemon.getStats()
+      logger.warn({ containerId, circuitState: stats.state }, 'Claude daemon circuit breaker is open')
+      throw new CircuitOpenError('Claude daemon circuit breaker is open', stats.lastStateChange.getTime())
+    }
+
     session.isProcessing = true
     session.state.lastActivity = new Date()
 
@@ -441,6 +449,9 @@ class ClaudeDaemonService extends EventEmitter {
           if (exitCode === 0) {
             logger.info({ containerId, exitCode, duration }, 'Main instruction process completed')
 
+            // Record success in circuit breaker
+            circuitBreakers.claudeDaemon.recordSuccess()
+
             // Log conclusao com sucesso
             claudeLogsService.addLog(containerId, 'system', `Instrucao concluida com sucesso (exit code: ${exitCode})`, {
               sessionId: session.sessionId,
@@ -450,6 +461,9 @@ class ClaudeDaemonService extends EventEmitter {
             })
           } else {
             logger.warn({ containerId, exitCode, signal, duration }, 'Instruction process exited with non-zero code')
+
+            // Record failure in circuit breaker
+            circuitBreakers.claudeDaemon.recordFailure(new Error(`Process exited with code ${exitCode}`))
 
             // Log conclusao com erro
             claudeLogsService.addLog(containerId, 'system', `Instrucao falhou (exit code: ${exitCode}, signal: ${signal || 'none'})`, {
@@ -524,6 +538,9 @@ class ClaudeDaemonService extends EventEmitter {
           // Clear the hard timeout
           clearTimeout(timeoutId)
 
+          // Record failure in circuit breaker
+          circuitBreakers.claudeDaemon.recordFailure(error)
+
           session.isProcessing = false
           session.currentProcess = undefined
           const duration = Date.now() - startTime
@@ -557,14 +574,24 @@ class ClaudeDaemonService extends EventEmitter {
   /**
    * Get the current status of a session
    */
-  getStatus(containerId: string): DaemonState | null {
+  getStatus(containerId: string): DaemonState & { circuitBreaker?: { state: string; failures: number; lastFailure?: Date } } | null {
     const session = this.sessions.get(containerId)
     if (!session) {
       return null
     }
 
-    // Return a copy to maintain immutability
-    return { ...session.state }
+    // Get circuit breaker stats
+    const circuitStats = circuitBreakers.claudeDaemon.getStats()
+
+    // Return a copy to maintain immutability, including circuit breaker state
+    return {
+      ...session.state,
+      circuitBreaker: {
+        state: circuitStats.state,
+        failures: circuitStats.failures,
+        lastFailure: circuitStats.lastFailure,
+      },
+    }
   }
 
   /**
