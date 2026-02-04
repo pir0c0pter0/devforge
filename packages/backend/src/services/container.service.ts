@@ -915,6 +915,16 @@ export class ContainerService {
       // Delete from Docker (handles "not found" gracefully)
       await dockerService.deleteContainer(container.dockerId, force);
 
+      // Delete workspace volume (each container has its own named volume)
+      const volumeName = `claude-docker-${container.name}-workspace`;
+      try {
+        await dockerService.deleteVolume(volumeName);
+        logger.info({ containerId, volumeName }, 'Workspace volume deleted');
+      } catch (volumeError) {
+        logger.warn({ error: volumeError, containerId, volumeName },
+          'Failed to delete workspace volume, continuing anyway');
+      }
+
       // Delete from database
       containerRepository.delete(containerId);
 
@@ -1028,7 +1038,19 @@ export class ContainerService {
       await dockerService.deleteContainer(container.dockerId, force);
 
       taskService.setProgress(taskId, 65, 'Container removido do Docker daemon');
-      taskService.setProgress(taskId, 70, 'Liberando volumes associados...');
+      taskService.setProgress(taskId, 70, 'Liberando volume de workspace...');
+
+      // Step 4.5: Delete workspace volume (each container has its own named volume)
+      const volumeName = `claude-docker-${container.name}-workspace`;
+      try {
+        await dockerService.deleteVolume(volumeName);
+        taskService.setProgress(taskId, 73, 'Volume de workspace removido');
+        logger.info({ containerId, taskId, volumeName }, 'Workspace volume deleted');
+      } catch (volumeError) {
+        logger.warn({ error: volumeError, containerId, taskId, volumeName },
+          'Failed to delete workspace volume, continuing anyway');
+        taskService.setProgress(taskId, 73, 'Volume não encontrado, continuando...');
+      }
 
       // Step 5: Delete from database
       taskService.setProgress(taskId, 75, 'Removendo registro do banco de dados...');
@@ -1321,8 +1343,11 @@ export class ContainerService {
     const volumes: string[] = [];
     const homeDir = os.homedir();
 
-    // Mount workspace
-    volumes.push('/var/lib/docker/volumes/workspace:/workspace');
+    // Mount workspace - each container gets its own named volume for isolation
+    // Using named volume ensures data persists across container restarts
+    // Format: claude-docker-{container-name}-workspace
+    const volumeName = `claude-docker-${config.name}-workspace`;
+    volumes.push(`${volumeName}:/workspace`);
 
     // Mount Claude credentials (for browser-based auth - Personal/Max/Pro accounts)
     // This shares the host's authenticated session with containers

@@ -397,6 +397,27 @@ export class DockerService {
       return false;
     }
   }
+
+  /**
+   * Delete a Docker volume
+   * Used to clean up workspace volumes when containers are deleted
+   */
+  async deleteVolume(volumeName: string): Promise<void> {
+    try {
+      logger.info({ volumeName }, 'Deleting Docker volume');
+      const volume = this.docker.getVolume(volumeName);
+      await volume.remove();
+      logger.info({ volumeName }, 'Docker volume deleted successfully');
+    } catch (error: any) {
+      // Ignore "not found" errors - volume may not exist
+      if (error.statusCode === 404) {
+        logger.debug({ volumeName }, 'Docker volume not found, skipping delete');
+        return;
+      }
+      logger.error({ error, volumeName }, 'Failed to delete Docker volume');
+      throw new Error(`Failed to delete volume: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
 }
 
 // Export singleton instance

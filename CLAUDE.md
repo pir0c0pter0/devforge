@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções
 
-## Versão Atual: 0.0.50-alpha
+## Versão Atual: 0.0.51-alpha
 
 ## Estrutura do Projeto
 
@@ -779,6 +779,14 @@ ALLOWED_ORIGINS=https://myapp.com,https://api.myapp.com
 ```
 
 ## Histórico de Versões
+
+### v0.0.51-alpha
+- Fix: **Volumes isolados por container** (corrige clone de repositórios)
+- Fix: Cada container agora tem seu próprio volume de workspace nomeado
+- Fix: Nome do volume: `claude-docker-{nome-container}-workspace`
+- Fix: Volumes são deletados automaticamente quando container é excluído
+- Fix: Método `deleteVolume` adicionado ao docker.service
+- Fix: Clone de repositórios GitHub agora funciona corretamente
 
 ### v0.0.50-alpha
 - Feat: **Sistema completo de traduções i18n**
