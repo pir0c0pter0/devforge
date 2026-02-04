@@ -156,11 +156,15 @@ export const translations = {
       start: 'Iniciar',
       sendMessage: 'Envie uma mensagem para o Claude Code',
       startFirst: 'Inicie o Claude Code primeiro',
-      thinking: 'Pensando',
+      thinking: 'Claude está pensando',
+      thinkingSubtext: 'Processando sua instrução...',
       error: 'Erro',
       connected: 'Conectado',
       disconnected: 'Desconectado',
       connecting: 'Conectando',
+      placeholder: 'Digite sua instrução...',
+      placeholderDisabled: 'Inicie o Claude Code primeiro',
+      pressEnter: 'Pressione Enter para enviar',
     },
 
     // Templates Page
@@ -567,11 +571,15 @@ export const translations = {
       start: 'Start',
       sendMessage: 'Send a message to Claude Code',
       startFirst: 'Start Claude Code first',
-      thinking: 'Thinking',
+      thinking: 'Claude is thinking',
+      thinkingSubtext: 'Processing your instruction...',
       error: 'Error',
       connected: 'Connected',
       disconnected: 'Disconnected',
       connecting: 'Connecting',
+      placeholder: 'Type your instruction...',
+      placeholderDisabled: 'Start Claude Code first',
+      pressEnter: 'Press Enter to send',
     },
 
     // Templates Page

@@ -310,16 +310,18 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
         onMessageRef.current?.(message)
       }
 
-      // Result event means Claude finished processing
-      if (event.type === 'result') {
+      // These events mean Claude has responded - stop loading indicator
+      // 'result' = final result, 'assistant' = Claude's response, 'error' = something went wrong
+      if (event.type === 'result' || event.type === 'assistant' || event.type === 'error') {
         setIsLoading(false)
       }
     })
 
     // Handle instruction received confirmation
+    // Note: We do NOT set isLoading=false here because Claude is still processing
+    // isLoading will be set to false when we receive 'result' or 'assistant' event
     socket.on('instruction:received', () => {
-      console.log('[ClaudeDaemon] Instruction received by daemon')
-      setIsLoading(false)
+      console.log('[ClaudeDaemon] Instruction received by daemon, waiting for response...')
     })
 
     // Handle errors

@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções
 
-## Versão Atual: 0.0.51-alpha
+## Versão Atual: 0.0.52-alpha
 
 ## Estrutura do Projeto
 
@@ -779,6 +779,15 @@ ALLOWED_ORIGINS=https://myapp.com,https://api.myapp.com
 ```
 
 ## Histórico de Versões
+
+### v0.0.52-alpha
+- Feat: **Indicador visual de "pensando"** no Claude Chat
+- Feat: Feedback visual melhorado quando Claude está processando
+- Feat: Animação pulsante com ícone do Bot e spinner
+- Feat: Mensagem de subtexto "Processando sua instrução..."
+- Fix: `isLoading` agora permanece ativo até Claude responder
+- Fix: `instruction:received` não desativa mais o loading prematuramente
+- Feat: Novas traduções: thinkingSubtext, placeholder, pressEnter
 
 ### v0.0.51-alpha
 - Fix: **Volumes isolados por container** (corrige clone de repositórios)
