@@ -23,6 +23,7 @@ import {
 import { emitContainerCreationProgress } from './websocket.service';
 import { taskService } from './task.service';
 import { containerLifecycleService } from './container-lifecycle.service';
+import { getQueueStatus, getActiveQueues } from './claude-queue.service';
 import * as path from 'path';
 import * as os from 'os';
 
@@ -1153,6 +1154,18 @@ export class ContainerService {
           ? String(entity.config['taskId'])
           : undefined;
 
+        // Get queue length if queue exists for this container
+        let queueLength = 0;
+        const activeQueues = getActiveQueues();
+        if (activeQueues.includes(container.id) && container.status === 'running') {
+          try {
+            const queueStatus = await getQueueStatus(container.id);
+            queueLength = queueStatus.waiting + queueStatus.active;
+          } catch (error) {
+            logger.warn({ error, containerId: container.id }, 'Failed to get queue status');
+          }
+        }
+
         items.push({
           id: container.id,
           dockerId: container.dockerId,
@@ -1164,7 +1177,7 @@ export class ContainerService {
           metrics: simpleMetrics,
           limits,
           activeAgents: activeAgentsCount,
-          queueLength: 0,
+          queueLength,
           taskId,
         });
       }
@@ -1250,6 +1263,18 @@ export class ContainerService {
       ? String(entity.config['taskId'])
       : undefined;
 
+    // Get queue length if queue exists for this container
+    let queueLength = 0;
+    const activeQueues = getActiveQueues();
+    if (activeQueues.includes(container.id) && container.status === 'running') {
+      try {
+        const queueStatus = await getQueueStatus(container.id);
+        queueLength = queueStatus.waiting + queueStatus.active;
+      } catch (error) {
+        logger.warn({ error, containerId: container.id }, 'Failed to get queue status');
+      }
+    }
+
     return {
       id: container.id,
       dockerId: container.dockerId,
@@ -1261,7 +1286,7 @@ export class ContainerService {
       metrics: simpleMetrics,
       limits,
       activeAgents: activeAgentsCount,
-      queueLength: 0,
+      queueLength,
       taskId,
     };
   }

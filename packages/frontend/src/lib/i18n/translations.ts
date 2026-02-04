@@ -81,6 +81,14 @@ export const translations = {
       waiting: 'Aguardando',
       reconnecting: 'Reconectando',
       connecting: 'Conectando',
+      cancel: 'Cancelar',
+      // Container stopped dialog
+      containerStopped: 'Container Parado',
+      containerStoppedMessage: 'Este container está parado e precisa ser iniciado para acessar esta funcionalidade.',
+      askStartContainer: 'Deseja iniciar o container agora?',
+      startAndOpen: 'Iniciar e Abrir',
+      containerNotReady: 'Container Não Disponível',
+      containerNotReadyMessage: 'O container não está pronto. Aguarde a criação finalizar ou verifique se há erros.',
     },
 
     // Container Detail Page
@@ -520,6 +528,14 @@ export const translations = {
       waiting: 'Waiting',
       reconnecting: 'Reconnecting',
       connecting: 'Connecting',
+      cancel: 'Cancel',
+      // Container stopped dialog
+      containerStopped: 'Container Stopped',
+      containerStoppedMessage: 'This container is stopped and needs to be started to access this feature.',
+      askStartContainer: 'Do you want to start the container now?',
+      startAndOpen: 'Start and Open',
+      containerNotReady: 'Container Not Available',
+      containerNotReadyMessage: 'The container is not ready. Wait for creation to finish or check for errors.',
     },
 
     // Container Detail Page

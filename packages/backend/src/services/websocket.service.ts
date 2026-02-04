@@ -773,6 +773,21 @@ export const emitInstructionFailed = (data: InstructionEventData): void => {
 }
 
 /**
+ * Emit queue stats update (for real-time counters in container list)
+ */
+export const emitQueueStatsUpdate = (containerId: string, stats: {
+  queueLength: number
+  activeAgents?: number
+}): void => {
+  if (!io) return
+  // Emit to queue namespace so container cards and instruction queue get updates
+  const data = { containerId, ...stats }
+  io.of('/queue')
+    .to(`container:${containerId}`)
+    .emit('queue:stats', data)
+}
+
+/**
  * Emit container log line
  */
 export const emitContainerLog = (

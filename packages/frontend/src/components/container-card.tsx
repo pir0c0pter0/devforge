@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { io, Socket } from 'socket.io-client'
 import type { Container, Task } from '@/lib/types'
 import { apiClient } from '@/lib/api-client'
 import { useContainerStore } from '@/stores/container.store'
@@ -13,6 +14,8 @@ import type { ContainerStatusType } from '@/components/ui/status-indicator'
 import { useTaskWebSocket } from '@/hooks/use-task-websocket'
 import { useMetrics } from '@/hooks/use-metrics'
 import clsx from 'clsx'
+
+const WS_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 interface ContainerCardProps {
   container: Container
@@ -26,10 +29,54 @@ export function ContainerCard({ container }: ContainerCardProps) {
   const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null)
   const [isStarting, setIsStarting] = useState(false)
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
+  const [queueStats, setQueueStats] = useState({ queueLength: container.queueLength, activeAgents: container.activeAgents })
+  const queueSocketRef = useRef<Socket | null>(null)
   const { updateContainer, removeContainer, setError } = useContainerStore()
 
   // Subscribe to real-time metrics updates for this container
   useMetrics(container.status === 'running' ? container.id : undefined)
+
+  // Subscribe to queue stats updates
+  useEffect(() => {
+    if (container.status !== 'running') {
+      return
+    }
+
+    const socket = io(`${WS_URL}/queue`, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+    })
+    queueSocketRef.current = socket
+
+    socket.on('connect', () => {
+      socket.emit('subscribe:container', container.id)
+    })
+
+    socket.on('queue:stats', (data: { containerId: string; queueLength: number; activeAgents?: number }) => {
+      if (data.containerId === container.id) {
+        setQueueStats(prev => ({
+          queueLength: data.queueLength,
+          activeAgents: data.activeAgents ?? prev.activeAgents,
+        }))
+      }
+    })
+
+    // Also update on instruction events
+    socket.on('instruction:pending', () => setQueueStats(prev => ({ ...prev, queueLength: prev.queueLength + 1 })))
+    socket.on('instruction:completed', () => setQueueStats(prev => ({ ...prev, queueLength: Math.max(0, prev.queueLength - 1) })))
+    socket.on('instruction:failed', () => setQueueStats(prev => ({ ...prev, queueLength: Math.max(0, prev.queueLength - 1) })))
+
+    return () => {
+      socket.emit('unsubscribe:container', container.id)
+      socket.disconnect()
+      queueSocketRef.current = null
+    }
+  }, [container.id, container.status])
+
+  // Sync queueStats when container props change
+  useEffect(() => {
+    setQueueStats({ queueLength: container.queueLength, activeAgents: container.activeAgents })
+  }, [container.queueLength, container.activeAgents])
 
   // Handle task completion - refresh container data or remove if deleted
   const handleTaskComplete = useCallback(async (task: Task) => {
@@ -206,15 +253,64 @@ export function ContainerCard({ container }: ContainerCardProps) {
     }
   }
 
-  const handleOpenShell = () => {
-    router.push(`/containers/${container.id}?tab=terminal`)
+  // Helper to check if container is stopped and ask to start
+  const askToStartIfStopped = async (): Promise<boolean> => {
+    if (container.status === 'running') {
+      return true // Already running, proceed
+    }
+
+    if (container.status === 'stopped' || container.status === 'exited') {
+      const shouldStart = await modal.confirm({
+        title: t.container.containerStopped,
+        message: (
+          <p>
+            {t.container.containerStoppedMessage}
+            <br />
+            <span className="text-terminal-cyan text-sm mt-2 block">
+              {t.container.askStartContainer}
+            </span>
+          </p>
+        ),
+        type: 'warning',
+        confirmLabel: t.container.startAndOpen,
+        cancelLabel: t.container.cancel,
+      })
+
+      if (shouldStart) {
+        await handleStart()
+        // Wait a bit for container to start
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        return true
+      }
+      return false
+    }
+
+    // Container is in another state (creating, error, etc.)
+    modal.showWarning(
+      t.container.containerNotReady,
+      t.container.containerNotReadyMessage
+    )
+    return false
   }
 
-  const handleOpenInstructions = () => {
-    router.push(`/containers/${container.id}?tab=instructions`)
+  const handleOpenShell = async () => {
+    const canProceed = await askToStartIfStopped()
+    if (canProceed) {
+      router.push(`/containers/${container.id}?tab=terminal`)
+    }
+  }
+
+  const handleOpenInstructions = async () => {
+    const canProceed = await askToStartIfStopped()
+    if (canProceed) {
+      router.push(`/containers/${container.id}?tab=instructions`)
+    }
   }
 
   const handleOpenVSCode = async () => {
+    const canProceed = await askToStartIfStopped()
+    if (!canProceed) return
+
     const response = await apiClient.openVSCode(container.id)
     if (response.success && response.data?.url) {
       window.open(response.data.url, '_blank')
@@ -422,13 +518,13 @@ export function ContainerCard({ container }: ContainerCardProps) {
             <div>
               <span className="text-terminal-textMuted">{t.container.agents}:</span>
               <span className="ml-1 font-medium text-terminal-cyan">
-                {container.activeAgents}
+                {queueStats.activeAgents}
               </span>
             </div>
             <div>
               <span className="text-terminal-textMuted">{t.container.queue}:</span>
-              <span className="ml-1 font-medium text-terminal-yellow">
-                {container.queueLength}
+              <span className={clsx('ml-1 font-medium', queueStats.queueLength > 0 ? 'text-terminal-yellow' : 'text-terminal-textMuted')}>
+                {queueStats.queueLength}
               </span>
             </div>
           </div>
@@ -460,7 +556,7 @@ export function ContainerCard({ container }: ContainerCardProps) {
           <button
             onClick={handleOpenShell}
             className="btn-secondary text-sm py-1.5"
-            disabled={container.status !== 'running' || isDeleting}
+            disabled={isDeleting || container.status === 'creating'}
           >
             {t.container.shell}
           </button>
@@ -468,7 +564,7 @@ export function ContainerCard({ container }: ContainerCardProps) {
           <button
             onClick={handleOpenInstructions}
             className="btn-secondary text-sm py-1.5"
-            disabled={container.status !== 'running' || isDeleting}
+            disabled={isDeleting || container.status === 'creating'}
           >
             {t.container.instructions}
           </button>
@@ -477,7 +573,7 @@ export function ContainerCard({ container }: ContainerCardProps) {
             <button
               onClick={handleOpenVSCode}
               className="btn-secondary text-sm py-1.5"
-              disabled={container.status !== 'running' || isDeleting}
+              disabled={isDeleting || container.status === 'creating'}
             >
               {t.container.vscode}
             </button>

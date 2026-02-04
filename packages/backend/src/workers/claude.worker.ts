@@ -8,8 +8,9 @@ import {
   emitInstructionProgress,
   emitInstructionCompleted,
   emitInstructionFailed,
+  emitQueueStatsUpdate,
 } from '../services/websocket.service'
-import { moveToDeadLetterQueue } from '../services/claude-queue.service'
+import { moveToDeadLetterQueue, getQueueStatus } from '../services/claude-queue.service'
 import type { InstructionJobData, InstructionEventData } from '@claude-docker/shared'
 
 /**
@@ -186,12 +187,20 @@ export function getOrCreateWorker(containerId: string): Worker {
   )
 
   // Event handlers for worker lifecycle
-  worker.on('completed', (job) => {
+  worker.on('completed', async (job) => {
     logger.info({ jobId: job.id, containerId: job.data.containerId }, 'Job completed')
     workerEvents.emit('job:completed', { jobId: job.id, containerId: job.data.containerId })
+
+    // Emit updated queue stats
+    try {
+      const stats = await getQueueStatus(job.data.containerId)
+      emitQueueStatsUpdate(job.data.containerId, { queueLength: stats.waiting + stats.active })
+    } catch (error) {
+      logger.warn({ error, containerId: job.data.containerId }, 'Failed to emit queue stats after completion')
+    }
   })
 
-  worker.on('failed', (job, error) => {
+  worker.on('failed', async (job, error) => {
     if (job) {
       const maxAttempts = job.opts.attempts || 3
       const isLastAttempt = job.attemptsMade >= maxAttempts
@@ -213,6 +222,14 @@ export function getOrCreateWorker(containerId: string): Worker {
         maxAttempts,
         willRetry: !isLastAttempt,
       })
+
+      // Emit updated queue stats
+      try {
+        const stats = await getQueueStatus(job.data.containerId)
+        emitQueueStatsUpdate(job.data.containerId, { queueLength: stats.waiting + stats.active })
+      } catch (err) {
+        logger.warn({ err, containerId: job.data.containerId }, 'Failed to emit queue stats after failure')
+      }
     } else {
       logger.error({ error: error.message }, 'Job failed without job data')
     }

@@ -27,6 +27,18 @@ export interface ContainerStatusEventData {
 }
 
 /**
+ * Queue stats update data
+ */
+export interface QueueStatsEventData {
+  /** Container ID */
+  containerId: string
+  /** Number of jobs in queue (waiting + active) */
+  queueLength: number
+  /** Number of active agents (optional) */
+  activeAgents?: number
+}
+
+/**
  * Events sent from server to client
  */
 export interface ServerToClientEvents {
@@ -52,6 +64,8 @@ export interface ServerToClientEvents {
   log: (log: { timestamp: Date; message: string; stream: 'stdout' | 'stderr' }) => void
   /** Task event (created, updated, progress, completed, failed) */
   'task:event': (data: TaskEventPayload) => void
+  /** Queue stats update (agents, queue length) */
+  'queue:stats': (data: QueueStatsEventData) => void
 }
 
 /**

@@ -6,6 +6,7 @@ import { getRedisConnection } from '../utils/redis'
 import {
   emitInstructionPending,
   emitInstructionFailed,
+  emitQueueStatsUpdate,
 } from './websocket.service'
 import type { InstructionJobData, InstructionEventData } from '@claude-docker/shared'
 
@@ -196,6 +197,10 @@ export async function queueInstruction(
     createdAt: new Date(),
   }
   emitInstructionPending(pendingData)
+
+  // Emitir stats atualizados para o container card
+  const active = await queue.getActiveCount()
+  emitQueueStatsUpdate(validated, { queueLength: waiting + active })
 
   return {
     id: job.id!,

@@ -33,6 +33,7 @@ export type {
   MetricsEventData,
   InstructionEventData,
   ContainerStatusEventData,
+  QueueStatsEventData,
   ServerToClientEvents,
   ClientToServerEvents,
 } from './types/events.types'
