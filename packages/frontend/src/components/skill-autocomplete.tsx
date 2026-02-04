@@ -129,11 +129,11 @@ export function SkillAutocomplete({
         autoComplete="off"
       />
 
-      {/* Sugestões de skills */}
+      {/* Sugestões de skills - aparece para baixo */}
       {showSuggestions && filteredSkills.length > 0 && (
         <div
           ref={suggestionsRef}
-          className="absolute bottom-full left-0 right-0 mb-1 max-h-64 overflow-y-auto bg-terminal-bgLight border border-terminal-border rounded-lg shadow-lg z-50"
+          className="absolute top-full left-0 right-0 mt-1 max-h-64 overflow-y-auto bg-terminal-bgLight border border-terminal-border rounded-lg shadow-lg z-[100]"
         >
           {filteredSkills.map((skill, index) => {
             const category = SKILL_CATEGORIES[skill.category]

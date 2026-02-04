@@ -319,13 +319,14 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
   }
 
   return (
-    <div className="card">
-      <div className="p-6 border-b border-terminal-border">
+    <div className="card overflow-visible">
+      {/* Header com overflow visible para autocomplete aparecer para baixo */}
+      <div className="p-6 border-b border-terminal-border overflow-visible relative z-20">
         <h3 className="text-lg font-semibold text-terminal-text mb-4">
           {t.instructionQueue.title}
         </h3>
 
-        <form onSubmit={handleSubmit} className="flex gap-2">
+        <form onSubmit={handleSubmit} className="flex gap-2 relative">
           <SkillAutocomplete
             value={newInstruction}
             onChange={setNewInstruction}
@@ -343,7 +344,7 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
         )}
       </div>
 
-      <div className="divide-y divide-terminal-border max-h-[400px] overflow-y-auto">
+      <div className="divide-y divide-terminal-border max-h-[400px] overflow-y-auto relative z-10">
         {queue.length === 0 ? (
           <div className="p-6 text-center text-terminal-textMuted">
             {t.instructionQueue.empty}

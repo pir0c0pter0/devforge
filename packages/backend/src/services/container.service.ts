@@ -1490,29 +1490,62 @@ export class ContainerService {
   }
 
   /**
-   * Clone repository via SSH
+   * Clone repository via SSH (converts HTTPS to SSH for private repos)
    */
   private async cloneRepository(
     dockerId: string,
     repoUrl: string,
-    sshKeyPath?: string
+    _sshKeyPath?: string
   ): Promise<void> {
     try {
       logger.info({ dockerId, repoUrl }, 'Cloning repository');
 
-      // Configure git for SSH if SSH key is provided
-      if (sshKeyPath) {
-        await dockerService.executeCommand(
-          dockerId,
-          ['chmod', '600', '/root/.ssh/id_rsa'],
-          { user: 'root' }
-        );
+      // SSH keys are mounted in /home/developer/.ssh but clone runs as root
+      // Copy SSH config from developer to root for git operations
+      await dockerService.executeCommand(
+        dockerId,
+        ['sh', '-c', 'mkdir -p /root/.ssh && cp -r /home/developer/.ssh/* /root/.ssh/ 2>/dev/null || true'],
+        { user: 'root' }
+      );
 
-        await dockerService.executeCommand(
-          dockerId,
-          ['ssh-keyscan', '-H', 'github.com'],
-          { user: 'root' }
-        );
+      // Set correct permissions on SSH keys (required for SSH to work)
+      await dockerService.executeCommand(
+        dockerId,
+        ['sh', '-c', 'chmod 700 /root/.ssh && chmod 600 /root/.ssh/* 2>/dev/null || true'],
+        { user: 'root' }
+      );
+
+      // Add GitHub/GitLab/Bitbucket to known_hosts to avoid host verification prompts
+      await dockerService.executeCommand(
+        dockerId,
+        ['sh', '-c', 'ssh-keyscan -H github.com gitlab.com bitbucket.org >> /root/.ssh/known_hosts 2>/dev/null || true'],
+        { user: 'root' }
+      );
+
+      // Configure SSH to not prompt for unknown hosts
+      await dockerService.executeCommand(
+        dockerId,
+        ['sh', '-c', 'echo "StrictHostKeyChecking accept-new" >> /root/.ssh/config 2>/dev/null || true'],
+        { user: 'root' }
+      );
+
+      // Check if SSH keys exist in the container
+      const sshCheck = await dockerService.executeCommand(
+        dockerId,
+        ['sh', '-c', 'ls /root/.ssh/id_* 2>/dev/null | head -1'],
+        { user: 'root' }
+      );
+      const hasSshKeys = sshCheck.exitCode === 0 && sshCheck.stdout.trim() !== '';
+
+      // Convert HTTPS URL to SSH URL if we have SSH keys (required for private repos)
+      let cloneUrl = repoUrl;
+      if (hasSshKeys) {
+        // Convert https://github.com/user/repo to git@github.com:user/repo
+        const httpsMatch = repoUrl.match(/^https:\/\/(github|gitlab|bitbucket)\.(com|org)\/(.+?)(?:\.git)?$/);
+        if (httpsMatch) {
+          cloneUrl = `git@${httpsMatch[1]}.${httpsMatch[2]}:${httpsMatch[3]}.git`;
+          logger.info({ dockerId, originalUrl: repoUrl, sshUrl: cloneUrl }, 'Converted HTTPS URL to SSH for authentication');
+        }
       }
 
       // Clean workspace before cloning (remove any existing content)
@@ -1525,7 +1558,7 @@ export class ContainerService {
       // Clone repository directly into /workspace
       const result = await dockerService.executeCommand(
         dockerId,
-        ['git', 'clone', repoUrl, '.'],
+        ['git', 'clone', cloneUrl, '.'],
         { user: 'root', workingDir: '/workspace' }
       );
 
