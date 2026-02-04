@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { io, Socket } from 'socket.io-client'
 import { useClaudeChatStore } from '@/stores/claude-chat.store'
+import { apiClient } from '@/lib/api-client'
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
 
@@ -226,7 +227,7 @@ function parseClaudeEventToMessage(event: ClaudeEvent, messageId: string): Claud
  * Hook for managing WebSocket connection to the /claude-daemon namespace
  * for real-time Claude Code communication.
  *
- * Messages are persisted in Zustand store to survive tab switches.
+ * Messages are persisted in SQLite via backend and loaded on initialization.
  */
 export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemonReturn {
   const { containerId, onMessage, onStatusChange, onError } = options
@@ -234,11 +235,12 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
   const [isConnected, setIsConnected] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
 
-  // Use Zustand store for persistent state
+  // Use Zustand store for state management
   const {
     messagesByContainer,
     daemonStatusByContainer,
     addMessage,
+    setMessages,
     clearMessages: storeClearMessages,
     setDaemonStatus,
     getNextMessageId,
@@ -249,6 +251,7 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
   const daemonStatus = daemonStatusByContainer[containerId] || null
 
   const socketRef = useRef<Socket | null>(null)
+  const historyLoadedRef = useRef(false)
 
   // Store callbacks in refs to avoid recreating socket handlers
   const onMessageRef = useRef(onMessage)
@@ -260,6 +263,40 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
     onStatusChangeRef.current = onStatusChange
     onErrorRef.current = onError
   }, [onMessage, onStatusChange, onError])
+
+  // Load chat history from backend on mount
+  useEffect(() => {
+    if (!containerId || historyLoadedRef.current) return
+
+    const loadHistory = async () => {
+      try {
+        console.log('[ClaudeDaemon] Loading chat history for container:', containerId)
+        const response = await apiClient.getChatMessages(containerId, { limit: 500 })
+
+        if (response.success && response.data?.messages) {
+          const loadedMessages: ClaudeMessage[] = response.data.messages.map((msg) => ({
+            id: msg.id,
+            type: msg.type,
+            content: msg.content,
+            timestamp: new Date(msg.timestamp),
+            toolName: msg.toolName,
+            toolInput: msg.toolInput,
+          }))
+
+          if (loadedMessages.length > 0) {
+            console.log('[ClaudeDaemon] Loaded', loadedMessages.length, 'messages from history')
+            setMessages(containerId, loadedMessages)
+          }
+        }
+      } catch (error) {
+        console.error('[ClaudeDaemon] Failed to load chat history:', error)
+      } finally {
+        historyLoadedRef.current = true
+      }
+    }
+
+    loadHistory()
+  }, [containerId, setMessages])
 
   // Initialize WebSocket connection
   useEffect(() => {
@@ -316,6 +353,15 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
       if (message) {
         addMessage(containerId, message)
         onMessageRef.current?.(message)
+        // Save to backend asynchronously (fire and forget)
+        apiClient.saveChatMessage(containerId, {
+          id: message.id,
+          type: message.type,
+          content: message.content,
+          timestamp: message.timestamp.toISOString(),
+          toolName: message.toolName,
+          toolInput: message.toolInput,
+        }).catch((err) => console.error('[ClaudeDaemon] Failed to save message:', err))
       }
 
       // These events mean Claude has responded - stop loading indicator
@@ -383,6 +429,14 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
       addMessage(containerId, userMessage)
       onMessageRef.current?.(userMessage)
 
+      // Save user message to backend asynchronously
+      apiClient.saveChatMessage(containerId, {
+        id: userMessage.id,
+        type: userMessage.type,
+        content: userMessage.content,
+        timestamp: userMessage.timestamp.toISOString(),
+      }).catch((err) => console.error('[ClaudeDaemon] Failed to save user message:', err))
+
       socketRef.current.emit('instruction:send', {
         containerId,
         instruction,
@@ -415,9 +469,13 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
     socketRef.current.emit('daemon:stop', { containerId })
   }, [containerId])
 
-  // Clear all messages (from store)
+  // Clear all messages (from store and backend)
   const clearMessages = useCallback(() => {
     storeClearMessages(containerId)
+    // Clear from backend too
+    apiClient.clearChatMessages(containerId)
+      .then(() => console.log('[ClaudeDaemon] Messages cleared from backend'))
+      .catch((err) => console.error('[ClaudeDaemon] Failed to clear messages from backend:', err))
   }, [containerId, storeClearMessages])
 
   return {

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { claudeDaemonService } from '../../services/claude-daemon.service';
 import { claudeLogsService } from '../../services/claude-logs.service';
 import { containerService } from '../../services/container.service';
-import { containerRepository } from '../../repositories';
+import { containerRepository, claudeMessagesRepository } from '../../repositories';
 import {
   queueInstruction,
   getQueueStatus,
@@ -738,6 +738,213 @@ router.get(
       res.status(500).json(
         errorResponse(
           error instanceof Error ? error.message : 'Falha ao obter entrada de log',
+          500
+        )
+      );
+    }
+  }
+);
+
+// ============================================
+// Claude Messages (Chat History) Endpoints
+// ============================================
+
+/**
+ * Message body schema for saving messages
+ */
+const MessageBodySchema = z.object({
+  id: z.string().min(1, 'Message ID cannot be empty'),
+  type: z.enum(['user', 'assistant', 'tool_use', 'tool_result', 'system', 'error']),
+  content: z.string(),
+  toolName: z.string().optional(),
+  toolInput: z.unknown().optional(),
+  timestamp: z.string().datetime().optional(),
+});
+
+const MessageBatchSchema = z.object({
+  messages: z.array(MessageBodySchema),
+});
+
+/**
+ * GET /api/claude-daemon/:containerId/messages
+ * Get chat message history for a container
+ *
+ * Query params:
+ * - limit: number (default 500, max 1000)
+ * - since: ISO timestamp string (filter messages after this time)
+ */
+router.get(
+  '/:containerId/messages',
+  validateParams(ContainerIdParamsSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const containerId = req.params['containerId'] as string;
+      const limit = Math.min(parseInt(req.query['limit'] as string) || 500, 1000);
+      const since = req.query['since'] as string | undefined;
+
+      logger.debug({ containerId, limit, since }, 'Getting chat messages');
+
+      const { messages, total, hasMore } = claudeMessagesRepository.getContainerMessages(
+        containerId,
+        {
+          limit,
+          since: since ? new Date(since) : undefined,
+        }
+      );
+
+      // Convert to frontend format
+      const formattedMessages = messages.map((msg) => ({
+        id: msg.id,
+        type: msg.type,
+        content: msg.content,
+        timestamp: msg.timestamp.toISOString(),
+        toolName: msg.toolName,
+        toolInput: msg.toolInput,
+      }));
+
+      res.json(successResponse({
+        containerId,
+        messages: formattedMessages,
+        total,
+        hasMore,
+      }));
+    } catch (error) {
+      logger.error({ error, containerId: req.params['containerId'] }, 'Failed to get messages');
+
+      res.status(500).json(
+        errorResponse(
+          error instanceof Error ? error.message : 'Falha ao obter mensagens',
+          500
+        )
+      );
+    }
+  }
+);
+
+/**
+ * POST /api/claude-daemon/:containerId/messages
+ * Save a single chat message
+ */
+router.post(
+  '/:containerId/messages',
+  strictRateLimiter,
+  validateParams(ContainerIdParamsSchema),
+  validateBody(MessageBodySchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const containerId = req.params['containerId'] as string;
+      const messageData = req.body;
+
+      logger.debug({ containerId, messageId: messageData.id, type: messageData.type }, 'Saving chat message');
+
+      // Check if message already exists (avoid duplicates)
+      const existing = claudeMessagesRepository.findById(messageData.id);
+      if (existing) {
+        res.json(successResponse({ id: existing.id, saved: false, reason: 'already_exists' }));
+        return;
+      }
+
+      const message = claudeMessagesRepository.create({
+        id: messageData.id,
+        containerId,
+        type: messageData.type,
+        content: messageData.content,
+        toolName: messageData.toolName,
+        toolInput: messageData.toolInput,
+        timestamp: messageData.timestamp ? new Date(messageData.timestamp) : undefined,
+      });
+
+      // Enforce max messages per container
+      claudeMessagesRepository.enforceMaxMessagesPerContainer(containerId);
+
+      logger.info({ containerId, messageId: message.id }, 'Chat message saved');
+
+      res.status(201).json(successResponse({ id: message.id, saved: true }));
+    } catch (error) {
+      logger.error({ error, containerId: req.params['containerId'] }, 'Failed to save message');
+
+      res.status(500).json(
+        errorResponse(
+          error instanceof Error ? error.message : 'Falha ao salvar mensagem',
+          500
+        )
+      );
+    }
+  }
+);
+
+/**
+ * POST /api/claude-daemon/:containerId/messages/batch
+ * Save multiple chat messages at once
+ */
+router.post(
+  '/:containerId/messages/batch',
+  strictRateLimiter,
+  validateParams(ContainerIdParamsSchema),
+  validateBody(MessageBatchSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const containerId = req.params['containerId'] as string;
+      const { messages } = req.body;
+
+      logger.debug({ containerId, count: messages.length }, 'Saving chat messages batch');
+
+      const messagesToCreate = messages.map((msg: z.infer<typeof MessageBodySchema>) => ({
+        id: msg.id,
+        containerId,
+        type: msg.type,
+        content: msg.content,
+        toolName: msg.toolName,
+        toolInput: msg.toolInput,
+        timestamp: msg.timestamp ? new Date(msg.timestamp) : undefined,
+      }));
+
+      const savedCount = claudeMessagesRepository.createBatch(messagesToCreate);
+
+      // Enforce max messages per container
+      claudeMessagesRepository.enforceMaxMessagesPerContainer(containerId);
+
+      logger.info({ containerId, savedCount }, 'Chat messages batch saved');
+
+      res.status(201).json(successResponse({ savedCount }));
+    } catch (error) {
+      logger.error({ error, containerId: req.params['containerId'] }, 'Failed to save messages batch');
+
+      res.status(500).json(
+        errorResponse(
+          error instanceof Error ? error.message : 'Falha ao salvar mensagens',
+          500
+        )
+      );
+    }
+  }
+);
+
+/**
+ * DELETE /api/claude-daemon/:containerId/messages
+ * Clear all chat messages for a container
+ */
+router.delete(
+  '/:containerId/messages',
+  strictRateLimiter,
+  validateParams(ContainerIdParamsSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const containerId = req.params['containerId'] as string;
+
+      logger.info({ containerId }, 'Clearing chat messages');
+
+      const count = claudeMessagesRepository.deleteByContainerId(containerId);
+
+      logger.info({ containerId, count }, 'Chat messages cleared');
+
+      res.json(successResponse({ containerId, clearedCount: count }, `Mensagens limpas. ${count} entradas removidas.`));
+    } catch (error) {
+      logger.error({ error, containerId: req.params['containerId'] }, 'Failed to clear messages');
+
+      res.status(500).json(
+        errorResponse(
+          error instanceof Error ? error.message : 'Falha ao limpar mensagens',
           500
         )
       );

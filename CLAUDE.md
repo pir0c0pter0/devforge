@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções
 
-## Versão Atual: 0.0.66-alpha
+## Versão Atual: 0.0.85-alpha
 
 ## Estrutura do Projeto
 
@@ -878,6 +878,17 @@ ALLOWED_ORIGINS=https://myapp.com,https://api.myapp.com
 ```
 
 ## Histórico de Versões
+
+### v0.0.85-alpha
+- Feat: **Histórico de chat Claude persistente no SQLite**
+- Feat: Nova tabela `claude_messages` no banco de dados
+- Feat: Mensagens do chat sobrevivem ao refresh (F5) do navegador
+- Feat: Carregamento automático do histórico ao abrir o chat
+- Feat: Salvamento assíncrono de cada mensagem no backend
+- Feat: Endpoints REST para histórico: GET/POST/DELETE `/api/claude-daemon/:id/messages`
+- Feat: Suporte a batch save de mensagens
+- Feat: Limite de 1000 mensagens por container (auto cleanup)
+- Feat: Retenção de 7 dias para mensagens antigas
 
 ### v0.0.66-alpha
 - Feat: **Logs incrementais e botões de ação na fila de instruções**

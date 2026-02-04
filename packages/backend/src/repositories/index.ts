@@ -89,3 +89,13 @@ export {
   type CreateClaudeLogDto,
   type ClaudeLogFilters,
 } from './claude-logs.repository';
+
+// Claude messages repository
+export {
+  ClaudeMessagesRepository,
+  claudeMessagesRepository,
+  type ClaudeMessageEntity,
+  type CreateClaudeMessageDto,
+  type ClaudeMessageFilters,
+  type ClaudeMessageType,
+} from './claude-messages.repository';

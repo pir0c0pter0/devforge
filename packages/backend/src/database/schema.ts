@@ -153,6 +153,22 @@ export const CLAUDE_LOGS_TABLE = `
 `;
 
 /**
+ * Claude messages table - persistent storage for Claude chat history
+ */
+export const CLAUDE_MESSAGES_TABLE = `
+  CREATE TABLE IF NOT EXISTS claude_messages (
+    id TEXT PRIMARY KEY,
+    container_id TEXT NOT NULL,
+    type TEXT NOT NULL CHECK (type IN ('user', 'assistant', 'tool_use', 'tool_result', 'system', 'error')),
+    content TEXT NOT NULL,
+    tool_name TEXT,
+    tool_input JSON,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (container_id) REFERENCES containers(id) ON DELETE CASCADE
+  )
+`;
+
+/**
  * All table creation statements in order (respecting foreign keys)
  */
 export const ALL_TABLES = [
@@ -164,6 +180,7 @@ export const ALL_TABLES = [
   { name: 'container_logs', sql: CONTAINER_LOGS_TABLE },
   { name: 'usage_tracking', sql: USAGE_TRACKING_TABLE },
   { name: 'claude_logs', sql: CLAUDE_LOGS_TABLE },
+  { name: 'claude_messages', sql: CLAUDE_MESSAGES_TABLE },
 ];
 
 /**
@@ -212,6 +229,12 @@ export const INDEXES = [
   'CREATE INDEX IF NOT EXISTS idx_claude_logs_type ON claude_logs(type)',
   'CREATE INDEX IF NOT EXISTS idx_claude_logs_recorded_at ON claude_logs(recorded_at)',
   'CREATE INDEX IF NOT EXISTS idx_claude_logs_container_recorded ON claude_logs(container_id, recorded_at DESC)',
+
+  // Claude messages indexes
+  'CREATE INDEX IF NOT EXISTS idx_claude_messages_container_id ON claude_messages(container_id)',
+  'CREATE INDEX IF NOT EXISTS idx_claude_messages_type ON claude_messages(type)',
+  'CREATE INDEX IF NOT EXISTS idx_claude_messages_created_at ON claude_messages(created_at)',
+  'CREATE INDEX IF NOT EXISTS idx_claude_messages_container_created ON claude_messages(container_id, created_at ASC)',
 ];
 
 /**

@@ -252,6 +252,61 @@ class ApiClient {
   }>> {
     return this.request(`/api/containers/${id}/usage`)
   }
+
+  // Claude Chat Messages (History)
+  async getChatMessages(containerId: string, options?: { limit?: number; since?: string }): Promise<ApiResponse<{
+    containerId: string
+    messages: Array<{
+      id: string
+      type: 'user' | 'assistant' | 'tool_use' | 'tool_result' | 'system' | 'error'
+      content: string
+      timestamp: string
+      toolName?: string
+      toolInput?: unknown
+    }>
+    total: number
+    hasMore: boolean
+  }>> {
+    const params = new URLSearchParams()
+    if (options?.limit) params.set('limit', options.limit.toString())
+    if (options?.since) params.set('since', options.since)
+    const query = params.toString()
+    return this.request(`/api/claude-daemon/${containerId}/messages${query ? `?${query}` : ''}`)
+  }
+
+  async saveChatMessage(containerId: string, message: {
+    id: string
+    type: 'user' | 'assistant' | 'tool_use' | 'tool_result' | 'system' | 'error'
+    content: string
+    timestamp?: string
+    toolName?: string
+    toolInput?: unknown
+  }): Promise<ApiResponse<{ id: string; saved: boolean }>> {
+    return this.request(`/api/claude-daemon/${containerId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify(message),
+    })
+  }
+
+  async saveChatMessagesBatch(containerId: string, messages: Array<{
+    id: string
+    type: 'user' | 'assistant' | 'tool_use' | 'tool_result' | 'system' | 'error'
+    content: string
+    timestamp?: string
+    toolName?: string
+    toolInput?: unknown
+  }>): Promise<ApiResponse<{ savedCount: number }>> {
+    return this.request(`/api/claude-daemon/${containerId}/messages/batch`, {
+      method: 'POST',
+      body: JSON.stringify({ messages }),
+    })
+  }
+
+  async clearChatMessages(containerId: string): Promise<ApiResponse<{ clearedCount: number }>> {
+    return this.request(`/api/claude-daemon/${containerId}/messages`, {
+      method: 'DELETE',
+    })
+  }
 }
 
 export const apiClient = new ApiClient()
