@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { validateInstructionContent } from './instruction.validator'
 
 // Container ID deve ser UUID ou docker container ID (hex 12-64 chars)
 export const containerIdSchema = z.string()
@@ -9,8 +10,12 @@ export const containerIdSchema = z.string()
 // Instruction não pode ter caracteres de controle perigosos
 export const instructionSchema = z.string()
   .min(1, 'Instruction cannot be empty')
-  .max(10000, 'Instruction too long')
+  .max(10240, 'Instruction too long (max 10KB)')
   .transform(s => s.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '')) // Remove control chars exceto \n \r \t
+  .refine(
+    (instruction) => validateInstructionContent(instruction).valid,
+    { message: 'Instruction contains dangerous patterns' }
+  )
 
 export const sendInstructionSchema = z.object({
   containerId: containerIdSchema,

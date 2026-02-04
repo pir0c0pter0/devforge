@@ -9,7 +9,7 @@ let redisClient: Redis | null = null
  */
 export const getRedisConnection = (): Redis => {
   if (!redisClient) {
-    redisClient = new Redis(config.redisUrl, {
+    const options = {
       maxRetriesPerRequest: 3,
       retryStrategy: (times: number) => {
         const delay = Math.min(times * 50, 2000)
@@ -25,7 +25,10 @@ export const getRedisConnection = (): Redis => {
       },
       enableReadyCheck: true,
       lazyConnect: false,
-    })
+      ...(config.redisPassword && { password: config.redisPassword }),
+    }
+
+    redisClient = new Redis(config.redisUrl, options)
 
     redisClient.on('connect', () => {
       console.info('[Redis] Connection established')

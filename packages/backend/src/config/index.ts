@@ -27,6 +27,7 @@ const configSchema = z.object({
   nodeEnv: z.enum(['development', 'production', 'test']).default('development'),
   port: z.coerce.number().int().min(1).max(65535).default(3000),
   redisUrl: z.string().url().default('redis://localhost:6379'),
+  redisPassword: z.string().optional(),
   logLevel: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
   allowedOrigins: z.array(z.string()).default(DEFAULT_ALLOWED_ORIGINS),
   jobTimeout: z.coerce.number().int().positive().default(300000), // 5 minutes
@@ -48,6 +49,7 @@ const loadConfig = (): Config => {
     nodeEnv: process.env['NODE_ENV'],
     port: process.env['PORT'],
     redisUrl: process.env['REDIS_URL'],
+    redisPassword: process.env['REDIS_PASSWORD'],
     logLevel: process.env['LOG_LEVEL'],
     allowedOrigins: parseAllowedOrigins(process.env['ALLOWED_ORIGINS']),
     jobTimeout: process.env['JOB_TIMEOUT'],
@@ -104,6 +106,7 @@ const initializeConfig = (): Config => {
   console.info(`[Config] Environment: ${cfg.nodeEnv}`)
   console.info(`[Config] Port: ${cfg.port}`)
   console.info(`[Config] Redis URL: ${cfg.redisUrl}`)
+  console.info(`[Config] Redis Auth: ${cfg.redisPassword ? 'enabled' : 'disabled'}`)
   console.info(`[Config] Log Level: ${cfg.logLevel}`)
   console.info(`[Config] Allowed Origins: ${cfg.allowedOrigins.join(', ')}`)
 
