@@ -436,15 +436,17 @@ export async function getJobHistory(
   const queue = getQueue(validated)
 
   // Buscar jobs de todos os estados
-  const [waiting, active, completed, failed, delayed] = await Promise.all([
+  // IMPORTANTE: 'prioritized' é usado quando jobs têm priority definida
+  const [waiting, prioritized, active, completed, failed, delayed] = await Promise.all([
     queue.getJobs(['waiting'], 0, limit),
+    queue.getJobs(['prioritized'], 0, limit),
     queue.getJobs(['active'], 0, limit),
     queue.getJobs(['completed'], 0, limit),
     queue.getJobs(['failed'], 0, limit),
     queue.getJobs(['delayed'], 0, limit),
   ])
 
-  const allJobs = [...waiting, ...active, ...completed, ...failed, ...delayed]
+  const allJobs = [...waiting, ...prioritized, ...active, ...completed, ...failed, ...delayed]
 
   // Ordenar por timestamp descendente (mais recentes primeiro)
   allJobs.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))

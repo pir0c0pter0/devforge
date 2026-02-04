@@ -372,10 +372,14 @@ class ClaudeDaemonService extends EventEmitter {
         let stdoutBuffer = ''
         let stderrBuffer = ''
 
+        // Track if process was killed by timeout
+        let killedByTimeout = false
+
         // Hard timeout watchdog - kill process if it runs too long
         const timeoutId = setTimeout(() => {
           if (childProcess && !childProcess.killed) {
             logger.warn({ containerId, timeout: PROCESS_HARD_TIMEOUT }, 'Process exceeded hard timeout, killing...')
+            killedByTimeout = true
             childProcess.kill('SIGKILL')
 
             // Log timeout
@@ -490,6 +494,20 @@ class ClaudeDaemonService extends EventEmitter {
           session.currentProcess = undefined
           session.state.instructionCount++
           session.state.lastActivity = new Date()
+
+          // If killed by timeout, reject with timeout error
+          if (killedByTimeout) {
+            logger.error({ containerId, duration }, 'Instruction killed by timeout')
+            reject(new Error(`Timeout: processo excedeu ${PROCESS_HARD_TIMEOUT / 1000}s e foi encerrado`))
+            return
+          }
+
+          // If exit code is non-zero (and not killed by timeout), still reject
+          if (exitCode !== 0) {
+            logger.error({ containerId, exitCode, signal, duration }, 'Instruction failed with non-zero exit code')
+            reject(new Error(`Processo falhou com exit code ${exitCode}${signal ? ` (signal: ${signal})` : ''}`))
+            return
+          }
 
           logger.info({ containerId, exitCode }, 'Instruction fully completed (including background agents)')
 
