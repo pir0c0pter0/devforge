@@ -250,44 +250,74 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
     return `${(ms / 60000).toFixed(1)}min`
   }
 
-  // Parse Claude stream-json output to extract the actual response
-  const parseClaudeOutput = (stdout: string): { text: string; cost?: string; duration?: string } | null => {
+  // Parse Claude stream-json output to extract the complete response
+  // Claude Code outputs multiple JSON events: assistant, tool_use, tool_result, result
+  // We need to collect all relevant pieces for a complete picture
+  const parseClaudeOutput = (stdout: string): { text: string; cost?: string; duration?: string; toolsUsed?: string[] } | null => {
     if (!stdout) return null
 
     try {
       const lines = stdout.split('\n').filter(l => l.trim())
-      let resultText = ''
+      const assistantMessages: string[] = []
+      const toolResults: { name: string; result: string }[] = []
+      let finalResult = ''
       let cost = ''
       let duration = ''
+      const toolsUsed: string[] = []
 
       for (const line of lines) {
         try {
           const parsed = JSON.parse(line)
 
-          // Extract result text
-          if (parsed.type === 'result' && parsed.result) {
-            resultText = parsed.result
-          }
-
-          // Extract assistant message
+          // Extract assistant messages (may have multiple)
           if (parsed.type === 'assistant' && parsed.message?.content) {
             const content = parsed.message.content
             if (Array.isArray(content)) {
               for (const item of content) {
-                if (item.type === 'text') {
-                  resultText = item.text
+                if (item.type === 'text' && item.text?.trim()) {
+                  assistantMessages.push(item.text)
                 }
               }
-            } else if (typeof content === 'string') {
-              resultText = content
+            } else if (typeof content === 'string' && content.trim()) {
+              assistantMessages.push(content)
             }
           }
 
-          // Extract cost info
-          if (parsed.total_cost_usd) {
+          // Track tool usage
+          if (parsed.type === 'tool_use' && parsed.name) {
+            if (!toolsUsed.includes(parsed.name)) {
+              toolsUsed.push(parsed.name)
+            }
+          }
+
+          // Extract tool results (useful for seeing what was read/analyzed)
+          if (parsed.type === 'tool_result' && parsed.content) {
+            const toolName = parsed.tool_use_id || 'tool'
+            let resultContent = ''
+            if (Array.isArray(parsed.content)) {
+              for (const item of parsed.content) {
+                if (item.type === 'text') {
+                  resultContent += item.text
+                }
+              }
+            } else if (typeof parsed.content === 'string') {
+              resultContent = parsed.content
+            }
+            if (resultContent.trim()) {
+              toolResults.push({ name: toolName, result: resultContent.substring(0, 500) })
+            }
+          }
+
+          // Extract final result (summary from Claude)
+          if (parsed.type === 'result' && parsed.result) {
+            finalResult = parsed.result
+          }
+
+          // Extract cost info (usually in the last event)
+          if (parsed.total_cost_usd !== undefined) {
             cost = `$${parsed.total_cost_usd.toFixed(4)}`
           }
-          if (parsed.duration_ms) {
+          if (parsed.duration_ms !== undefined) {
             duration = formatDuration(parsed.duration_ms)
           }
         } catch {
@@ -295,8 +325,48 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
         }
       }
 
-      if (resultText) {
-        return { text: resultText, cost, duration }
+      // Build complete response
+      // Priority: final result > assistant messages concatenated
+      let completeText = ''
+
+      // If there's a final result, use it as the main answer
+      if (finalResult) {
+        completeText = finalResult
+      }
+
+      // If assistant messages provide more context, include them
+      // Filter out very short or duplicate messages
+      const uniqueMessages = assistantMessages.filter((msg, index, arr) => {
+        const trimmed = msg.trim()
+        // Skip very short messages that are likely just acknowledgments
+        if (trimmed.length < 20) return false
+        // Skip if it's a substring of another message
+        return !arr.some((other, otherIndex) =>
+          otherIndex !== index && other.includes(trimmed)
+        )
+      })
+
+      // If no final result but we have assistant messages, use them
+      if (!completeText && uniqueMessages.length > 0) {
+        completeText = uniqueMessages.join('\n\n---\n\n')
+      }
+
+      // If final result is short but we have substantial assistant content, combine them
+      if (finalResult && uniqueMessages.length > 0 && finalResult.length < 200) {
+        // Check if assistant messages add value
+        const combinedAssistant = uniqueMessages.join('\n\n')
+        if (combinedAssistant.length > finalResult.length * 2) {
+          completeText = combinedAssistant + '\n\n---\n\n**Resumo:** ' + finalResult
+        }
+      }
+
+      if (completeText) {
+        return {
+          text: completeText,
+          cost,
+          duration,
+          toolsUsed: toolsUsed.length > 0 ? toolsUsed : undefined
+        }
       }
     } catch {
       // Parse failed
@@ -425,7 +495,19 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
                             if (parsed) {
                               return (
                                 <div className="mb-2">
-                                  <div className="text-sm text-terminal-text bg-terminal-bg p-3 rounded overflow-x-auto whitespace-pre-wrap max-h-60 overflow-y-auto">
+                                  {/* Tools used indicator */}
+                                  {parsed.toolsUsed && parsed.toolsUsed.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mb-2">
+                                      <span className="text-xs text-terminal-textMuted">Ferramentas:</span>
+                                      {parsed.toolsUsed.map((tool, idx) => (
+                                        <span key={idx} className="badge badge-gray text-xs">
+                                          {tool}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {/* Main response */}
+                                  <div className="text-sm text-terminal-text bg-terminal-bg p-3 rounded overflow-x-auto whitespace-pre-wrap max-h-[500px] overflow-y-auto">
                                     {parsed.text}
                                   </div>
                                   {(parsed.cost || parsed.duration) && (
