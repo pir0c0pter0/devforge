@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções
 
-## Versão Atual: 0.0.39-alpha
+## Versão Atual: 0.0.50-alpha
 
 ## Estrutura do Projeto
 
@@ -67,6 +67,18 @@ claude-docker/
 - `POST /api/settings/open-claude-auth` - Instruções de autenticação
 - `POST /api/settings/logout-claude` - Logout do Claude
 - `POST /api/settings/generate-ssh-key` - Gerar chave SSH
+
+### Fila de Instruções (Claude Daemon)
+- `GET /api/claude-daemon/:containerId/queue` - Status da fila
+- `GET /api/claude-daemon/:containerId/queue/history` - Histórico de jobs
+- `GET /api/claude-daemon/:containerId/queue/dlq` - Dead Letter Queue
+- `GET /api/claude-daemon/:containerId/queue/jobs/:jobId` - Detalhes do job
+- `POST /api/claude-daemon/:containerId/queue/jobs/:jobId/cancel` - Cancelar job
+- `POST /api/claude-daemon/:containerId/queue/jobs/:jobId/retry` - Retentar job
+- `DELETE /api/claude-daemon/:containerId/queue` - Limpar fila
+- `POST /api/claude-daemon/:containerId/queue/pause` - Pausar fila
+- `POST /api/claude-daemon/:containerId/queue/resume` - Resumir fila
+- `POST /api/claude-daemon/:containerId/instruction` - Adicionar instrução
 
 ## Git Workflow (OBRIGATÓRIO)
 
@@ -670,6 +682,75 @@ taskService.setProgress(taskId, 30, 'Starting container...');
 Tasks são automaticamente limpas após 1 hora pelo `TaskService`.
 Não é necessário implementar timeout manual.
 
+## Sistema de Internacionalização (i18n) (v0.0.50+)
+
+### Arquitetura
+
+O sistema de tradução usa React Context para gerenciar o idioma:
+
+```
+translations.ts → I18nProvider → useI18n() hook → Componentes
+```
+
+### Arquivos
+
+| Arquivo | Propósito |
+|---------|-----------|
+| `frontend/src/lib/i18n/translations.ts` | Todas as traduções PT-BR e EN |
+| `frontend/src/lib/i18n/context.tsx` | Provider e hook useI18n |
+| `frontend/src/lib/i18n/index.ts` | Exports |
+
+### Uso em Componentes
+
+```typescript
+import { useI18n } from '@/lib/i18n'
+
+function MeuComponente() {
+  const { t, language, setLanguage } = useI18n()
+
+  return (
+    <div>
+      <h1>{t.containerDetail.tabs.overview}</h1>
+      <button onClick={() => setLanguage('en')}>
+        {t.settings.language.english}
+      </button>
+    </div>
+  )
+}
+```
+
+### Estrutura das Traduções
+
+```typescript
+const translations = {
+  'pt-BR': {
+    nav: { dashboard: 'Painel', ... },
+    container: { start: 'Iniciar', stop: 'Parar', ... },
+    containerDetail: {
+      tabs: { overview: 'Visão Geral', metrics: 'Métricas', ... },
+      ...
+    },
+    ...
+  },
+  'en': {
+    nav: { dashboard: 'Dashboard', ... },
+    container: { start: 'Start', stop: 'Stop', ... },
+    ...
+  }
+}
+```
+
+### Idiomas Suportados
+
+- **pt-BR**: Português (Brasil) - padrão
+- **en**: English
+
+### Adicionando Novas Traduções
+
+1. Adicionar chave em `translations['pt-BR']`
+2. Adicionar mesma chave em `translations['en']`
+3. Usar no componente: `t.minhaSecao.minhaChave`
+
 ## Rate Limiting (v0.0.24+)
 
 Três níveis de rate limiting configuráveis via env:
@@ -698,6 +779,58 @@ ALLOWED_ORIGINS=https://myapp.com,https://api.myapp.com
 ```
 
 ## Histórico de Versões
+
+### v0.0.50-alpha
+- Feat: **Sistema completo de traduções i18n**
+- Feat: Traduções para sidebar (nav, signOut, manager)
+- Feat: Traduções para container detail page (tabs, labels, buttons)
+- Feat: Traduções para claude chat
+- Feat: Traduções para templates page
+- Feat: Atualizar sidebar.tsx para usar traduções
+- Feat: Container detail page reescrita com todas as traduções
+- Feat: Todos os textos agora suportam PT-BR e EN
+
+### v0.0.49-alpha
+- Fix: **Redis maxRetriesPerRequest null para BullMQ**
+- Fix: Configuração Redis incompatível com BullMQ corrigida
+- Fix: HTTP 500 na fila de instruções resolvido
+
+### v0.0.48-alpha
+- Fix: **Endpoint da fila de instruções corrigido**
+- Fix: `/api/containers/:id/queue` → `/api/claude-daemon/:id/queue/history`
+- Feat: Novos métodos API: getQueueStatus, cancelJob, retryJob
+- Feat: Tipos QueueItem atualizados para compatibilidade com backend
+- Feat: Traduções pt-BR e en para fila de instruções
+- Feat: Status: waiting, active, completed, failed, delayed, dead-letter
+
+### v0.0.47-alpha
+- Feat: **Sistema de fila de comandos BullMQ consolidado**
+- Feat: WebSocket events para ciclo de vida de instruções
+- Feat: Dead Letter Queue para jobs que falharam
+- Fix: HTTP 404 em `/api/queue` resolvido (consolidação de sistemas duplicados)
+- Feat: Novos endpoints: history, dlq, cancel, retry, pause, resume
+- Refactor: Removido código duplicado (~827 linhas)
+
+### v0.0.46-alpha
+- Fix: Melhorias de estabilidade no sistema de filas
+
+### v0.0.45-alpha
+- Fix: Correções de bugs menores
+
+### v0.0.44-alpha
+- Fix: Ajustes de interface
+
+### v0.0.43-alpha
+- Fix: Correções de compatibilidade
+
+### v0.0.42-alpha
+- Fix: **Tema escuro completo em todo o frontend**
+
+### v0.0.41-alpha
+- Fix: Input e sub-tabs do chat para tema escuro
+
+### v0.0.40-alpha
+- Fix: Cores do chat Claude Code para tema escuro
 
 ### v0.0.39-alpha
 - Fix: **Working directory padronizado para `/workspace`** em todos os serviços
