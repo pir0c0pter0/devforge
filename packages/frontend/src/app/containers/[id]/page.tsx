@@ -665,8 +665,8 @@ export default function ContainerDetailPage() {
                   className={clsx(
                     'flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors border-b-2',
                     terminalSubTab === 'shell'
-                      ? 'border-terminal-cyan text-terminal-cyan bg-terminal-surface'
-                      : 'border-transparent text-terminal-textMuted hover:text-terminal-text hover:bg-terminal-surface/50'
+                      ? 'border-terminal-cyan text-terminal-cyan bg-terminal-bgLight'
+                      : 'border-transparent text-terminal-textMuted hover:text-terminal-text hover:bg-terminal-bgLight/50'
                   )}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -679,8 +679,8 @@ export default function ContainerDetailPage() {
                   className={clsx(
                     'flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors border-b-2',
                     terminalSubTab === 'claude'
-                      ? 'border-terminal-cyan text-terminal-cyan bg-terminal-surface'
-                      : 'border-transparent text-terminal-textMuted hover:text-terminal-text hover:bg-terminal-surface/50'
+                      ? 'border-terminal-cyan text-terminal-cyan bg-terminal-bgLight'
+                      : 'border-transparent text-terminal-textMuted hover:text-terminal-text hover:bg-terminal-bgLight/50'
                   )}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

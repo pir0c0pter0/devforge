@@ -75,7 +75,7 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
   const canSend = isDaemonRunning && !isLoading && inputValue.trim().length > 0
 
   return (
-    <div className="flex flex-col h-full bg-terminal-surface rounded-lg border border-terminal-border overflow-hidden">
+    <div className="flex flex-col h-full bg-terminal-bg rounded-lg border border-terminal-border overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-terminal-border bg-terminal-bg">
         <div className="flex items-center gap-3">
@@ -177,7 +177,7 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
               placeholder={isDaemonRunning ? 'Digite sua instrucao...' : 'Inicie o Claude Code primeiro'}
               className={clsx(
                 'w-full px-3 py-2 rounded-lg border resize-none',
-                'bg-terminal-surface text-terminal-text placeholder-terminal-textMuted',
+                'bg-terminal-bgLight text-terminal-text placeholder-terminal-textMuted',
                 'focus:outline-none focus:ring-2 focus:ring-terminal-cyan focus:border-transparent',
                 'disabled:opacity-50 disabled:cursor-not-allowed',
                 isDaemonRunning
