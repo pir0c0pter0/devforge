@@ -1,12 +1,15 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { io, Socket } from 'socket.io-client'
 import { apiClient } from '@/lib/api-client'
 import type { QueueItem, QueueItemStatus, JobDetails } from '@/lib/types'
 import { AnimatedDots } from '@/components/ui/animated-dots'
 import { useI18n } from '@/lib/i18n'
 import clsx from 'clsx'
 import { ChevronDown, ChevronUp } from 'lucide-react'
+
+const WS_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 interface InstructionQueueProps {
   containerId: string
@@ -21,9 +24,9 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedJob, setSelectedJob] = useState<JobDetails | null>(null)
   const [isLoadingDetails, setIsLoadingDetails] = useState(false)
+  const socketRef = useRef<Socket | null>(null)
 
-  const fetchQueue = async () => {
-    setIsLoading(true)
+  const fetchQueue = useCallback(async () => {
     setError(null)
 
     const response = await apiClient.getQueue(containerId)
@@ -35,11 +38,61 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
     }
 
     setIsLoading(false)
-  }
+  }, [containerId, t.instructionQueue.failedFetch])
 
+  // WebSocket subscription for real-time updates
   useEffect(() => {
+    // Connect to /queue namespace
+    const socket = io(`${WS_URL}/queue`, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+    })
+    socketRef.current = socket
+
+    socket.on('connect', () => {
+      console.log('[InstructionQueue] Connected to /queue WebSocket')
+      // Subscribe to this container's events
+      socket.emit('subscribe:container', containerId)
+    })
+
+    // Listen for instruction events and refetch queue
+    socket.on('instruction:pending', () => {
+      console.log('[InstructionQueue] Instruction pending, refreshing...')
+      fetchQueue()
+    })
+
+    socket.on('instruction:started', () => {
+      console.log('[InstructionQueue] Instruction started, refreshing...')
+      fetchQueue()
+    })
+
+    socket.on('instruction:completed', () => {
+      console.log('[InstructionQueue] Instruction completed, refreshing...')
+      fetchQueue()
+    })
+
+    socket.on('instruction:failed', () => {
+      console.log('[InstructionQueue] Instruction failed, refreshing...')
+      fetchQueue()
+    })
+
+    socket.on('instruction:progress', () => {
+      // Progress updates - could update UI but for now just log
+      console.log('[InstructionQueue] Instruction progress...')
+    })
+
+    return () => {
+      socket.emit('unsubscribe:container', containerId)
+      socket.disconnect()
+      socketRef.current = null
+    }
+  }, [containerId, fetchQueue])
+
+  // Initial fetch
+  useEffect(() => {
+    setIsLoading(true)
     fetchQueue()
-  }, [containerId])
+  }, [fetchQueue])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -196,6 +249,61 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
     return `${(ms / 60000).toFixed(1)}min`
   }
 
+  // Parse Claude stream-json output to extract the actual response
+  const parseClaudeOutput = (stdout: string): { text: string; cost?: string; duration?: string } | null => {
+    if (!stdout) return null
+
+    try {
+      const lines = stdout.split('\n').filter(l => l.trim())
+      let resultText = ''
+      let cost = ''
+      let duration = ''
+
+      for (const line of lines) {
+        try {
+          const parsed = JSON.parse(line)
+
+          // Extract result text
+          if (parsed.type === 'result' && parsed.result) {
+            resultText = parsed.result
+          }
+
+          // Extract assistant message
+          if (parsed.type === 'assistant' && parsed.message?.content) {
+            const content = parsed.message.content
+            if (Array.isArray(content)) {
+              for (const item of content) {
+                if (item.type === 'text') {
+                  resultText = item.text
+                }
+              }
+            } else if (typeof content === 'string') {
+              resultText = content
+            }
+          }
+
+          // Extract cost info
+          if (parsed.total_cost_usd) {
+            cost = `$${parsed.total_cost_usd.toFixed(4)}`
+          }
+          if (parsed.duration_ms) {
+            duration = formatDuration(parsed.duration_ms)
+          }
+        } catch {
+          // Not JSON, skip
+        }
+      }
+
+      if (resultText) {
+        return { text: resultText, cost, duration }
+      }
+    } catch {
+      // Parse failed
+    }
+
+    return null
+  }
+
   if (isLoading) {
     return (
       <div className="card p-6">
@@ -311,14 +419,37 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
                           <h4 className="text-xs font-semibold text-terminal-textMuted uppercase mb-1">
                             {t.instructionQueue.result || 'Resultado'}
                           </h4>
-                          {selectedJob.result.stdout && (
-                            <div className="mb-2">
-                              <span className="text-xs text-terminal-green">stdout:</span>
-                              <pre className="text-sm text-terminal-text bg-terminal-bg p-2 rounded overflow-x-auto whitespace-pre-wrap max-h-60 overflow-y-auto">
-                                {selectedJob.result.stdout}
-                              </pre>
-                            </div>
-                          )}
+                          {(() => {
+                            const parsed = parseClaudeOutput(selectedJob.result.stdout)
+                            if (parsed) {
+                              return (
+                                <div className="mb-2">
+                                  <div className="text-sm text-terminal-text bg-terminal-bg p-3 rounded overflow-x-auto whitespace-pre-wrap max-h-60 overflow-y-auto">
+                                    {parsed.text}
+                                  </div>
+                                  {(parsed.cost || parsed.duration) && (
+                                    <div className="flex gap-4 mt-2 text-xs text-terminal-textMuted">
+                                      {parsed.cost && <span>Custo: <span className="text-terminal-cyan">{parsed.cost}</span></span>}
+                                      {parsed.duration && <span>Duração API: <span className="text-terminal-cyan">{parsed.duration}</span></span>}
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            }
+                            // Fallback to raw output if parsing fails
+                            return (
+                              <>
+                                {selectedJob.result.stdout && (
+                                  <div className="mb-2">
+                                    <span className="text-xs text-terminal-green">stdout:</span>
+                                    <pre className="text-sm text-terminal-text bg-terminal-bg p-2 rounded overflow-x-auto whitespace-pre-wrap max-h-60 overflow-y-auto">
+                                      {selectedJob.result.stdout}
+                                    </pre>
+                                  </div>
+                                )}
+                              </>
+                            )
+                          })()}
                           {selectedJob.result.stderr && (
                             <div>
                               <span className="text-xs text-terminal-yellow">stderr:</span>
