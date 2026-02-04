@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { apiClient } from '@/lib/api-client'
@@ -11,10 +11,17 @@ import { MetricsChart } from '@/components/metrics-chart'
 import { InstructionQueue } from '@/components/instruction-queue'
 import { DiskMetricsCard } from '@/components/disk-metrics-card'
 import { CpuMetricsCard } from '@/components/cpu-metrics-card'
+import { UsageStatsCard } from '@/components/usage-stats-card'
 import { ContainerDetailSkeleton } from '@/components/ui/skeleton'
 import { AnimatedDots } from '@/components/ui/animated-dots'
 import type { Container } from '@/lib/types'
 import clsx from 'clsx'
+
+interface ResourceLimitsForm {
+  cpuCores: number
+  memoryMB: number
+  diskGB: number
+}
 
 const InteractiveTerminal = dynamic(
   () => import('@/components/interactive-terminal').then(mod => mod.InteractiveTerminal),
@@ -111,6 +118,17 @@ export default function ContainerDetailPage() {
   const [vscodeUrl, setVscodeUrl] = useState<string | null>(null)
   const { updateContainer, containers, addContainer } = useContainerStore()
 
+  // Resource limits editor state
+  const [isEditingLimits, setIsEditingLimits] = useState(false)
+  const [isSavingLimits, setIsSavingLimits] = useState(false)
+  const [limitsForm, setLimitsForm] = useState<ResourceLimitsForm>({
+    cpuCores: 1,
+    memoryMB: 2048,
+    diskGB: 20,
+  })
+  const [limitsError, setLimitsError] = useState<string | null>(null)
+  const [limitsSuccess, setLimitsSuccess] = useState<string | null>(null)
+
   // Get real-time metrics from store (updated via WebSocket)
   const storeContainer = useMemo(() => {
     return containers.find(c => c.id === containerId)
@@ -202,6 +220,78 @@ export default function ContainerDetailPage() {
     } else {
       setError(response.error || t.container.failedVscode)
     }
+  }
+
+  // Initialize limits form when container loads or when entering edit mode
+  const startEditingLimits = useCallback(() => {
+    if (container) {
+      setLimitsForm({
+        cpuCores: container.limits.cpuCores,
+        memoryMB: container.limits.memoryMB,
+        diskGB: container.limits.diskGB,
+      })
+      setLimitsError(null)
+      setLimitsSuccess(null)
+      setIsEditingLimits(true)
+    }
+  }, [container])
+
+  const cancelEditingLimits = useCallback(() => {
+    setIsEditingLimits(false)
+    setLimitsError(null)
+  }, [])
+
+  const handleSaveLimits = async () => {
+    if (!container) return
+
+    // Validate form
+    if (limitsForm.cpuCores < 0.5 || limitsForm.cpuCores > 16) {
+      setLimitsError(t.containerDetail.cpuRange)
+      return
+    }
+    if (limitsForm.memoryMB < 512 || limitsForm.memoryMB > 32768) {
+      setLimitsError(t.containerDetail.memoryRange)
+      return
+    }
+    if (limitsForm.diskGB < 5 || limitsForm.diskGB > 500) {
+      setLimitsError(t.containerDetail.diskRange)
+      return
+    }
+
+    setIsSavingLimits(true)
+    setLimitsError(null)
+    setLimitsSuccess(null)
+
+    const response = await apiClient.updateContainerLimits(container.id, {
+      cpuCores: limitsForm.cpuCores,
+      memoryMB: limitsForm.memoryMB,
+      diskGB: limitsForm.diskGB,
+    })
+
+    if (response.success && response.data) {
+      // Update local container state
+      setContainerBase(prev => prev ? {
+        ...prev,
+        limits: {
+          cpuCores: response.data!.limits.cpuCores,
+          memoryMB: response.data!.limits.memoryMB,
+          diskGB: response.data!.limits.diskGB,
+        }
+      } : null)
+      setLimitsSuccess(t.containerDetail.limitsUpdated)
+      setIsEditingLimits(false)
+      // Clear success message after 3 seconds
+      setTimeout(() => setLimitsSuccess(null), 3000)
+    } else {
+      setLimitsError(response.error || t.containerDetail.limitsUpdateFailed)
+    }
+
+    setIsSavingLimits(false)
+  }
+
+  const handleLimitsFormChange = (field: keyof ResourceLimitsForm, value: number) => {
+    setLimitsForm(prev => ({ ...prev, [field]: value }))
+    setLimitsError(null)
   }
 
   const getTabName = (id: TabType): string => {
@@ -339,7 +429,7 @@ export default function ContainerDetailPage() {
       {activeTab === 'overview' && (
         <div className="space-y-6">
           {/* Quick Stats */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
             <CpuMetricsCard
               containerId={container.id}
               cpuUsage={container.metrics?.cpu ?? 0}
@@ -370,6 +460,11 @@ export default function ContainerDetailPage() {
               containerName={container.name}
               diskUsageGB={container.metrics?.disk ?? 0}
               diskLimitGB={container.limits?.diskGB ?? 10}
+              containerStatus={container.status}
+            />
+
+            <UsageStatsCard
+              containerId={container.id}
               containerStatus={container.status}
             />
           </div>
@@ -593,22 +688,189 @@ export default function ContainerDetailPage() {
           </div>
 
           <div className="card p-6">
-            <h3 className="text-lg font-semibold text-terminal-text mb-4">{t.containerDetail.resourceLimitsTitle}</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="label">{t.containerDetail.cpuCores}</label>
-                <input type="number" className="input" value={container.limits.cpuCores} readOnly disabled />
-              </div>
-              <div>
-                <label className="label">{t.containerDetail.memoryMb}</label>
-                <input type="number" className="input" value={container.limits.memoryMB} readOnly disabled />
-              </div>
-              <div>
-                <label className="label">{t.containerDetail.diskGb}</label>
-                <input type="number" className="input" value={container.limits.diskGB} readOnly disabled />
-              </div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-terminal-text">{t.containerDetail.resourceLimitsTitle}</h3>
+              {!isEditingLimits && (
+                <button
+                  onClick={startEditingLimits}
+                  disabled={container.status === 'running'}
+                  className={clsx(
+                    'btn-secondary text-sm',
+                    container.status === 'running' && 'opacity-50 cursor-not-allowed'
+                  )}
+                  title={container.status === 'running' ? t.containerDetail.mustBeStopped : ''}
+                >
+                  <svg className="w-4 h-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                  {t.containerDetail.editLimits}
+                </button>
+              )}
             </div>
-            <p className="text-sm text-terminal-textMuted mt-4">{t.containerDetail.cannotModifyRunning}</p>
+
+            {/* Success message */}
+            {limitsSuccess && (
+              <div className="mb-4 p-3 bg-terminal-green/10 border border-terminal-green/30 rounded-lg">
+                <p className="text-sm text-terminal-green flex items-center">
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  {limitsSuccess}
+                </p>
+              </div>
+            )}
+
+            {/* Error message */}
+            {limitsError && (
+              <div className="mb-4 p-3 bg-terminal-red/10 border border-terminal-red/30 rounded-lg">
+                <p className="text-sm text-terminal-red">{limitsError}</p>
+              </div>
+            )}
+
+            {isEditingLimits ? (
+              /* Edit Mode */
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* CPU Cores */}
+                  <div>
+                    <label className="label">{t.containerDetail.cpuCores}</label>
+                    <div className="space-y-2">
+                      <input
+                        type="range"
+                        min="0.5"
+                        max="16"
+                        step="0.5"
+                        value={limitsForm.cpuCores}
+                        onChange={(e) => handleLimitsFormChange('cpuCores', parseFloat(e.target.value))}
+                        className="w-full h-2 bg-terminal-border rounded-lg appearance-none cursor-pointer accent-terminal-green"
+                        disabled={isSavingLimits}
+                      />
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="0.5"
+                          max="16"
+                          step="0.5"
+                          value={limitsForm.cpuCores}
+                          onChange={(e) => handleLimitsFormChange('cpuCores', parseFloat(e.target.value) || 0.5)}
+                          className="input w-24"
+                          disabled={isSavingLimits}
+                        />
+                        <span className="text-xs text-terminal-textMuted">{t.containerDetail.cpuRange}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Memory MB */}
+                  <div>
+                    <label className="label">{t.containerDetail.memoryMb}</label>
+                    <div className="space-y-2">
+                      <input
+                        type="range"
+                        min="512"
+                        max="32768"
+                        step="256"
+                        value={limitsForm.memoryMB}
+                        onChange={(e) => handleLimitsFormChange('memoryMB', parseInt(e.target.value))}
+                        className="w-full h-2 bg-terminal-border rounded-lg appearance-none cursor-pointer accent-terminal-green"
+                        disabled={isSavingLimits}
+                      />
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="512"
+                          max="32768"
+                          step="256"
+                          value={limitsForm.memoryMB}
+                          onChange={(e) => handleLimitsFormChange('memoryMB', parseInt(e.target.value) || 512)}
+                          className="input w-24"
+                          disabled={isSavingLimits}
+                        />
+                        <span className="text-xs text-terminal-textMuted">{t.containerDetail.memoryRange}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Disk GB */}
+                  <div>
+                    <label className="label">{t.containerDetail.diskGb}</label>
+                    <div className="space-y-2">
+                      <input
+                        type="range"
+                        min="5"
+                        max="500"
+                        step="1"
+                        value={limitsForm.diskGB}
+                        onChange={(e) => handleLimitsFormChange('diskGB', parseInt(e.target.value))}
+                        className="w-full h-2 bg-terminal-border rounded-lg appearance-none cursor-pointer accent-terminal-green"
+                        disabled={isSavingLimits}
+                      />
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="5"
+                          max="500"
+                          step="1"
+                          value={limitsForm.diskGB}
+                          onChange={(e) => handleLimitsFormChange('diskGB', parseInt(e.target.value) || 5)}
+                          className="input w-24"
+                          disabled={isSavingLimits}
+                        />
+                        <span className="text-xs text-terminal-textMuted">{t.containerDetail.diskRange}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action buttons */}
+                <div className="flex justify-end gap-2 pt-4 border-t border-terminal-border">
+                  <button
+                    onClick={cancelEditingLimits}
+                    className="btn-secondary"
+                    disabled={isSavingLimits}
+                  >
+                    {t.containerDetail.cancelEdit}
+                  </button>
+                  <button
+                    onClick={handleSaveLimits}
+                    className="btn-primary"
+                    disabled={isSavingLimits}
+                  >
+                    {isSavingLimits ? (
+                      <AnimatedDots text={t.common.loading} />
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        {t.containerDetail.saveLimits}
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* View Mode */
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="label">{t.containerDetail.cpuCores}</label>
+                    <div className="input bg-terminal-bgLight cursor-not-allowed">{container.limits.cpuCores}</div>
+                  </div>
+                  <div>
+                    <label className="label">{t.containerDetail.memoryMb}</label>
+                    <div className="input bg-terminal-bgLight cursor-not-allowed">{container.limits.memoryMB}</div>
+                  </div>
+                  <div>
+                    <label className="label">{t.containerDetail.diskGb}</label>
+                    <div className="input bg-terminal-bgLight cursor-not-allowed">{container.limits.diskGB}</div>
+                  </div>
+                </div>
+                {container.status === 'running' && (
+                  <p className="text-sm text-terminal-textMuted mt-4">{t.containerDetail.cannotModifyRunning}</p>
+                )}
+              </>
+            )}
           </div>
 
           <div className="card p-6 border-terminal-red/30">

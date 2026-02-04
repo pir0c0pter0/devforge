@@ -172,3 +172,14 @@ export type {
   ClaudeToolResult,
   ClaudeAssistantMessage,
 } from './types/claude-daemon.types'
+
+// Export all Claude Logs types
+export type {
+  ClaudeLogType,
+  ClaudeLogEntry,
+  ClaudeLogMetadata,
+  ClaudeLogFilter,
+  ClaudeLogsResponse,
+  ClaudeLogStats,
+  ClaudeLogEvents,
+} from './types/claude-logs.types'

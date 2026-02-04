@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { claudeDaemonService } from '../../services/claude-daemon.service';
+import { claudeLogsService } from '../../services/claude-logs.service';
 import { containerService } from '../../services/container.service';
 import { containerRepository } from '../../repositories';
 import {
@@ -592,6 +593,151 @@ router.post(
       res.status(500).json(
         errorResponse(
           error instanceof Error ? error.message : 'Failed to resume queue',
+          500
+        )
+      );
+    }
+  }
+);
+
+// ============================================
+// Claude Logs Endpoints
+// ============================================
+
+/**
+ * GET /api/claude-daemon/:containerId/logs
+ * Get logs history for a container
+ *
+ * Query params:
+ * - limit: number (default 500, max 2000)
+ * - since: ISO timestamp string (filter logs after this time)
+ * - types: comma-separated list of log types (stdin, stdout, stderr, system)
+ */
+router.get(
+  '/:containerId/logs',
+  validateParams(ContainerIdParamsSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const containerId = req.params['containerId'] as string;
+      const limit = Math.min(parseInt(req.query['limit'] as string) || 500, 2000);
+      const since = req.query['since'] as string | undefined;
+      const typesParam = req.query['types'] as string | undefined;
+
+      logger.debug({ containerId, limit, since, types: typesParam }, 'Getting logs');
+
+      // Parse types filter
+      const types = typesParam
+        ? (typesParam.split(',').filter(t => ['stdin', 'stdout', 'stderr', 'system'].includes(t)) as Array<'stdin' | 'stdout' | 'stderr' | 'system'>)
+        : undefined;
+
+      const response = claudeLogsService.getLogs(containerId, {
+        limit,
+        since: since ? new Date(since) : undefined,
+        types,
+      });
+
+      res.json(successResponse(response));
+    } catch (error) {
+      logger.error({ error, containerId: req.params['containerId'] }, 'Failed to get logs');
+
+      res.status(500).json(
+        errorResponse(
+          error instanceof Error ? error.message : 'Falha ao obter logs',
+          500
+        )
+      );
+    }
+  }
+);
+
+/**
+ * GET /api/claude-daemon/:containerId/logs/stats
+ * Get logs statistics for a container
+ */
+router.get(
+  '/:containerId/logs/stats',
+  validateParams(ContainerIdParamsSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const containerId = req.params['containerId'] as string;
+
+      logger.debug({ containerId }, 'Getting logs stats');
+
+      const stats = claudeLogsService.getStats(containerId);
+
+      res.json(successResponse(stats));
+    } catch (error) {
+      logger.error({ error, containerId: req.params['containerId'] }, 'Failed to get logs stats');
+
+      res.status(500).json(
+        errorResponse(
+          error instanceof Error ? error.message : 'Falha ao obter estatisticas de logs',
+          500
+        )
+      );
+    }
+  }
+);
+
+/**
+ * DELETE /api/claude-daemon/:containerId/logs
+ * Clear all logs for a container
+ */
+router.delete(
+  '/:containerId/logs',
+  strictRateLimiter,
+  validateParams(ContainerIdParamsSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const containerId = req.params['containerId'] as string;
+
+      logger.info({ containerId }, 'Clearing logs');
+
+      const count = claudeLogsService.clearLogs(containerId);
+
+      logger.info({ containerId, count }, 'Logs cleared');
+
+      res.json(successResponse({ containerId, clearedCount: count }, `Logs limpos. ${count} entradas removidas.`));
+    } catch (error) {
+      logger.error({ error, containerId: req.params['containerId'] }, 'Failed to clear logs');
+
+      res.status(500).json(
+        errorResponse(
+          error instanceof Error ? error.message : 'Falha ao limpar logs',
+          500
+        )
+      );
+    }
+  }
+);
+
+/**
+ * GET /api/claude-daemon/:containerId/logs/:logId
+ * Get a specific log entry
+ */
+router.get(
+  '/:containerId/logs/:logId',
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const containerId = req.params['containerId'] as string;
+      const logId = req.params['logId'] as string;
+
+      logger.debug({ containerId, logId }, 'Getting log entry');
+
+      const entry = claudeLogsService.getLogById(containerId, logId);
+
+      if (!entry) {
+        res.status(404).json(errorResponse('Entrada de log nao encontrada', 404));
+        return;
+      }
+
+      res.json(successResponse(entry));
+    } catch (error) {
+      logger.error({ error, containerId: req.params['containerId'], logId: req.params['logId'] }, 'Failed to get log entry');
+
+      res.status(500).json(
+        errorResponse(
+          error instanceof Error ? error.message : 'Falha ao obter entrada de log',
           500
         )
       );

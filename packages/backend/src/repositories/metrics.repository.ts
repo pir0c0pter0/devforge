@@ -483,6 +483,74 @@ export class MetricsRepository extends BaseRepository<
       diskUsage: row.disk_usage ?? 0,
     }));
   }
+
+  /**
+   * Get metrics history for charts (5-hour history by default)
+   * Returns data points in chronological order (oldest first)
+   */
+  getHistory(
+    containerId: string,
+    hours: number = 5
+  ): readonly MetricsHistoryPoint[] {
+    const fromDate = new Date(Date.now() - hours * 60 * 60 * 1000);
+
+    const sql = `
+      SELECT
+        recorded_at as timestamp,
+        cpu_percent,
+        memory_usage,
+        memory_limit,
+        disk_usage
+      FROM ${this.tableName}
+      WHERE container_id = ?
+        AND recorded_at >= ?
+      ORDER BY recorded_at ASC
+    `;
+
+    const rows = this.db.prepare(sql).all(containerId, fromDate.toISOString()) as Array<{
+      timestamp: string;
+      cpu_percent: number | null;
+      memory_usage: number | null;
+      memory_limit: number | null;
+      disk_usage: number | null;
+    }>;
+
+    return rows.map((row) => {
+      // Calculate memory percentage
+      const memoryUsage = row.memory_usage ?? 0;
+      const memoryLimit = row.memory_limit ?? 1;
+      const memoryPercentage = memoryLimit > 0 ? (memoryUsage / memoryLimit) * 100 : 0;
+
+      // Disk usage is stored in MB, convert to GB for display
+      const diskUsageGB = (row.disk_usage ?? 0) / 1024;
+
+      return {
+        timestamp: row.timestamp,
+        cpu: Number((row.cpu_percent ?? 0).toFixed(2)),
+        memory: Number(memoryPercentage.toFixed(2)),
+        disk: Number(diskUsageGB.toFixed(3)),
+      };
+    });
+  }
+
+  /**
+   * Cleanup old metrics records (older than specified hours)
+   * Returns the number of deleted records
+   */
+  cleanupOldMetrics(olderThanHours: number = 6): number {
+    const cutoffDate = new Date(Date.now() - olderThanHours * 60 * 60 * 1000);
+    return this.deleteOld(cutoffDate);
+  }
+}
+
+/**
+ * Metrics history point for charts
+ */
+export interface MetricsHistoryPoint {
+  readonly timestamp: string;
+  readonly cpu: number;      // percentage (0-100)
+  readonly memory: number;   // percentage (0-100)
+  readonly disk: number;     // GB used
 }
 
 // Export singleton instance

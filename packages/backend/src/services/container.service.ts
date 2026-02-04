@@ -19,6 +19,7 @@ import {
   containerRepository,
   type ContainerEntity,
   type CreateContainerDto,
+  type UpdateLimitsDto,
 } from '../repositories';
 import { emitContainerCreationProgress } from './websocket.service';
 import { taskService } from './task.service';
@@ -1328,6 +1329,58 @@ export class ContainerService {
     } catch (error) {
       logger.error({ error, containerId }, 'Failed to get container logs');
       throw new Error(`Failed to get logs: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Update container resource limits (CPU, Memory, Disk)
+   * Note: Disk limit can only be updated in database (not at Docker runtime)
+   */
+  async updateLimits(containerId: string, limits: UpdateLimitsDto): Promise<ContainerListItem> {
+    try {
+      // Find container in database
+      const entity = containerRepository.findById(containerId);
+      if (!entity) {
+        throw new Error(`Container não encontrado: ${containerId}`);
+      }
+
+      logger.info({ containerId, limits }, 'Updating container resource limits');
+
+      // If container is running, update Docker resources (CPU and Memory only)
+      if (entity.status === 'running' && (limits.cpuCores !== undefined || limits.memoryMB !== undefined)) {
+        const dockerUpdateOptions: { memoryBytes?: number; nanoCpus?: number } = {};
+
+        if (limits.memoryMB !== undefined) {
+          // Convert MB to bytes
+          dockerUpdateOptions.memoryBytes = limits.memoryMB * 1024 * 1024;
+        }
+
+        if (limits.cpuCores !== undefined) {
+          // Convert cores to nanocpus (1 core = 1,000,000,000 nanocpus)
+          dockerUpdateOptions.nanoCpus = limits.cpuCores * 1000000000;
+        }
+
+        await dockerService.updateContainerResources(entity.dockerId, dockerUpdateOptions);
+        logger.info({ containerId, dockerId: entity.dockerId }, 'Docker container resources updated');
+      }
+
+      // Update database record
+      const updatedEntity = containerRepository.updateLimits(containerId, limits);
+      if (!updatedEntity) {
+        throw new Error('Falha ao atualizar limites no banco de dados');
+      }
+
+      // Update in-memory cache
+      const container = entityToContainer(updatedEntity);
+      this.containers.set(containerId, container);
+
+      logger.info({ containerId, limits }, 'Container limits updated successfully');
+
+      // Return enriched container format
+      return await this.getById(containerId) as ContainerListItem;
+    } catch (error) {
+      logger.error({ error, containerId, limits }, 'Failed to update container limits');
+      throw new Error(`Falha ao atualizar limites: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
     }
   }
 

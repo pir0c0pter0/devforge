@@ -399,6 +399,39 @@ export class DockerService {
   }
 
   /**
+   * Update container resource limits (CPU and Memory)
+   * Note: Disk cannot be updated at runtime - only stored in DB
+   */
+  async updateContainerResources(
+    containerId: string,
+    options: { memoryBytes?: number; nanoCpus?: number }
+  ): Promise<void> {
+    try {
+      logger.info({ containerId, options }, 'Updating Docker container resources');
+
+      const container = this.docker.getContainer(containerId);
+
+      const updateConfig: any = {};
+
+      if (options.memoryBytes !== undefined) {
+        updateConfig.Memory = options.memoryBytes;
+        updateConfig.MemorySwap = options.memoryBytes; // Same as memory to disable swap
+      }
+
+      if (options.nanoCpus !== undefined) {
+        updateConfig.NanoCpus = options.nanoCpus;
+      }
+
+      await container.update(updateConfig);
+
+      logger.info({ containerId }, 'Docker container resources updated successfully');
+    } catch (error) {
+      logger.error({ error, containerId }, 'Failed to update Docker container resources');
+      throw new Error(`Failed to update container resources: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
    * Delete a Docker volume
    * Used to clean up workspace volumes when containers are deleted
    */

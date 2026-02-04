@@ -97,6 +97,17 @@ export interface UpdateContainerDto {
   readonly startedAt?: Date;
   readonly stoppedAt?: Date;
   readonly diskLimit?: number;
+  readonly cpuLimit?: number;
+  readonly memoryLimit?: number;
+}
+
+/**
+ * Resource limits update DTO
+ */
+export interface UpdateLimitsDto {
+  readonly cpuCores?: number;
+  readonly memoryMB?: number;
+  readonly diskGB?: number;
 }
 
 /**
@@ -327,6 +338,14 @@ export class ContainerRepository extends BaseRepository<
       updates.push('disk_limit = ?');
       params.push(data.diskLimit);
     }
+    if (data.cpuLimit !== undefined) {
+      updates.push('cpu_limit = ?');
+      params.push(data.cpuLimit);
+    }
+    if (data.memoryLimit !== undefined) {
+      updates.push('memory_limit = ?');
+      params.push(data.memoryLimit);
+    }
 
     if (updates.length === 0) {
       return existing;
@@ -355,6 +374,31 @@ export class ContainerRepository extends BaseRepository<
       return this.update(id, { ...updates, startedAt: new Date() });
     } else if (status === 'stopped' || status === 'exited') {
       return this.update(id, { ...updates, stoppedAt: new Date() });
+    }
+
+    return this.update(id, updates);
+  }
+
+  /**
+   * Update container resource limits
+   */
+  updateLimits(id: string, limits: UpdateLimitsDto): ContainerEntity | null {
+    const existing = this.findById(id);
+    if (!existing) {
+      return null;
+    }
+
+    const updates: UpdateContainerDto = {};
+
+    if (limits.cpuCores !== undefined) {
+      (updates as any).cpuLimit = limits.cpuCores;
+    }
+    if (limits.memoryMB !== undefined) {
+      (updates as any).memoryLimit = limits.memoryMB;
+    }
+    if (limits.diskGB !== undefined) {
+      // Convert GB to MB for storage
+      (updates as any).diskLimit = limits.diskGB * 1024;
     }
 
     return this.update(id, updates);

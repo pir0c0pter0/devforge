@@ -21,6 +21,8 @@ import { terminalService } from './terminal.service'
 import { claudeDaemonService } from './claude-daemon.service'
 import { containerService } from './container.service'
 import { healthMonitorService } from './health-monitor.service'
+import { claudeLogsService } from './claude-logs.service'
+import type { ClaudeLogEntry } from '@claude-docker/shared'
 
 /**
  * Socket.io server instance
@@ -546,6 +548,19 @@ const setupClaudeDaemonNamespace = (): void => {
     claudeDaemonNamespace.to(`claude:${containerId}`).emit('claude:output' as any, event)
   })
 
+  // Forward log events from logs service to WebSocket clients
+  claudeLogsService.on('log:new', ({ containerId, entry }: { containerId: string; entry: ClaudeLogEntry }) => {
+    claudeDaemonNamespace.to(`claude:${containerId}`).emit('claude:log' as any, entry)
+  })
+
+  claudeLogsService.on('log:batch', ({ containerId, entries }: { containerId: string; entries: ClaudeLogEntry[] }) => {
+    claudeDaemonNamespace.to(`claude:${containerId}`).emit('claude:logs:batch' as any, { containerId, logs: entries })
+  })
+
+  claudeLogsService.on('log:cleared', ({ containerId, count }: { containerId: string; count: number }) => {
+    claudeDaemonNamespace.to(`claude:${containerId}`).emit('claude:logs:cleared' as any, { containerId, count })
+  })
+
   claudeDaemonService.on('daemon:started', ({ containerId, state }: { containerId: string; state: DaemonState }) => {
     claudeDaemonNamespace.to(`claude:${containerId}`).emit('daemon:status' as any, state)
   })
@@ -660,6 +675,45 @@ const setupClaudeDaemonNamespace = (): void => {
     socket.on('daemon:get-status', ({ containerId }: { containerId: string }) => {
       const status = claudeDaemonService.getStatus(containerId)
       socket.emit('daemon:status' as any, status || { containerId, status: 'stopped', instructionCount: 0 })
+    })
+
+    // Get logs history (request batch of recent logs)
+    socket.on('logs:get', ({ containerId, limit, since }: { containerId: string; limit?: number; since?: string }) => {
+      try {
+        const response = claudeLogsService.getLogs(containerId, {
+          limit: limit || 500,
+          since: since ? new Date(since) : undefined,
+        })
+        socket.emit('claude:logs:batch' as any, { containerId, logs: response.logs })
+      } catch (error) {
+        socket.emit('error' as any, {
+          message: error instanceof Error ? error.message : 'Falha ao obter logs',
+        })
+      }
+    })
+
+    // Get logs stats
+    socket.on('logs:stats', ({ containerId }: { containerId: string }) => {
+      try {
+        const stats = claudeLogsService.getStats(containerId)
+        socket.emit('claude:logs:stats' as any, stats)
+      } catch (error) {
+        socket.emit('error' as any, {
+          message: error instanceof Error ? error.message : 'Falha ao obter estatisticas',
+        })
+      }
+    })
+
+    // Clear logs
+    socket.on('logs:clear', ({ containerId }: { containerId: string }) => {
+      try {
+        const count = claudeLogsService.clearLogs(containerId)
+        socket.emit('claude:logs:cleared' as any, { containerId, count })
+      } catch (error) {
+        socket.emit('error' as any, {
+          message: error instanceof Error ? error.message : 'Falha ao limpar logs',
+        })
+      }
     })
 
     socket.on('disconnect', () => {

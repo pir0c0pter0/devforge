@@ -4,6 +4,8 @@ import { spawn } from 'child_process'
 import { randomUUID } from 'crypto'
 import { dockerLogger as logger } from '../utils/logger'
 import { containerRepository } from '../repositories'
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import { claudeLogsService } from './claude-logs.service'
 import type {
   DaemonState,
   ClaudeEvent,
@@ -172,6 +174,12 @@ class ClaudeDaemonService extends EventEmitter {
       this.sessions.set(containerId, activeSession)
 
       logger.info({ containerId, sessionId }, 'Claude session started')
+
+      // Log inicio da sessao
+      claudeLogsService.addLog(containerId, 'system', `Sessao Claude iniciada (sessionId: ${sessionId})`, {
+        sessionId,
+      })
+
       this.emit('daemon:started', { containerId, state })
 
       return state
@@ -201,6 +209,11 @@ class ClaudeDaemonService extends EventEmitter {
     logger.info({ containerId }, 'Stopping Claude session')
     session.state.status = 'stopping'
 
+    // Log parada da sessao
+    claudeLogsService.addLog(containerId, 'system', `Sessao Claude encerrada (sessionId: ${session.sessionId})`, {
+      sessionId: session.sessionId,
+    })
+
     // No persistent process to kill, just clean up
     session.state.status = 'stopped'
     this.sessions.delete(containerId)
@@ -219,7 +232,7 @@ class ClaudeDaemonService extends EventEmitter {
    * Spawns a new process for each instruction, using --resume for subsequent calls
    * Returns a Promise that resolves when the instruction completes with captured output
    */
-  async sendInstruction(containerId: string, instruction: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  async sendInstruction(containerId: string, instruction: string, jobId?: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     const session = this.sessions.get(containerId)
     if (!session) {
       throw new Error(`No session active for container ${containerId}`)
@@ -236,7 +249,16 @@ class ClaudeDaemonService extends EventEmitter {
     session.isProcessing = true
     session.state.lastActivity = new Date()
 
+    const startTime = Date.now()
+
     logger.info({ containerId, instructionLength: instruction.length, sessionId: session.sessionId }, 'Sending instruction to Claude')
+
+    // Log instrucao enviada (stdin)
+    claudeLogsService.addLog(containerId, 'stdin', instruction, {
+      sessionId: session.sessionId,
+      jobId,
+      instruction,
+    })
 
     return new Promise((resolve, reject) => {
       try {
@@ -283,6 +305,13 @@ class ClaudeDaemonService extends EventEmitter {
         childProcess.stdout?.on('data', (chunk: Buffer) => {
           const data = chunk.toString('utf-8')
           stdoutBuffer += data
+
+          // Log stdout em tempo real
+          claudeLogsService.addLog(containerId, 'stdout', data, {
+            sessionId: session.sessionId,
+            jobId,
+          })
+
           this.handleOutput(containerId, data)
         })
 
@@ -291,6 +320,12 @@ class ClaudeDaemonService extends EventEmitter {
           const errorOutput = chunk.toString('utf-8')
           stderrBuffer += errorOutput
           logger.warn({ containerId, error: errorOutput }, 'Claude stderr')
+
+          // Log stderr em tempo real
+          claudeLogsService.addLog(containerId, 'stderr', errorOutput, {
+            sessionId: session.sessionId,
+            jobId,
+          })
 
           // Emit as system event
           const event: ClaudeEvent = {
@@ -308,11 +343,28 @@ class ClaudeDaemonService extends EventEmitter {
         // Handle process exit
         childProcess.on('exit', async (code, signal) => {
           const exitCode = code ?? -1
+          const duration = Date.now() - startTime
 
           if (exitCode === 0) {
-            logger.info({ containerId, exitCode }, 'Main instruction process completed')
+            logger.info({ containerId, exitCode, duration }, 'Main instruction process completed')
+
+            // Log conclusao com sucesso
+            claudeLogsService.addLog(containerId, 'system', `Instrucao concluida com sucesso (exit code: ${exitCode})`, {
+              sessionId: session.sessionId,
+              jobId,
+              exitCode,
+              duration,
+            })
           } else {
-            logger.warn({ containerId, exitCode, signal }, 'Instruction process exited with non-zero code')
+            logger.warn({ containerId, exitCode, signal, duration }, 'Instruction process exited with non-zero code')
+
+            // Log conclusao com erro
+            claudeLogsService.addLog(containerId, 'system', `Instrucao falhou (exit code: ${exitCode}, signal: ${signal || 'none'})`, {
+              sessionId: session.sessionId,
+              jobId,
+              exitCode,
+              duration,
+            })
 
             // Check if there's an error in the output
             if (stdoutBuffer.includes('"is_error":true')) {
@@ -362,7 +414,15 @@ class ClaudeDaemonService extends EventEmitter {
         // Handle process error
         childProcess.on('error', (error) => {
           session.isProcessing = false
-          logger.error({ containerId, error }, 'Instruction process error')
+          const duration = Date.now() - startTime
+          logger.error({ containerId, error, duration }, 'Instruction process error')
+
+          // Log erro do processo
+          claudeLogsService.addLog(containerId, 'system', `Erro no processo: ${error.message}`, {
+            sessionId: session.sessionId,
+            jobId,
+            duration,
+          })
 
           const event: ClaudeEvent = {
             type: 'error',
