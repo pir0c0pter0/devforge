@@ -80,3 +80,12 @@ export {
   type UpdateUsageDto,
   type UsageFilters,
 } from './usage.repository';
+
+// Claude logs repository
+export {
+  ClaudeLogsRepository,
+  claudeLogsRepository,
+  type ClaudeLogEntity,
+  type CreateClaudeLogDto,
+  type ClaudeLogFilters,
+} from './claude-logs.repository';

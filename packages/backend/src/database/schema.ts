@@ -138,6 +138,21 @@ export const USAGE_TRACKING_TABLE = `
 `;
 
 /**
+ * Claude logs table - persistent storage for Claude Code terminal logs
+ */
+export const CLAUDE_LOGS_TABLE = `
+  CREATE TABLE IF NOT EXISTS claude_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    container_id TEXT NOT NULL,
+    type TEXT NOT NULL CHECK (type IN ('stdin', 'stdout', 'stderr', 'system')),
+    content TEXT NOT NULL,
+    metadata JSON,
+    recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (container_id) REFERENCES containers(id) ON DELETE CASCADE
+  )
+`;
+
+/**
  * All table creation statements in order (respecting foreign keys)
  */
 export const ALL_TABLES = [
@@ -148,6 +163,7 @@ export const ALL_TABLES = [
   { name: 'sessions', sql: SESSIONS_TABLE },
   { name: 'container_logs', sql: CONTAINER_LOGS_TABLE },
   { name: 'usage_tracking', sql: USAGE_TRACKING_TABLE },
+  { name: 'claude_logs', sql: CLAUDE_LOGS_TABLE },
 ];
 
 /**
@@ -190,6 +206,12 @@ export const INDEXES = [
   'CREATE INDEX IF NOT EXISTS idx_usage_tracking_session_id ON usage_tracking(session_id)',
   'CREATE INDEX IF NOT EXISTS idx_usage_tracking_recorded_at ON usage_tracking(recorded_at)',
   'CREATE INDEX IF NOT EXISTS idx_usage_tracking_container_recorded ON usage_tracking(container_id, recorded_at DESC)',
+
+  // Claude logs indexes
+  'CREATE INDEX IF NOT EXISTS idx_claude_logs_container_id ON claude_logs(container_id)',
+  'CREATE INDEX IF NOT EXISTS idx_claude_logs_type ON claude_logs(type)',
+  'CREATE INDEX IF NOT EXISTS idx_claude_logs_recorded_at ON claude_logs(recorded_at)',
+  'CREATE INDEX IF NOT EXISTS idx_claude_logs_container_recorded ON claude_logs(container_id, recorded_at DESC)',
 ];
 
 /**

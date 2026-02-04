@@ -14,9 +14,11 @@ import {
   Search,
   X,
   Filter,
+  Loader2,
 } from 'lucide-react'
 
 const WS_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 interface ClaudeCodeLogsProps {
   containerId: string
@@ -32,6 +34,9 @@ type ClaudeEventType =
   | 'result'
   | 'error'
   | 'system'
+  | 'stdin'
+  | 'stdout'
+  | 'stderr'
 
 interface ClaudeEvent {
   type: ClaudeEventType
@@ -58,11 +63,36 @@ const eventTypeColors: Record<ClaudeEventType, { bg: string; text: string; label
   result: { bg: 'bg-purple-500/20', text: 'text-purple-400', label: 'FINAL' },
   error: { bg: 'bg-red-500/20', text: 'text-red-400', label: 'ERROR' },
   system: { bg: 'bg-gray-500/20', text: 'text-gray-400', label: 'SYSTEM' },
+  stdin: { bg: 'bg-green-500/20', text: 'text-green-400', label: 'INPUT' },
+  stdout: { bg: 'bg-blue-500/20', text: 'text-blue-400', label: 'OUTPUT' },
+  stderr: { bg: 'bg-red-500/20', text: 'text-red-400', label: 'STDERR' },
 }
 
 // Generate unique ID
 let logIdCounter = 0
 const generateLogId = () => `log-${Date.now()}-${++logIdCounter}`
+
+/**
+ * Verifica se o log deve ser filtrado (nao mostrado)
+ */
+function shouldFilterLog(type: ClaudeEventType, content: string): boolean {
+  if (!content || !content.trim()) return true
+
+  const lower = content.toLowerCase().trim()
+
+  // Filtrar mensagens de status genericas
+  if (type === 'system') {
+    if (lower === 'daemon status: running') return true
+    if (lower === 'daemon status: stopped') return true
+    if (lower === 'health: unknown') return true
+    if (lower.startsWith('health:') && lower.length < 20) return true
+  }
+
+  // Filtrar conteudo muito curto sem significado
+  if (lower.length < 2) return true
+
+  return false
+}
 
 export function ClaudeCodeLogs({ containerId, className }: ClaudeCodeLogsProps) {
   const [logs, setLogs] = useState<LogEntry[]>([])
@@ -71,18 +101,27 @@ export function ClaudeCodeLogs({ containerId, className }: ClaudeCodeLogsProps) 
   const [filter, setFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState<ClaudeEventType | 'all'>('all')
   const [showFilters, setShowFilters] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [totalLogs, setTotalLogs] = useState(0)
   const socketRef = useRef<Socket | null>(null)
   const logsEndRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const pausedLogsRef = useRef<LogEntry[]>([])
 
   // Parse event to create log entry
-  const parseEvent = useCallback((event: ClaudeEvent): LogEntry => {
+  const parseEvent = useCallback((event: ClaudeEvent): LogEntry | null => {
     const data = event.data || {}
     let summary = ''
     let details: string | null = null
+    const type = event.type
 
-    switch (event.type) {
+    // Filtrar eventos sem conteudo util
+    const content = (data.content as string) || (data.message as string) || ''
+    if (shouldFilterLog(type, content)) {
+      return null
+    }
+
+    switch (type) {
       case 'assistant': {
         const message = data.message as { content?: Array<{ type?: string; text?: string }> | string } | undefined
         if (message?.content) {
@@ -117,7 +156,6 @@ export function ClaudeCodeLogs({ containerId, className }: ClaudeCodeLogsProps) 
         const input = data.input as Record<string, unknown> | undefined
         summary = `Tool: ${name}`
         if (input) {
-          // Show brief input preview
           const inputStr = JSON.stringify(input)
           if (inputStr.length > 50) {
             summary += ` - ${inputStr.substring(0, 50)}...`
@@ -130,12 +168,12 @@ export function ClaudeCodeLogs({ containerId, className }: ClaudeCodeLogsProps) 
       }
 
       case 'tool_result': {
-        const content = data.content as string | undefined
+        const resultContent = data.content as string | undefined
         const isError = data.is_error as boolean | undefined
         summary = isError ? 'Tool falhou' : 'Tool resultado'
-        if (content) {
-          summary += `: ${content.substring(0, 80)}${content.length > 80 ? '...' : ''}`
-          details = content
+        if (resultContent) {
+          summary += `: ${resultContent.substring(0, 80)}${resultContent.length > 80 ? '...' : ''}`
+          details = resultContent
         }
         break
       }
@@ -156,22 +194,37 @@ export function ClaudeCodeLogs({ containerId, className }: ClaudeCodeLogsProps) 
       }
 
       case 'error': {
-        const message = (data.message as string) || (data.error as string) || 'Erro desconhecido'
-        summary = `Erro: ${message}`
+        const errorMessage = (data.message as string) || (data.error as string) || 'Erro desconhecido'
+        summary = `Erro: ${errorMessage}`
         details = JSON.stringify(data, null, 2)
         break
       }
 
+      case 'stdin': {
+        const inputContent = data.content as string || ''
+        summary = inputContent.substring(0, 100) + (inputContent.length > 100 ? '...' : '')
+        details = inputContent.length > 100 ? inputContent : null
+        break
+      }
+
+      case 'stdout':
+      case 'stderr': {
+        const outputContent = data.content as string || ''
+        summary = outputContent.substring(0, 100) + (outputContent.length > 100 ? '...' : '')
+        details = outputContent.length > 100 ? outputContent : null
+        break
+      }
+
       case 'system': {
-        const message = data.message as string | undefined
+        const sysMessage = data.message as string | undefined
         const raw = data.raw as string | undefined
         const stderr = data.stderr as string | undefined
         const agentCount = data.agentCount as number | undefined
 
         if (agentCount !== undefined) {
           summary = `Aguardando ${agentCount} agente(s) em background`
-        } else if (message) {
-          summary = message
+        } else if (sysMessage) {
+          summary = sysMessage
         } else if (stderr) {
           summary = `stderr: ${stderr.substring(0, 80)}`
           details = stderr
@@ -190,10 +243,15 @@ export function ClaudeCodeLogs({ containerId, className }: ClaudeCodeLogsProps) 
         details = JSON.stringify(data, null, 2)
     }
 
+    // Validar que temos conteudo util
+    if (!summary || summary.trim().length < 2) {
+      return null
+    }
+
     return {
       id: generateLogId(),
       timestamp: new Date(event.timestamp || Date.now()),
-      type: event.type,
+      type,
       summary,
       details,
       raw: data,
@@ -202,13 +260,20 @@ export function ClaudeCodeLogs({ containerId, className }: ClaudeCodeLogsProps) 
   }, [])
 
   // Add log entry
-  const addLog = useCallback((entry: LogEntry) => {
+  const addLog = useCallback((entry: LogEntry | null) => {
+    if (!entry) return
+
     if (isPaused) {
       pausedLogsRef.current.push(entry)
       return
     }
 
     setLogs(prev => {
+      // Verificar se ja existe
+      if (prev.some(l => l.id === entry.id)) {
+        return prev
+      }
+
       // Keep last 1000 entries
       const newLogs = [...prev, entry]
       if (newLogs.length > 1000) {
@@ -217,6 +282,50 @@ export function ClaudeCodeLogs({ containerId, className }: ClaudeCodeLogsProps) 
       return newLogs
     })
   }, [isPaused])
+
+  // Carregar historico de logs
+  const loadHistory = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const response = await fetch(`${API_URL}/api/claude-daemon/${containerId}/logs?limit=500`)
+      if (!response.ok) throw new Error('Failed to load logs')
+
+      const data = await response.json()
+
+      if (data.success && data.data?.logs) {
+        const historyLogs: LogEntry[] = data.data.logs
+          .map((log: { id: string; type: ClaudeEventType; content: string; metadata?: Record<string, unknown>; recordedAt: string }) => {
+            // Filtrar logs vazios
+            if (shouldFilterLog(log.type, log.content)) {
+              return null
+            }
+
+            return {
+              id: log.id,
+              timestamp: new Date(log.recordedAt),
+              type: log.type,
+              summary: log.content.substring(0, 100) + (log.content.length > 100 ? '...' : ''),
+              details: log.content.length > 100 ? log.content : null,
+              raw: log.metadata || {},
+              expanded: false,
+            }
+          })
+          .filter(Boolean) as LogEntry[]
+
+        setLogs(historyLogs)
+        setTotalLogs(data.data.total || historyLogs.length)
+      }
+    } catch (error) {
+      console.error('[ClaudeCodeLogs] Failed to load history:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [containerId])
+
+  // Carregar historico na montagem
+  useEffect(() => {
+    loadHistory()
+  }, [loadHistory])
 
   // WebSocket connection
   useEffect(() => {
@@ -244,18 +353,25 @@ export function ClaudeCodeLogs({ containerId, className }: ClaudeCodeLogsProps) 
       addLog(entry)
     })
 
-    socket.on('daemon:status', (status: { status: string; containerId: string }) => {
+    socket.on('claude:log', (log: { id: string; type: ClaudeEventType; content: string; metadata?: Record<string, unknown>; timestamp: string }) => {
+      // Filtrar logs vazios
+      if (shouldFilterLog(log.type, log.content)) {
+        return
+      }
+
       const entry: LogEntry = {
-        id: generateLogId(),
-        timestamp: new Date(),
-        type: 'system',
-        summary: `Daemon status: ${status.status}`,
-        details: null,
-        raw: status,
+        id: log.id || generateLogId(),
+        timestamp: new Date(log.timestamp),
+        type: log.type,
+        summary: log.content.substring(0, 100) + (log.content.length > 100 ? '...' : ''),
+        details: log.content.length > 100 ? log.content : null,
+        raw: log.metadata || {},
         expanded: false,
       }
       addLog(entry)
     })
+
+    // NAO adicionar evento de daemon:status para evitar logs repetitivos
 
     socket.on('daemon:error', (data: { error: string }) => {
       const entry: LogEntry = {
@@ -265,19 +381,6 @@ export function ClaudeCodeLogs({ containerId, className }: ClaudeCodeLogsProps) 
         summary: `Daemon error: ${data.error}`,
         details: data.error,
         raw: data,
-        expanded: false,
-      }
-      addLog(entry)
-    })
-
-    socket.on('health:event', (event: Record<string, unknown>) => {
-      const entry: LogEntry = {
-        id: generateLogId(),
-        timestamp: new Date(),
-        type: 'system',
-        summary: `Health: ${event.type || 'unknown'}`,
-        details: JSON.stringify(event, null, 2),
-        raw: event,
         expanded: false,
       }
       addLog(entry)
@@ -307,9 +410,15 @@ export function ClaudeCodeLogs({ containerId, className }: ClaudeCodeLogsProps) 
   }
 
   // Clear logs
-  const handleClear = () => {
+  const handleClear = async () => {
+    try {
+      await fetch(`${API_URL}/api/claude-daemon/${containerId}/logs`, { method: 'DELETE' })
+    } catch (error) {
+      console.error('[ClaudeCodeLogs] Failed to clear logs:', error)
+    }
     setLogs([])
     pausedLogsRef.current = []
+    setTotalLogs(0)
   }
 
   // Download logs
@@ -356,9 +465,9 @@ export function ClaudeCodeLogs({ containerId, className }: ClaudeCodeLogsProps) 
   })
 
   return (
-    <div className={clsx('flex flex-col h-full bg-terminal-bg', className)}>
+    <div className={clsx('flex flex-col bg-terminal-bg rounded-lg border border-terminal-border h-full', className)}>
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 bg-terminal-bgLight border-b border-terminal-border">
+      <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 bg-terminal-bgLight border-b border-terminal-border rounded-t-lg">
         <div className="flex items-center gap-2">
           <Terminal className="w-4 h-4 text-terminal-green" />
           <span className="text-sm font-medium text-terminal-text">
@@ -371,6 +480,11 @@ export function ClaudeCodeLogs({ containerId, className }: ClaudeCodeLogsProps) 
           {isPaused && pausedLogsRef.current.length > 0 && (
             <span className="text-xs text-terminal-yellow">
               ({pausedLogsRef.current.length} pendentes)
+            </span>
+          )}
+          {totalLogs > 0 && (
+            <span className="text-xs text-terminal-textMuted">
+              ({totalLogs} total)
             </span>
           )}
         </div>
@@ -428,7 +542,7 @@ export function ClaudeCodeLogs({ containerId, className }: ClaudeCodeLogsProps) 
 
       {/* Filters */}
       {showFilters && (
-        <div className="flex items-center gap-4 px-4 py-2 bg-terminal-bg border-b border-terminal-border">
+        <div className="flex-shrink-0 flex items-center gap-4 px-4 py-2 bg-terminal-bg border-b border-terminal-border">
           {/* Text search */}
           <div className="relative flex-1 max-w-xs">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-terminal-textMuted" />
@@ -450,8 +564,8 @@ export function ClaudeCodeLogs({ containerId, className }: ClaudeCodeLogsProps) 
           </div>
 
           {/* Type filter */}
-          <div className="flex items-center gap-1">
-            {(['all', 'assistant', 'tool_use', 'tool_result', 'result', 'error', 'system'] as const).map((type) => (
+          <div className="flex items-center gap-1 flex-wrap">
+            {(['all', 'stdin', 'stdout', 'stderr', 'assistant', 'tool_use', 'result', 'error', 'system'] as const).map((type) => (
               <button
                 key={type}
                 onClick={() => setTypeFilter(type)}
@@ -471,12 +585,17 @@ export function ClaudeCodeLogs({ containerId, className }: ClaudeCodeLogsProps) 
         </div>
       )}
 
-      {/* Logs */}
+      {/* Logs - container com scroll interno */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-y-auto font-mono text-sm"
+        className="flex-1 overflow-y-auto font-mono text-sm min-h-0"
       >
-        {filteredLogs.length === 0 ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center h-full text-terminal-textMuted">
+            <Loader2 className="w-6 h-6 animate-spin mr-2" />
+            <span>Carregando histórico...</span>
+          </div>
+        ) : filteredLogs.length === 0 ? (
           <div className="flex items-center justify-center h-full text-terminal-textMuted">
             {logs.length === 0 ? (
               <div className="text-center">
@@ -495,7 +614,7 @@ export function ClaudeCodeLogs({ containerId, className }: ClaudeCodeLogsProps) 
                 key={log.id}
                 className={clsx(
                   'rounded border transition-colors',
-                  log.type === 'error'
+                  log.type === 'error' || log.type === 'stderr'
                     ? 'border-terminal-red/30 bg-terminal-red/5'
                     : 'border-terminal-border bg-terminal-bgLight/50 hover:bg-terminal-bgLight'
                 )}
@@ -526,10 +645,10 @@ export function ClaudeCodeLogs({ containerId, className }: ClaudeCodeLogsProps) 
                   {/* Type badge */}
                   <span className={clsx(
                     'flex-shrink-0 px-1.5 py-0.5 rounded text-xs font-medium',
-                    eventTypeColors[log.type].bg,
-                    eventTypeColors[log.type].text
+                    eventTypeColors[log.type]?.bg || 'bg-gray-500/20',
+                    eventTypeColors[log.type]?.text || 'text-gray-400'
                   )}>
-                    {eventTypeColors[log.type].label}
+                    {eventTypeColors[log.type]?.label || log.type.toUpperCase()}
                   </span>
 
                   {/* Summary */}
@@ -554,7 +673,7 @@ export function ClaudeCodeLogs({ containerId, className }: ClaudeCodeLogsProps) 
       </div>
 
       {/* Status bar */}
-      <div className="flex items-center justify-between px-4 py-1 bg-terminal-bgLight border-t border-terminal-border text-xs text-terminal-textMuted">
+      <div className="flex-shrink-0 flex items-center justify-between px-4 py-1 bg-terminal-bgLight border-t border-terminal-border text-xs text-terminal-textMuted rounded-b-lg">
         <span>{filteredLogs.length} logs {filter || typeFilter !== 'all' ? '(filtrado)' : ''}</span>
         <span>
           {isConnected ? 'Conectado' : 'Desconectado'}

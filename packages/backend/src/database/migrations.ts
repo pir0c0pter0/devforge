@@ -90,10 +90,41 @@ const usageTrackingMigration: Migration = {
 };
 
 /**
+ * Migration 003 - Add claude_logs table for persistent log storage
+ */
+const claudeLogsMigration: Migration = {
+  name: '003_claude_logs',
+  up: (db: Database.Database) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS claude_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        container_id TEXT NOT NULL,
+        type TEXT NOT NULL CHECK (type IN ('stdin', 'stdout', 'stderr', 'system')),
+        content TEXT NOT NULL,
+        metadata JSON,
+        recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (container_id) REFERENCES containers(id) ON DELETE CASCADE
+      )
+    `);
+    logger.debug('Created claude_logs table');
+
+    // Create indexes
+    db.exec('CREATE INDEX IF NOT EXISTS idx_claude_logs_container_id ON claude_logs(container_id)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_claude_logs_type ON claude_logs(type)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_claude_logs_recorded_at ON claude_logs(recorded_at)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_claude_logs_container_recorded ON claude_logs(container_id, recorded_at DESC)');
+    logger.debug('Created claude_logs indexes');
+  },
+  down: (db: Database.Database) => {
+    db.exec('DROP TABLE IF EXISTS claude_logs');
+  },
+};
+
+/**
  * All migrations in order
  * Add new migrations here as the schema evolves
  */
-const migrations: readonly Migration[] = [initialMigration, usageTrackingMigration];
+const migrations: readonly Migration[] = [initialMigration, usageTrackingMigration, claudeLogsMigration];
 
 /**
  * Check if a migration has been applied

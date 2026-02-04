@@ -595,9 +595,9 @@ export default function ContainerDetailPage() {
       )}
 
       {activeTab === 'logs' && (
-        <div className="card overflow-hidden">
+        <div className="card overflow-hidden" style={{ height: 'calc(100vh - 280px)', minHeight: '400px' }}>
           {container.status === 'running' ? (
-            <ClaudeCodeLogs containerId={container.id} className="h-[600px]" />
+            <ClaudeCodeLogs containerId={container.id} className="h-full" />
           ) : (
             <div className="p-6 text-center">
               <svg className="mx-auto h-12 w-12 text-terminal-textMuted mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -647,12 +647,12 @@ export default function ContainerDetailPage() {
             </div>
 
             {/* Shell - Use CSS hidden to preserve terminal state */}
-            <div className={clsx(terminalSubTab !== 'shell' && 'hidden')}>
-              <InteractiveTerminal containerId={container.id} onClose={() => setActiveTab('overview')} className="h-[500px]" />
+            <div className={clsx(terminalSubTab !== 'shell' && 'hidden')} style={{ height: 'calc(100vh - 320px)', minHeight: '400px' }}>
+              <InteractiveTerminal containerId={container.id} onClose={() => setActiveTab('overview')} className="h-full" />
             </div>
 
             {/* Claude Chat - Use CSS hidden to preserve messages */}
-            <div className={clsx('h-[500px]', terminalSubTab !== 'claude' && 'hidden')}>
+            <div className={clsx(terminalSubTab !== 'claude' && 'hidden')} style={{ height: 'calc(100vh - 320px)', minHeight: '400px' }}>
               <ClaudeChat containerId={container.id} />
             </div>
           </>
