@@ -47,6 +47,16 @@ const CONTAINER_WORKSPACE = '/workspace'
 const INACTIVITY_TIMEOUT = 30 * 60 * 1000
 
 /**
+ * Poll interval for checking if background agents completed (ms)
+ */
+const AGENT_POLL_INTERVAL = 2000
+
+/**
+ * Maximum time to wait for background agents (10 minutes)
+ */
+const MAX_AGENT_WAIT_TIME = 10 * 60 * 1000
+
+/**
  * Lock for preventing parallel starts of the same container
  */
 const daemonStartLocks = new Map<string, Promise<void>>()
@@ -296,15 +306,11 @@ class ClaudeDaemonService extends EventEmitter {
         childProcess.stdin?.end()
 
         // Handle process exit
-        childProcess.on('exit', (code, signal) => {
-          session.isProcessing = false
-          session.state.instructionCount++
-          session.state.lastActivity = new Date()
-
+        childProcess.on('exit', async (code, signal) => {
           const exitCode = code ?? -1
 
           if (exitCode === 0) {
-            logger.info({ containerId, exitCode }, 'Instruction completed successfully')
+            logger.info({ containerId, exitCode }, 'Main instruction process completed')
           } else {
             logger.warn({ containerId, exitCode, signal }, 'Instruction process exited with non-zero code')
 
@@ -318,6 +324,32 @@ class ClaudeDaemonService extends EventEmitter {
               this.emit('claude:event', { containerId, event })
             }
           }
+
+          // Check if background agents were spawned (Task tool usage)
+          const hasBackgroundAgents = stdoutBuffer.includes('"name":"Task"') ||
+                                       stdoutBuffer.includes('run_in_background')
+
+          if (hasBackgroundAgents && exitCode === 0) {
+            logger.info({ containerId }, 'Background agents detected, waiting for completion...')
+
+            // Emit event to inform frontend
+            const waitEvent: ClaudeEvent = {
+              type: 'system',
+              timestamp: new Date(),
+              data: { message: 'Aguardando agentes em background terminarem...' },
+            }
+            this.emit('claude:event', { containerId, event: waitEvent })
+
+            // Wait for all background agents to complete
+            await this.waitForAgentsToComplete(containerId, session.dockerId)
+          }
+
+          // Now mark as complete
+          session.isProcessing = false
+          session.state.instructionCount++
+          session.state.lastActivity = new Date()
+
+          logger.info({ containerId, exitCode }, 'Instruction fully completed (including background agents)')
 
           // Resolve with captured output
           resolve({
@@ -449,6 +481,86 @@ class ClaudeDaemonService extends EventEmitter {
       default:
         return 'system'
     }
+  }
+
+  /**
+   * Check if there are still Claude processes running in the container
+   * Returns the count of active claude processes
+   */
+  private async getActiveClaudeProcessCount(dockerId: string): Promise<number> {
+    return new Promise((resolve) => {
+      const checkProcess = spawn('docker', [
+        'exec',
+        dockerId,
+        'pgrep', '-c', '-f', 'claude',
+      ])
+
+      let countStr = ''
+
+      checkProcess.stdout?.on('data', (chunk: Buffer) => {
+        countStr += chunk.toString('utf-8')
+      })
+
+      checkProcess.on('exit', (code) => {
+        // pgrep returns 0 if found, 1 if not found
+        if (code === 0) {
+          const count = parseInt(countStr.trim(), 10) || 0
+          resolve(count)
+        } else {
+          resolve(0)
+        }
+      })
+
+      checkProcess.on('error', () => {
+        resolve(0)
+      })
+    })
+  }
+
+  /**
+   * Wait for all background agents to complete
+   * Returns when no more claude processes are running
+   */
+  private async waitForAgentsToComplete(
+    containerId: string,
+    dockerId: string,
+    maxWaitTime: number = MAX_AGENT_WAIT_TIME
+  ): Promise<void> {
+    const session = this.sessions.get(containerId)
+    const startTime = Date.now()
+
+    logger.info({ containerId }, 'Waiting for background agents to complete...')
+
+    // Initial delay to let any background tasks spawn
+    await new Promise(resolve => setTimeout(resolve, 1000))
+
+    while (Date.now() - startTime < maxWaitTime) {
+      const processCount = await this.getActiveClaudeProcessCount(dockerId)
+
+      if (processCount === 0) {
+        logger.info({ containerId }, 'All background agents completed')
+        return
+      }
+
+      logger.debug({ containerId, processCount }, 'Background agents still running')
+
+      // Emit progress event
+      if (session) {
+        const event: ClaudeEvent = {
+          type: 'system',
+          timestamp: new Date(),
+          data: {
+            message: `Aguardando ${processCount} agente(s) em background...`,
+            agentCount: processCount,
+          },
+        }
+        this.emit('claude:event', { containerId, event })
+      }
+
+      await new Promise(resolve => setTimeout(resolve, AGENT_POLL_INTERVAL))
+    }
+
+    logger.warn({ containerId, maxWaitTime }, 'Max wait time reached, agents may still be running')
   }
 
   /**

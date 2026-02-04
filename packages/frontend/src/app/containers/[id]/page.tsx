@@ -475,9 +475,7 @@ export default function ContainerDetailPage() {
       )}
 
       {activeTab === 'instructions' && (
-        <div className="max-w-3xl">
-          <InstructionQueue containerId={container.id} />
-        </div>
+        <InstructionQueue containerId={container.id} />
       )}
 
       {activeTab === 'logs' && (

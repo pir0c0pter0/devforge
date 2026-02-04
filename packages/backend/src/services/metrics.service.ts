@@ -151,13 +151,18 @@ export class MetricsService {
 
   /**
    * Detect active Claude agents by parsing ps aux inside container
+   * Improved detection to capture:
+   * - Main Claude process (claude command)
+   * - Background agents spawned via Task tool
+   * - Node.js processes related to Claude
    */
   private async detectActiveAgents(containerId: string): Promise<AgentProcess[]> {
     try {
       // Execute ps command to find Claude processes
+      // Using ps aux with full command line
       const result = await dockerService.executeCommand(
         containerId,
-        ['ps', 'aux'],
+        ['ps', 'aux', '--width', '200'],
         { user: 'root' }
       );
 
@@ -174,41 +179,74 @@ export class MetricsService {
           continue;
         }
 
-        // Look for Claude-related processes
-        if (
-          line.includes('claude') ||
-          line.includes('code-server') ||
-          line.includes('vscode') ||
-          (line.includes('node') && line.includes('agent'))
-        ) {
-          const parts = line.split(/\s+/);
+        const lineLower = line.toLowerCase();
 
-          if (parts.length < 11) {
-            continue;
-          }
+        // Look for Claude-related processes with improved detection:
+        // 1. Direct claude command execution
+        // 2. Node.js running claude code
+        // 3. Background agents (Task tool spawns)
+        // 4. claude-code related processes
+        const isClaudeProcess =
+          // Direct claude command (main process or subagents)
+          lineLower.includes('/claude') ||
+          lineLower.includes(' claude ') ||
+          line.endsWith(' claude') ||
+          // Claude Code specific patterns
+          lineLower.includes('claude-code') ||
+          lineLower.includes('@anthropic') ||
+          // Node.js running claude (background tasks)
+          (lineLower.includes('node') && (
+            lineLower.includes('subagent') ||
+            lineLower.includes('task_id') ||
+            lineLower.includes('agent')
+          ));
 
-          const pidStr = parts[1];
-          const cpuStr = parts[2];
-          const memStr = parts[3];
-
-          if (!pidStr || !cpuStr || !memStr) {
-            continue;
-          }
-
-          const pid = parseInt(pidStr, 10);
-          const cpu = parseFloat(cpuStr);
-          const memory = parseFloat(memStr);
-          const command = parts.slice(10).join(' ');
-
-          if (!isNaN(pid)) {
-            agents.push({
-              pid,
-              command: command.substring(0, 100), // Limit command length
-              cpu: Number(cpu.toFixed(2)),
-              memory: Number(memory.toFixed(2)),
-            });
-          }
+        // Skip non-Claude processes
+        if (!isClaudeProcess) {
+          continue;
         }
+
+        // Skip ps command itself and grep/pgrep commands
+        if (
+          lineLower.includes('ps aux') ||
+          lineLower.includes('pgrep') ||
+          lineLower.includes('grep')
+        ) {
+          continue;
+        }
+
+        const parts = line.split(/\s+/);
+
+        if (parts.length < 11) {
+          continue;
+        }
+
+        const pidStr = parts[1];
+        const cpuStr = parts[2];
+        const memStr = parts[3];
+
+        if (!pidStr || !cpuStr || !memStr) {
+          continue;
+        }
+
+        const pid = parseInt(pidStr, 10);
+        const cpu = parseFloat(cpuStr);
+        const memory = parseFloat(memStr);
+        const command = parts.slice(10).join(' ');
+
+        if (!isNaN(pid)) {
+          agents.push({
+            pid,
+            command: command.substring(0, 100), // Limit command length
+            cpu: Number(cpu.toFixed(2)),
+            memory: Number(memory.toFixed(2)),
+          });
+        }
+      }
+
+      // Log detected agents for debugging
+      if (agents.length > 0) {
+        logger.debug({ containerId, agentCount: agents.length, agents: agents.map(a => ({ pid: a.pid, cmd: a.command.substring(0, 50) })) }, 'Detected Claude agents');
       }
 
       return agents;

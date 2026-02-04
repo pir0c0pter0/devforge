@@ -144,9 +144,33 @@ export function getOrCreateWorker(containerId: string): Worker {
         await job.updateProgress(progressProcessing)
         emitInstructionProgress({ ...baseEventData, progress: 45, progressDetail: progressProcessing })
 
+        // Listen for daemon events to track background agents
+        const eventHandler = ({ containerId: eventContainerId, event }: { containerId: string; event: { type: string; data?: { message?: string; agentCount?: number } } }) => {
+          if (eventContainerId !== containerId) return
+
+          // Update progress when waiting for background agents
+          if (event.type === 'system' && event.data?.agentCount) {
+            const agentProgress = createProgressData(
+              55,
+              'processing',
+              event.data.message || `Aguardando ${event.data.agentCount} agente(s)...`
+            )
+            job.updateProgress(agentProgress)
+            emitInstructionProgress({ ...baseEventData, progress: 55, progressDetail: agentProgress })
+          }
+        }
+
+        claudeDaemonService.on('claude:event', eventHandler)
+
         // Send instruction to Claude daemon and wait for completion
-        // Now returns captured output when the instruction finishes
-        const result = await claudeDaemonService.sendInstruction(containerId, safeInstruction)
+        // Now returns captured output when the instruction finishes (including background agents)
+        let result
+        try {
+          result = await claudeDaemonService.sendInstruction(containerId, safeInstruction)
+        } finally {
+          // Remove event listener
+          claudeDaemonService.off('claude:event', eventHandler)
+        }
 
         // Stage 7: Finalizing
         const progressFinalizing = createProgressData(80, 'finalizing', 'Instrução concluída, processando resultado...')
