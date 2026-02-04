@@ -44,9 +44,9 @@ export const rustTemplate: ContainerTemplate = {
       // Install cross-compilation support (optional, for WebAssembly)
       'rustup target add wasm32-unknown-unknown || true',
       // Initialize a Cargo project if not exists
-      'cd /home/developer/workspace && [ ! -f Cargo.toml ] && cargo init --name project || true',
+      'cd /workspace && [ ! -f Cargo.toml ] && cargo init --name project || true',
     ],
-    workingDir: '/home/developer/workspace',
+    workingDir: '/workspace',
     ports: {
       8080: 8080,
       3000: 3000,

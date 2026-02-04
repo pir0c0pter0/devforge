@@ -19,8 +19,8 @@ export const pythonTemplate: ContainerTemplate = {
       PYTHONUNBUFFERED: '1',
       PIP_NO_CACHE_DIR: 'off',
       PIP_DISABLE_PIP_VERSION_CHECK: 'on',
-      VIRTUAL_ENV: '/home/developer/workspace/.venv',
-      PATH: '/home/developer/workspace/.venv/bin:$PATH',
+      VIRTUAL_ENV: '/workspace/.venv',
+      PATH: '/workspace/.venv/bin:$PATH',
     },
     extensions: [
       'ms-python.python',
@@ -46,9 +46,9 @@ export const pythonTemplate: ContainerTemplate = {
       // Install Jupyter for notebooks
       'python3 -m pip install --user jupyter jupyterlab',
       // Create project virtual environment
-      'python3 -m venv /home/developer/workspace/.venv || true',
+      'python3 -m venv /workspace/.venv || true',
     ],
-    workingDir: '/home/developer/workspace',
+    workingDir: '/workspace',
     ports: {
       8000: 8000,
       8888: 8888,

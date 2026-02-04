@@ -43,7 +43,7 @@ export const nodejsTemplate: ContainerTemplate = {
       // Initialize pnpm store if not exists
       'pnpm config set store-dir /home/developer/.pnpm-store',
     ],
-    workingDir: '/home/developer/workspace',
+    workingDir: '/workspace',
     ports: {
       3000: 3000,
       4000: 4000,

@@ -45,9 +45,9 @@ export const goTemplate: ContainerTemplate = {
       // Install mockery for test mocks
       'go install github.com/vektra/mockery/v2@latest',
       // Initialize a go.mod file if not exists
-      'cd /home/developer/workspace && [ ! -f go.mod ] && go mod init project || true',
+      'cd /workspace && [ ! -f go.mod ] && go mod init project || true',
     ],
-    workingDir: '/home/developer/workspace',
+    workingDir: '/workspace',
     ports: {
       8080: 8080,
       9090: 9090,

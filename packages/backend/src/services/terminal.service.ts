@@ -57,13 +57,14 @@ class TerminalService {
 
     const container = this.docker.getContainer(dockerId)
 
-    // Create exec with TTY
+    // Create exec with TTY - start in /workspace where repo is cloned
     const exec = await container.exec({
       Cmd: ['/bin/bash'],
       AttachStdin: true,
       AttachStdout: true,
       AttachStderr: true,
       Tty: true,
+      WorkingDir: '/workspace',
       Env: [
         'TERM=xterm-256color',
         `COLUMNS=${cols}`,

@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções
 
-## Versão Atual: 0.0.37-alpha
+## Versão Atual: 0.0.39-alpha
 
 ## Estrutura do Projeto
 
@@ -698,6 +698,20 @@ ALLOWED_ORIGINS=https://myapp.com,https://api.myapp.com
 ```
 
 ## Histórico de Versões
+
+### v0.0.39-alpha
+- Fix: **Working directory padronizado para `/workspace`** em todos os serviços
+- Fix: Claude Daemon, Terminal, e Templates agora usam `/workspace` consistentemente
+- Feat: Git configurado automaticamente após clone (user.email, user.name)
+- Feat: Permissões do workspace ajustadas para usuário developer
+- Feat: safe.directory configurado para evitar erros de ownership no git
+- Fix: Repositório agora é reconhecido pelo Claude Code
+
+### v0.0.38-alpha
+- Fix: **Parsing de mensagens Claude** - conteúdo array agora tratado corretamente
+- Fix: Claude retorna `content: [{type: "text", text: "..."}]` não string direta
+- Feat: `extractTextContent()` função para parsear formato array do Claude
+- Fix: React error #31 (Objects are not valid as React child) corrigido
 
 ### v0.0.37-alpha
 - Fix: **Claude Code Daemon - arquitetura session-based** (corrige processo que parava)

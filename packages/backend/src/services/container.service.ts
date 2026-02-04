@@ -470,7 +470,7 @@ export class ContainerService {
         name: containerName,
         Image: image,
         Env: templateEnv,
-        WorkingDir: template.defaultConfig.workingDir ?? '/home/developer/workspace',
+        WorkingDir: template.defaultConfig.workingDir ?? '/workspace',
         Tty: true,
         OpenStdin: true,
         AttachStdin: true,
@@ -626,7 +626,7 @@ export class ContainerService {
         const result = await dockerService.executeCommand(
           dockerId,
           ['bash', '-c', command],
-          { user: 'developer', workingDir: '/home/developer/workspace' }
+          { user: 'developer', workingDir: '/workspace' }
         );
 
         if (result.exitCode !== 0) {
@@ -1471,6 +1471,32 @@ export class ContainerService {
       if (result.exitCode !== 0) {
         throw new Error(`Git clone failed: ${result.stderr}`);
       }
+
+      // Configure git user for commits (use repo info or defaults)
+      await dockerService.executeCommand(
+        dockerId,
+        ['git', 'config', 'user.email', 'claude@docker.local'],
+        { user: 'root', workingDir: '/workspace' }
+      );
+      await dockerService.executeCommand(
+        dockerId,
+        ['git', 'config', 'user.name', 'Claude Docker'],
+        { user: 'root', workingDir: '/workspace' }
+      );
+
+      // Set workspace permissions for developer user
+      await dockerService.executeCommand(
+        dockerId,
+        ['chown', '-R', 'developer:developer', '/workspace'],
+        { user: 'root' }
+      );
+
+      // Mark workspace as safe for git (avoids dubious ownership errors)
+      await dockerService.executeCommand(
+        dockerId,
+        ['git', 'config', '--global', '--add', 'safe.directory', '/workspace'],
+        { user: 'root' }
+      );
 
       logger.info({ dockerId }, 'Repository cloned successfully');
     } catch (error) {

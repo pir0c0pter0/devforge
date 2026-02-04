@@ -36,8 +36,9 @@ const CLAUDE_BASE_FLAGS = [
 
 /**
  * Working directory inside containers
+ * Repository is cloned to /workspace in container.service.ts
  */
-const CONTAINER_WORKSPACE = '/home/developer/workspace'
+const CONTAINER_WORKSPACE = '/workspace'
 
 /**
  * Inactivity timeout (30 minutes)

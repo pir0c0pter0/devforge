@@ -59,9 +59,9 @@ export const fullstackTemplate: ContainerTemplate = {
       // Install common dev tools
       'pnpm add -g eslint prettier',
       // If no package.json exists, create a Next.js project
-      'cd /home/developer/workspace && [ ! -f package.json ] && pnpm create next-app . --typescript --tailwind --eslint --app --src-dir --use-pnpm --no-import-alias || true',
+      'cd /workspace && [ ! -f package.json ] && pnpm create next-app . --typescript --tailwind --eslint --app --src-dir --use-pnpm --no-import-alias || true',
     ],
-    workingDir: '/home/developer/workspace',
+    workingDir: '/workspace',
     ports: {
       3000: 3000,
       4000: 4000,
