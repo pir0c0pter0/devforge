@@ -420,6 +420,24 @@ export const translations = {
       close: 'Fechar',
       required: 'obrigatório',
     },
+
+    // Modals
+    modal: {
+      close: 'Fechar',
+      ok: 'OK',
+      cancel: 'Cancelar',
+      confirm: 'Confirmar',
+      technicalDetails: 'Detalhes técnicos',
+      deleteConfirm: {
+        title: 'Confirmar Exclusão',
+        cannotUndo: 'Esta ação não pode ser desfeita.',
+      },
+      errors: {
+        cloneRepository: 'Erro ao clonar repositório',
+        cloneDescription: 'Não foi possível clonar o repositório Git.',
+        sshRequired: 'Para repositórios privados, configure uma chave SSH em Configurações.',
+      },
+    },
   },
 
   en: {
@@ -840,6 +858,24 @@ export const translations = {
       confirm: 'Confirm',
       close: 'Close',
       required: 'required',
+    },
+
+    // Modals
+    modal: {
+      close: 'Close',
+      ok: 'OK',
+      cancel: 'Cancel',
+      confirm: 'Confirm',
+      technicalDetails: 'Technical details',
+      deleteConfirm: {
+        title: 'Confirm Deletion',
+        cannotUndo: 'This action cannot be undone.',
+      },
+      errors: {
+        cloneRepository: 'Error cloning repository',
+        cloneDescription: 'Could not clone the Git repository.',
+        sshRequired: 'For private repositories, configure an SSH key in Settings.',
+      },
     },
   },
 } as const

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { z } from 'zod'
 import { apiClient } from '@/lib/api-client'
 import { useI18n } from '@/lib/i18n'
+import { useModal } from '@/components/ui/modal'
 import type { TemplateType, ContainerMode, RepositoryType } from '@/lib/types'
 import { AnimatedDots } from '@/components/ui/animated-dots'
 import clsx from 'clsx'
@@ -83,9 +84,9 @@ type FormData = z.infer<typeof createContainerSchema>
 export function CreateContainerForm() {
   const { t } = useI18n()
   const router = useRouter()
+  const modal = useModal()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({})
-  const [generalError, setGeneralError] = useState<string | null>(null)
 
   const [formData, setFormData] = useState<FormData>({
     name: '',
@@ -109,7 +110,6 @@ export function CreateContainerForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setErrors({})
-    setGeneralError(null)
 
     try {
       const validated = createContainerSchema.parse(formData)
@@ -144,7 +144,21 @@ export function CreateContainerForm() {
         // Redirect immediately to container list - progress will show there
         router.push('/containers')
       } else {
-        setGeneralError(response.error || t.createContainer.failedCreate)
+        const errorMessage = response.error || t.createContainer.failedCreate
+
+        // Check if it's a git clone error for better messaging
+        if (errorMessage.includes('Git clone failed') || errorMessage.includes('clone repository')) {
+          modal.showError(
+            'Erro ao clonar repositório',
+            'Não foi possível clonar o repositório Git.',
+            errorMessage
+          )
+        } else {
+          modal.showError(
+            t.createContainer.failedCreate,
+            errorMessage
+          )
+        }
         setIsSubmitting(false)
       }
     } catch (error) {
@@ -157,7 +171,10 @@ export function CreateContainerForm() {
         })
         setErrors(fieldErrors)
       } else {
-        setGeneralError(t.createContainer.unexpectedError)
+        modal.showError(
+          t.createContainer.unexpectedError,
+          error instanceof Error ? error.message : 'Erro desconhecido'
+        )
       }
       setIsSubmitting(false)
     }
@@ -199,12 +216,6 @@ export function CreateContainerForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {generalError && (
-        <div className="bg-terminal-red/10 border border-terminal-red/30 rounded p-4">
-          <p className="text-sm text-terminal-red">{generalError}</p>
-        </div>
-      )}
-
       <div>
         <label htmlFor="name" className="label">
           <span className="text-terminal-green">$</span> {t.createContainer.name} *

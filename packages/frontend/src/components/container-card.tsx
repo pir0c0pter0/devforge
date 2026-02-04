@@ -6,6 +6,7 @@ import type { Container, Task } from '@/lib/types'
 import { apiClient } from '@/lib/api-client'
 import { useContainerStore } from '@/stores/container.store'
 import { useI18n } from '@/lib/i18n'
+import { useModal } from '@/components/ui/modal'
 import { AnimatedDots } from '@/components/ui/animated-dots'
 import { StatusIndicator } from '@/components/ui/status-indicator'
 import type { ContainerStatusType } from '@/components/ui/status-indicator'
@@ -20,6 +21,7 @@ interface ContainerCardProps {
 export function ContainerCard({ container }: ContainerCardProps) {
   const { t } = useI18n()
   const router = useRouter()
+  const modal = useModal()
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null)
   const [isStarting, setIsStarting] = useState(false)
@@ -116,7 +118,10 @@ export function ContainerCard({ container }: ContainerCardProps) {
     const response = await apiClient.startContainer(container.id)
 
     if (!response.success) {
-      setError(response.error || t.container.failedStart)
+      modal.showError(
+        t.container.failedStart,
+        response.error || 'Erro desconhecido ao iniciar container'
+      )
       setIsStarting(false)
       return
     }
@@ -146,13 +151,30 @@ export function ContainerCard({ container }: ContainerCardProps) {
     const response = await apiClient.stopContainer(container.id)
 
     if (!response.success) {
-      setError(response.error || t.container.failedStop)
+      modal.showError(
+        t.container.failedStop,
+        response.error || 'Erro desconhecido ao parar container'
+      )
       updateContainer(container.id, { status: 'running' })
     }
   }
 
   const handleDelete = async () => {
-    if (!confirm(`${t.container.confirmDelete} "${container.name}"?`)) {
+    const confirmed = await modal.confirm({
+      title: t.container.confirmDelete,
+      message: (
+        <p>
+          Tem certeza que deseja excluir o container <strong className="text-terminal-text">{container.name}</strong>?
+          <br />
+          <span className="text-terminal-red text-xs mt-2 block">Esta ação não pode ser desfeita.</span>
+        </p>
+      ),
+      type: 'delete',
+      confirmLabel: t.container.delete,
+      cancelLabel: 'Cancelar',
+    })
+
+    if (!confirmed) {
       return
     }
 
@@ -165,7 +187,10 @@ export function ContainerCard({ container }: ContainerCardProps) {
     const response = await apiClient.deleteContainer(container.id)
 
     if (!response.success) {
-      setError(response.error || t.container.failedDelete)
+      modal.showError(
+        t.container.failedDelete,
+        response.error || 'Erro desconhecido ao excluir container'
+      )
       setIsDeleting(false)
       return
     }
@@ -194,7 +219,10 @@ export function ContainerCard({ container }: ContainerCardProps) {
     if (response.success && response.data?.url) {
       window.open(response.data.url, '_blank')
     } else {
-      setError(response.error || t.container.failedVscode)
+      modal.showError(
+        t.container.failedVscode,
+        response.error || 'Erro desconhecido ao abrir VS Code'
+      )
     }
   }
 

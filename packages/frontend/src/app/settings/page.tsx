@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useI18n } from '@/lib/i18n'
+import { useModal } from '@/components/ui/modal'
 import { AnimatedDots } from '@/components/ui/animated-dots'
 
 interface ClaudeStatus {
@@ -64,6 +65,7 @@ const API_URL = process.env['NEXT_PUBLIC_API_URL'] || 'http://localhost:8000'
 
 export default function SettingsPage() {
   const { t, language, setLanguage } = useI18n()
+  const modal = useModal()
   const [claudeStatus, setClaudeStatus] = useState<ClaudeStatus | null>(null)
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null)
   const [config, setConfig] = useState<Config | null>(null)
@@ -119,7 +121,15 @@ export default function SettingsPage() {
   }
 
   const handleLogout = async () => {
-    if (!confirm(t.settings.claudeAuth.confirmLogout)) {
+    const confirmed = await modal.confirm({
+      title: 'Logout do Claude Code',
+      message: t.settings.claudeAuth.confirmLogout,
+      type: 'warning',
+      confirmLabel: t.settings.claudeAuth.logout,
+      cancelLabel: 'Cancelar',
+    })
+
+    if (!confirmed) {
       return
     }
 
@@ -129,15 +139,17 @@ export default function SettingsPage() {
       })
       if (res.ok) {
         await fetchStatus()
+        modal.showSuccess('Logout realizado', 'Você foi deslogado do Claude Code.')
       }
     } catch (error) {
       console.error('Failed to logout:', error)
+      modal.showError('Erro ao fazer logout', 'Não foi possível fazer logout do Claude Code.')
     }
   }
 
   const handleGenerateSshKey = async () => {
     if (!sshEmail || !sshEmail.includes('@')) {
-      alert(t.settings.github.emailInvalid)
+      modal.showWarning('Email inválido', t.settings.github.emailInvalid)
       return
     }
 

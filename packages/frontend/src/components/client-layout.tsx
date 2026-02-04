@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { I18nProvider, useI18n } from '@/lib/i18n'
+import { ModalProvider } from '@/components/ui/modal'
 import { APP_INFO } from '@/lib/version'
 
 function Header() {
@@ -84,7 +85,9 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
 export function ClientLayout({ children }: { children: React.ReactNode }) {
   return (
     <I18nProvider>
-      <LayoutContent>{children}</LayoutContent>
+      <ModalProvider>
+        <LayoutContent>{children}</LayoutContent>
+      </ModalProvider>
     </I18nProvider>
   )
 }
