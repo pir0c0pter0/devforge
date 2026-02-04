@@ -221,6 +221,15 @@ export const translations = {
       memoryRange: '512 - 32768 MB',
       diskRange: '5 - 500 GB',
       mustBeStopped: 'Pare o container para editar os limites',
+      // Save confirmation modal
+      confirmSaveTitle: 'Confirmar alterações',
+      confirmSaveMessage: 'O container está rodando. Para aplicar as novas configurações de recursos, o container será parado e reiniciado automaticamente.',
+      confirmSaveWarning: 'Processos em execução serão interrompidos.',
+      confirmSaveButton: 'Parar e Reconfigurar',
+      cancelButton: 'Cancelar',
+      stoppingContainer: 'Parando container...',
+      applyingChanges: 'Aplicando alterações...',
+      restartingContainer: 'Reiniciando container...',
     },
 
     // Claude Chat
@@ -785,6 +794,15 @@ export const translations = {
       memoryRange: '512 - 32768 MB',
       diskRange: '5 - 500 GB',
       mustBeStopped: 'Stop the container to edit limits',
+      // Save confirmation modal
+      confirmSaveTitle: 'Confirm changes',
+      confirmSaveMessage: 'The container is running. To apply the new resource settings, the container will be stopped and restarted automatically.',
+      confirmSaveWarning: 'Running processes will be interrupted.',
+      confirmSaveButton: 'Stop and Reconfigure',
+      cancelButton: 'Cancel',
+      stoppingContainer: 'Stopping container...',
+      applyingChanges: 'Applying changes...',
+      restartingContainer: 'Restarting container...',
     },
 
     // Claude Chat

@@ -121,6 +121,8 @@ export default function ContainerDetailPage() {
   // Resource limits editor state
   const [isEditingLimits, setIsEditingLimits] = useState(false)
   const [isSavingLimits, setIsSavingLimits] = useState(false)
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
+  const [saveProgress, setSaveProgress] = useState<string | null>(null)
   const [limitsForm, setLimitsForm] = useState<ResourceLimitsForm>({
     cpuCores: 1,
     memoryMB: 2048,
@@ -241,34 +243,71 @@ export default function ContainerDetailPage() {
     setLimitsError(null)
   }, [])
 
-  const handleSaveLimits = async () => {
-    if (!container) return
-
-    // Validate form
+  // Validate limits form
+  const validateLimitsForm = (): boolean => {
     if (limitsForm.cpuCores < 0.5 || limitsForm.cpuCores > 16) {
       setLimitsError(t.containerDetail.cpuRange)
-      return
+      return false
     }
     if (limitsForm.memoryMB < 512 || limitsForm.memoryMB > 32768) {
       setLimitsError(t.containerDetail.memoryRange)
-      return
+      return false
     }
     if (limitsForm.diskGB < 5 || limitsForm.diskGB > 500) {
       setLimitsError(t.containerDetail.diskRange)
+      return false
+    }
+    return true
+  }
+
+  const handleSaveLimits = async () => {
+    if (!container) return
+    if (!validateLimitsForm()) return
+
+    // If container is running, show confirmation modal
+    if (container.status === 'running') {
+      setShowConfirmModal(true)
       return
     }
+
+    // Container is stopped, save directly
+    await performSaveLimits(false)
+  }
+
+  // Perform the actual save (optionally stopping and restarting)
+  const performSaveLimits = async (needsRestart: boolean) => {
+    if (!container) return
 
     setIsSavingLimits(true)
     setLimitsError(null)
     setLimitsSuccess(null)
+    setShowConfirmModal(false)
 
-    const response = await apiClient.updateContainerLimits(container.id, {
-      cpuCores: limitsForm.cpuCores,
-      memoryMB: limitsForm.memoryMB,
-      diskGB: limitsForm.diskGB,
-    })
+    try {
+      // Step 1: Stop container if running
+      if (needsRestart) {
+        setSaveProgress(t.containerDetail.stoppingContainer)
+        updateContainer(container.id, { status: 'stopped' })
+        const stopResponse = await apiClient.stopContainer(container.id)
+        if (!stopResponse.success) {
+          throw new Error(stopResponse.error || t.container.failedStop)
+        }
+        // Wait a moment for container to fully stop
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      }
 
-    if (response.success && response.data) {
+      // Step 2: Apply new limits
+      setSaveProgress(t.containerDetail.applyingChanges)
+      const response = await apiClient.updateContainerLimits(container.id, {
+        cpuCores: limitsForm.cpuCores,
+        memoryMB: limitsForm.memoryMB,
+        diskGB: limitsForm.diskGB,
+      })
+
+      if (!response.success || !response.data) {
+        throw new Error(response.error || t.containerDetail.limitsUpdateFailed)
+      }
+
       // Update local container state
       setContainerBase(prev => prev ? {
         ...prev,
@@ -278,15 +317,27 @@ export default function ContainerDetailPage() {
           diskGB: response.data!.limits.diskGB,
         }
       } : null)
+
+      // Step 3: Restart container if it was running
+      if (needsRestart) {
+        setSaveProgress(t.containerDetail.restartingContainer)
+        updateContainer(container.id, { status: 'creating' })
+        const startResponse = await apiClient.startContainer(container.id)
+        if (!startResponse.success) {
+          // Don't throw - limits were saved, just couldn't restart
+          setLimitsError(t.container.failedStart)
+        }
+      }
+
       setLimitsSuccess(t.containerDetail.limitsUpdated)
       setIsEditingLimits(false)
-      // Clear success message after 3 seconds
       setTimeout(() => setLimitsSuccess(null), 3000)
-    } else {
-      setLimitsError(response.error || t.containerDetail.limitsUpdateFailed)
+    } catch (err) {
+      setLimitsError(err instanceof Error ? err.message : t.containerDetail.limitsUpdateFailed)
+    } finally {
+      setIsSavingLimits(false)
+      setSaveProgress(null)
     }
-
-    setIsSavingLimits(false)
   }
 
   const handleLimitsFormChange = (field: keyof ResourceLimitsForm, value: number) => {
@@ -693,12 +744,7 @@ export default function ContainerDetailPage() {
               {!isEditingLimits && (
                 <button
                   onClick={startEditingLimits}
-                  disabled={container.status === 'running'}
-                  className={clsx(
-                    'btn-secondary text-sm',
-                    container.status === 'running' && 'opacity-50 cursor-not-allowed'
-                  )}
-                  title={container.status === 'running' ? t.containerDetail.mustBeStopped : ''}
+                  className="btn-secondary text-sm"
                 >
                   <svg className="w-4 h-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -866,9 +912,6 @@ export default function ContainerDetailPage() {
                     <div className="input bg-terminal-bgLight cursor-not-allowed">{container.limits.diskGB}</div>
                   </div>
                 </div>
-                {container.status === 'running' && (
-                  <p className="text-sm text-terminal-textMuted mt-4">{t.containerDetail.cannotModifyRunning}</p>
-                )}
               </>
             )}
           </div>
@@ -877,6 +920,68 @@ export default function ContainerDetailPage() {
             <h3 className="text-lg font-semibold text-terminal-red mb-4">{t.containerDetail.dangerZone}</h3>
             <p className="text-sm text-terminal-textMuted mb-4">{t.containerDetail.dangerZoneWarning}</p>
             <button className="btn-danger">{t.containerDetail.deleteContainer}</button>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal for Resource Limits */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="card p-6 max-w-md mx-4 animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-terminal-yellow/20 flex items-center justify-center">
+                <svg className="w-5 h-5 text-terminal-yellow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-terminal-text">{t.containerDetail.confirmSaveTitle}</h3>
+            </div>
+
+            <p className="text-sm text-terminal-text mb-3">{t.containerDetail.confirmSaveMessage}</p>
+            <p className="text-sm text-terminal-yellow mb-4 flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              {t.containerDetail.confirmSaveWarning}
+            </p>
+
+            {/* Show progress during save */}
+            {saveProgress && (
+              <div className="mb-4 p-3 bg-terminal-cyan/10 border border-terminal-cyan/30 rounded-lg">
+                <p className="text-sm text-terminal-cyan flex items-center gap-2">
+                  <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  {saveProgress}
+                </p>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowConfirmModal(false)}
+                className="btn-secondary"
+                disabled={isSavingLimits}
+              >
+                {t.containerDetail.cancelButton}
+              </button>
+              <button
+                onClick={() => performSaveLimits(true)}
+                className="btn-warning"
+                disabled={isSavingLimits}
+              >
+                {isSavingLimits ? (
+                  <AnimatedDots text={saveProgress || t.common.loading} />
+                ) : (
+                  <>
+                    <svg className="w-4 h-4 mr-1 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    {t.containerDetail.confirmSaveButton}
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

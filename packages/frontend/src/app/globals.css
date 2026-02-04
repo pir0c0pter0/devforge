@@ -98,6 +98,15 @@ body {
     box-shadow: 0 0 12px rgba(248, 81, 73, 0.3);
   }
 
+  .btn-warning {
+    @apply bg-terminal-yellow/20 hover:bg-terminal-yellow/30 text-terminal-yellow font-medium py-2 px-4 rounded transition-all border border-terminal-yellow/50;
+  }
+
+  .btn-warning:hover {
+    @apply border-terminal-yellow;
+    box-shadow: 0 0 12px rgba(214, 158, 47, 0.3);
+  }
+
   .card {
     @apply bg-terminal-bgLight rounded-lg border border-terminal-border overflow-hidden;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
