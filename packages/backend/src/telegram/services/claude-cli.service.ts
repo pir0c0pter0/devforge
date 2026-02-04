@@ -25,15 +25,14 @@ interface ClaudeResponse {
 }
 
 /**
- * Claude CLI flags for Telegram conversations
+ * Claude CLI base flags for Telegram conversations
  * Note: prompt is passed as positional argument, not as --prompt
- * Note: --verbose is required when using --output-format stream-json
+ * Note: Claude CLI requires TTY emulation via 'script' command to avoid
+ *       stdout buffering issues when spawned as child process
  */
-const CLAUDE_FLAGS = [
+const CLAUDE_FLAGS_BASE = [
   '--print',
   '--dangerously-skip-permissions',
-  '--output-format', 'stream-json',
-  '--verbose',
 ]
 
 /**
@@ -128,25 +127,35 @@ class TelegramClaudeService {
     )
 
     return new Promise((resolve, reject) => {
-      // Build command arguments
-      const args = [...CLAUDE_FLAGS]
+      // Build command arguments for Claude
+      const claudeArgs = [...CLAUDE_FLAGS_BASE]
+
+      // Track if this is first message (for output parsing)
+      const isFirstMessage = session.isFirstMessage
 
       // Use session for continuity
-      if (session.isFirstMessage) {
-        args.push('--session-id', session.sessionId)
+      if (isFirstMessage) {
+        claudeArgs.push('--session-id', session.sessionId)
         // Add system prompt on first message
-        args.push('--system-prompt', TELEGRAM_SYSTEM_PROMPT)
+        claudeArgs.push('--system-prompt', TELEGRAM_SYSTEM_PROMPT)
         session.isFirstMessage = false
       } else {
-        args.push('--resume', session.sessionId)
+        claudeArgs.push('--resume', session.sessionId)
       }
 
       // Add the message as positional argument (must be last)
-      args.push(message)
+      // Escape single quotes in message for shell command
+      const escapedMessage = message.replace(/'/g, "'\\''")
+      claudeArgs.push(escapedMessage)
 
-      logger.debug({ args: args.join(' ') }, 'Spawning Claude CLI')
+      // Build the full command string for script
+      const claudeCommand = `claude ${claudeArgs.map(arg => `'${arg.replace(/'/g, "'\\''")}'`).join(' ')}`
 
-      const proc = spawn('claude', args, {
+      logger.debug({ command: claudeCommand }, 'Spawning Claude CLI via script')
+
+      // Use 'script' to emulate a TTY - this fixes stdout buffering issues
+      // script -q -c 'command' /dev/null runs command in a PTY and outputs to stdout
+      const proc = spawn('script', ['-q', '-c', claudeCommand, '/dev/null'], {
         cwd: process.env['HOME'] || '/tmp', // Use HOME to avoid scanning large codebases
         env: { ...process.env, HOME: process.env['HOME'] },
       })
@@ -194,8 +203,9 @@ class TelegramClaudeService {
           return
         }
 
-        // Parse the stream-json output to extract the response
-        const response = this.parseClaudeOutput(stdout)
+        // Parse the output to extract the response
+        // First message returns plain text, subsequent messages return JSON
+        const response = this.parseClaudeOutput(stdout, isFirstMessage)
 
         logger.info(
           { userId, sessionId: session.sessionId, responseLength: response.text.length },
@@ -221,72 +231,47 @@ class TelegramClaudeService {
   }
 
   /**
-   * Parse Claude CLI stream-json output to extract response text
+   * Strip ANSI escape codes and terminal control sequences from output
+   * These are added by 'script' command when emulating TTY
    */
-  private parseClaudeOutput(stdout: string): ClaudeResponse {
-    let responseText = ''
-    let cost: number | undefined
-    let durationMs: number | undefined
+  private stripAnsiCodes(text: string): string {
+    return text
+      // Remove ANSI escape sequences (colors, cursor movement, etc.)
+      .replace(/\x1b\[[0-9;?]*[a-zA-Z<>]/g, '')
+      // Remove OSC sequences (Operating System Commands)
+      .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+      // Remove remaining escape sequences
+      .replace(/\x1b[<>=A-Za-z]/g, '')
+      // Remove control characters
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+      // Remove carriage returns
+      .replace(/\r/g, '')
+      // Remove leftover bracket sequences like [<u [?1004l [?25h etc
+      .replace(/\[<[a-z]/g, '')
+      .replace(/\[\?[0-9]*[a-zA-Z]/g, '')
+      // Remove trailing single letters that are escape sequence residue (common: u, h, l)
+      .replace(/[uhl]\s*$/g, '')
+      // Remove "u[" pattern that appears when escape sequence is split
+      .replace(/u\[/g, '')
+      // Clean up multiple spaces
+      .replace(/  +/g, ' ')
+      // Clean up multiple newlines
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+  }
 
-    // Split by newlines and parse each JSON line
-    const lines = stdout.split('\n').filter(line => line.trim())
-
-    for (const line of lines) {
-      try {
-        const parsed = JSON.parse(line)
-
-        // Look for assistant messages
-        if (parsed.type === 'assistant' && parsed.message?.content) {
-          const content = parsed.message.content
-          if (Array.isArray(content)) {
-            for (const block of content) {
-              if (block.type === 'text' && block.text) {
-                responseText += block.text
-              }
-            }
-          } else if (typeof content === 'string') {
-            responseText += content
-          }
-        }
-
-        // Look for result with cost info
-        if (parsed.type === 'result') {
-          if (parsed.total_cost_usd) {
-            cost = parsed.total_cost_usd
-          }
-          if (parsed.duration_ms) {
-            durationMs = parsed.duration_ms
-          }
-          // Result might also have the response
-          if (parsed.result && typeof parsed.result === 'string') {
-            responseText = parsed.result
-          }
-        }
-
-        // Handle content_block_delta for streaming
-        if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
-          responseText += parsed.delta.text
-        }
-
-      } catch {
-        // Not JSON, might be plain text
-        if (line.trim() && !line.startsWith('{')) {
-          responseText += line + '\n'
-        }
-      }
-    }
-
-    // Fallback: if no parsed response, use raw output
-    if (!responseText.trim() && stdout.trim()) {
-      // Try to find any text that looks like a response
-      const lastLines = stdout.split('\n').slice(-10).join('\n')
-      responseText = lastLines
-    }
+  /**
+   * Parse Claude CLI output to extract response text
+   * Output comes through 'script' TTY emulation, so may contain escape codes
+   */
+  private parseClaudeOutput(stdout: string, _isPlainText: boolean): ClaudeResponse {
+    // Strip terminal escape codes added by 'script'
+    const cleanOutput = this.stripAnsiCodes(stdout)
 
     return {
-      text: responseText.trim() || 'Desculpe, nao consegui gerar uma resposta.',
-      cost,
-      durationMs,
+      text: cleanOutput || 'Desculpe, nao consegui gerar uma resposta.',
+      cost: undefined,
+      durationMs: undefined,
     }
   }
 
