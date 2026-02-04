@@ -15,6 +15,7 @@ import diagnosticsRouter from './api/routes/diagnostics.routes';
 import settingsRouter from './api/routes/settings.routes';
 import tasksRouter from './api/routes/tasks.routes';
 import claudeDaemonRouter from './api/routes/claude-daemon.routes';
+import telegramRouter from './api/routes/telegram.routes';
 import { initializeDatabase, closeDatabase, isDatabaseHealthy } from './database';
 import { runMigrations, getDatabaseStats } from './database/migrations';
 import {
@@ -27,6 +28,7 @@ import { healthMonitorService } from './services/health-monitor.service';
 import { claudeDaemonService } from './services/claude-daemon.service';
 import { metricsCollectorService } from './services/metrics-collector.service';
 import { usageService } from './services/usage.service';
+import { telegramService } from './telegram/telegram.service';
 
 // Load environment variables
 dotenv.config();
@@ -159,6 +161,7 @@ app.use('/api/diagnostics', diagnosticsRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/tasks', tasksRouter);
 app.use('/api/claude-daemon', claudeDaemonRouter);
+app.use('/api/telegram', telegramRouter);
 
 /**
  * Root endpoint
@@ -176,6 +179,13 @@ app.get('/', (_req: Request, res: Response) => {
       settings: '/api/settings',
       tasks: '/api/tasks',
       claudeDaemon: '/api/claude-daemon',
+      telegram: '/api/telegram',
+    },
+    telegramEndpoints: {
+      webhook: 'POST /api/telegram/webhook',
+      status: 'GET /api/telegram/status',
+      sendMessage: 'POST /api/telegram/send',
+      broadcast: 'POST /api/telegram/broadcast',
     },
     queueEndpoints: {
       sendInstruction: 'POST /api/claude-daemon/:containerId/instruction',
@@ -265,6 +275,14 @@ const gracefulShutdown = async (signal: string) => {
       await destroyAllQueues();
     } catch (error) {
       logger.warn({ error }, 'Error destroying queues');
+    }
+
+    // 5.5. Parar Telegram bot
+    logger.info('Stopping Telegram bot...');
+    try {
+      await telegramService.stop();
+    } catch (error) {
+      logger.warn({ error }, 'Error stopping Telegram bot');
     }
 
     // 6. Fechar WebSocket
@@ -369,6 +387,19 @@ const startServer = async () => {
     // Start usage cleanup timer (deletes records older than 30 days)
     logger.info('Starting usage cleanup timer');
     usageService.startCleanupTimer();
+
+    // Initialize Telegram Bot (if configured)
+    if (process.env['TELEGRAM_BOT_TOKEN']) {
+      try {
+        logger.info('Initializing Telegram bot');
+        await telegramService.start();
+        logger.info('Telegram bot started successfully');
+      } catch (error) {
+        logger.error({ error }, 'Failed to start Telegram bot (non-fatal, continuing startup)');
+      }
+    } else {
+      logger.info('TELEGRAM_BOT_TOKEN not set, skipping Telegram bot initialization');
+    }
 
     // Start HTTP server
     httpServer.listen(PORT, HOST, () => {
