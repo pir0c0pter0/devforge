@@ -315,6 +315,16 @@ class HealthMonitorService {
   getConfig(): MonitorConfig {
     return { ...this.config }
   }
+
+  /**
+   * Destrói o serviço completamente
+   * Chamado durante graceful shutdown
+   */
+  destroy(): void {
+    this.stopAllMonitoring()
+    this.eventEmitter = null
+    logger.info('Health monitor service destroyed')
+  }
 }
 
 /**

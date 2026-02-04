@@ -22,6 +22,7 @@ import {
 } from '../repositories';
 import { emitContainerCreationProgress } from './websocket.service';
 import { taskService } from './task.service';
+import { containerLifecycleService } from './container-lifecycle.service';
 import * as path from 'path';
 import * as os from 'os';
 
@@ -712,6 +713,14 @@ export class ContainerService {
       const updatedContainer = entityToContainer(updatedEntity);
       this.containers.set(containerId, updatedContainer);
 
+      // Auto-start Claude environment
+      try {
+        await containerLifecycleService.onContainerStart(containerId, container.dockerId);
+      } catch (error) {
+        logger.warn({ error, containerId }, 'Failed to auto-start Claude environment - user can start manually');
+        // Não falhar o start do container
+      }
+
       logger.info({ containerId }, 'Container started successfully');
 
       return updatedContainer;
@@ -763,6 +772,16 @@ export class ContainerService {
       taskService.setProgress(taskId, 60, 'Container iniciado com sucesso!');
       taskService.setProgress(taskId, 70, 'Verificando saúde do container...');
 
+      // Auto-start Claude environment
+      taskService.setProgress(taskId, 65, 'Iniciando ambiente Claude Code...');
+      try {
+        await containerLifecycleService.onContainerStart(containerId, container.dockerId);
+        taskService.setProgress(taskId, 75, 'Ambiente Claude Code iniciado!');
+      } catch (error) {
+        logger.warn({ error, containerId, taskId }, 'Failed to auto-start Claude environment');
+        taskService.setProgress(taskId, 75, 'Ambiente Claude não iniciado (pode iniciar manualmente)');
+      }
+
       // Step 5: Update database
       taskService.setProgress(taskId, 80, 'Atualizando banco de dados...');
       const updatedEntity = containerRepository.updateStatus(containerId, 'running');
@@ -810,6 +829,13 @@ export class ContainerService {
       }
 
       logger.info({ containerId, dockerId: container.dockerId }, 'Stopping container');
+
+      // Cleanup Claude environment before stopping Docker container
+      try {
+        await containerLifecycleService.onContainerStop(containerId);
+      } catch (error) {
+        logger.warn({ error, containerId }, 'Error cleaning up Claude environment before stop');
+      }
 
       await dockerService.stopContainer(container.dockerId);
 
@@ -966,6 +992,16 @@ export class ContainerService {
       if (closedSessions > 0) {
         logger.info({ containerId, taskId, closedSessions }, 'Closed terminal sessions before deletion');
         taskService.setProgress(taskId, 20, `${closedSessions} sessões de terminal fechadas`);
+      }
+
+      // Cleanup Claude environment before deletion
+      taskService.setProgress(taskId, 22, 'Limpando ambiente Claude Code...');
+      try {
+        await containerLifecycleService.onContainerDelete(containerId);
+        taskService.setProgress(taskId, 28, 'Ambiente Claude Code limpo!');
+      } catch (error) {
+        logger.warn({ error, containerId, taskId }, 'Error cleaning up Claude environment before delete');
+        taskService.setProgress(taskId, 28, 'Continuando exclusão...');
       }
 
       // Step 3: Stop container if running

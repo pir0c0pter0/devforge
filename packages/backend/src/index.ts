@@ -8,6 +8,7 @@ import { httpLogger, logger } from './utils/logger';
 import { containerService } from './services/container.service';
 import { dockerService } from './services/docker.service';
 import { initializeWebSocket, getSocketServer } from './services/websocket.service';
+import { containerLifecycleService } from './services/container-lifecycle.service';
 import containersRouter from './api/routes/containers.routes';
 import templatesRouter from './api/routes/templates.routes';
 import diagnosticsRouter from './api/routes/diagnostics.routes';
@@ -20,6 +21,10 @@ import {
   standardRateLimiter,
   rateLimitConfig,
 } from './middleware/rate-limit';
+import { destroyAllQueues } from './services/claude-queue.service';
+import { stopAllWorkers } from './workers/claude.worker';
+import { healthMonitorService } from './services/health-monitor.service';
+import { claudeDaemonService } from './services/claude-daemon.service';
 
 // Load environment variables
 dotenv.config();
@@ -201,29 +206,67 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
  * Graceful shutdown handler
  */
 const gracefulShutdown = async (signal: string) => {
-  logger.info({ signal }, 'Received shutdown signal, closing server gracefully');
+  logger.info({ signal }, 'Received shutdown signal, starting graceful shutdown');
 
-  // Close HTTP server
-  httpServer.close(() => {
-    logger.info('HTTP server closed');
-  });
+  try {
+    // 1. Parar health monitoring (primeiro para não gerar eventos durante shutdown)
+    logger.info('Stopping health monitors...');
+    healthMonitorService.stopAllMonitoring();
 
-  // Close Socket.io connections
-  const socketServer = getSocketServer();
-  if (socketServer) {
-    socketServer.close(() => {
-      logger.info('Socket.io server closed');
+    // 2. Aguardar jobs ativos terminarem (max 30s)
+    logger.info('Waiting for active workers to finish (max 30s)...');
+    await Promise.race([
+      stopAllWorkers(),
+      new Promise(resolve => setTimeout(resolve, 30000))
+    ]);
+
+    // 3. Parar todos os daemons
+    logger.info('Stopping all Claude daemons...');
+    try {
+      await claudeDaemonService.destroy();
+    } catch (error) {
+      logger.warn({ error }, 'Error stopping Claude daemons');
+    }
+
+    // 4. Destruir todas as queues
+    logger.info('Destroying all queues...');
+    try {
+      await destroyAllQueues();
+    } catch (error) {
+      logger.warn({ error }, 'Error destroying queues');
+    }
+
+    // 5. Fechar WebSocket
+    const socketServer = getSocketServer();
+    if (socketServer) {
+      await new Promise<void>((resolve) => {
+        socketServer.close(() => {
+          logger.info('Socket.io server closed');
+          resolve();
+        });
+      });
+    }
+
+    // 6. Fechar HTTP server
+    await new Promise<void>((resolve) => {
+      httpServer.close(() => {
+        logger.info('HTTP server closed');
+        resolve();
+      });
     });
-  }
 
-  // Close database connection
-  closeDatabase();
+    // 7. Fechar database
+    closeDatabase();
 
-  // Give time for connections to close
-  setTimeout(() => {
-    logger.info('Forcing shutdown');
+    logger.info('Graceful shutdown completed');
     process.exit(0);
-  }, 10000);
+  } catch (error) {
+    logger.error({ error }, 'Error during graceful shutdown');
+    setTimeout(() => {
+      logger.info('Forcing shutdown after error');
+      process.exit(1);
+    }, 5000);
+  }
 };
 
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
@@ -263,6 +306,26 @@ const startServer = async () => {
     // Sync existing containers
     logger.info('Syncing existing containers');
     await containerService.syncContainers();
+
+    // Auto-start Claude daemons for running containers
+    logger.info('Auto-starting Claude daemons for running containers');
+    try {
+      const allContainers = await containerService.getAll(false); // false = não atualizar do Docker
+      const runningContainers = allContainers.filter(c => c.status === 'running');
+
+      logger.info({ count: runningContainers.length }, 'Found running containers');
+
+      for (const container of runningContainers) {
+        try {
+          await containerLifecycleService.onContainerStart(container.id, container.dockerId);
+          logger.info({ containerId: container.id }, 'Claude daemon auto-started');
+        } catch (error) {
+          logger.error({ error, containerId: container.id }, 'Failed to auto-start Claude daemon for running container');
+        }
+      }
+    } catch (error) {
+      logger.error({ error }, 'Failed to auto-start Claude daemons on startup');
+    }
 
     // Initialize WebSocket server with namespaces
     logger.info('Initializing WebSocket server');
