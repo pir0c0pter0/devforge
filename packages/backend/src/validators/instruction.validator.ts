@@ -41,6 +41,35 @@ const DANGEROUS_PATTERNS = [
   /wget.*\|\s*bash/i,
   /curl.*\|\s*sh/i,
   /wget.*\|\s*sh/i,
+
+  // Git credential theft
+  /git\s+config.*credential/i,
+  /\.git\/config/i,
+
+  // Environment variable exfiltration
+  /printenv|env\s*$/i,
+  /cat.*\/proc\/.*environ/i,
+
+  // Container escape attempts
+  /--privileged/i,
+  /docker\s+run.*--pid=host/i,
+  /nsenter/i,
+  /--cap-add/i,
+
+  // SSH key theft
+  /cat.*\.ssh\/id_/i,
+  /scp.*\.ssh/i,
+
+  // Kernel module manipulation
+  /insmod|modprobe|rmmod/i,
+
+  // Cron job injection
+  /crontab/i,
+  /\/etc\/cron/i,
+
+  // Network scanning
+  /nmap/i,
+  /masscan/i,
 ]
 
 /**

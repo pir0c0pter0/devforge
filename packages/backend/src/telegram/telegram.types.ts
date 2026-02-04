@@ -17,6 +17,10 @@ export interface SessionData {
   firstName?: string
   /** Last name (optional) */
   lastName?: string
+  /** Session mode: conversation (chat with Claude) or container (manage containers) */
+  mode: 'conversation' | 'container'
+  /** Conversation ID for tracking Claude sessions */
+  conversationId?: string
 }
 
 /**
@@ -157,4 +161,68 @@ export interface NotificationPayload {
   message: string
   timestamp: Date
   details?: Record<string, unknown>
+}
+
+// ============================================
+// Conversation & Message Persistence Types
+// ============================================
+
+/**
+ * Conversation mode - determines how messages are processed
+ */
+export type ConversationMode = 'conversation' | 'container'
+
+/**
+ * Message role - who sent the message
+ */
+export type MessageRole = 'user' | 'assistant' | 'system'
+
+/**
+ * Telegram conversation entity
+ * Represents a conversation session with a user
+ */
+export interface TelegramConversation {
+  /** Unique identifier */
+  readonly id: string
+  /** Telegram user ID */
+  readonly userId: number
+  /** Telegram chat ID */
+  readonly chatId: number
+  /** Current conversation mode */
+  readonly mode: ConversationMode
+  /** Associated container ID (when in container mode) */
+  readonly containerId?: string
+  /** Claude session ID for context continuity */
+  readonly sessionId?: string
+  /** Current context token count */
+  readonly contextTokens: number
+  /** When the conversation was created */
+  readonly createdAt: Date
+  /** When the conversation was last updated */
+  readonly updatedAt: Date
+  /** When the last message was sent */
+  readonly lastMessageAt?: Date
+}
+
+/**
+ * Telegram message entity
+ * Represents a single message in a conversation
+ */
+export interface TelegramMessage {
+  /** Unique identifier */
+  readonly id: string
+  /** Parent conversation ID */
+  readonly conversationId: string
+  /** Original Telegram message ID (for replies) */
+  readonly telegramMessageId?: number
+  /** Who sent the message */
+  readonly role: MessageRole
+  /** Message content */
+  readonly content: string
+  /** Estimated token count for context management */
+  readonly tokenCount: number
+  /** Additional metadata (tool calls, etc.) */
+  readonly metadata?: Record<string, unknown>
+  /** When the message was created */
+  readonly createdAt: Date
 }

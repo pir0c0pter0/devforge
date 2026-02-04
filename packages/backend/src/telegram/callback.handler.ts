@@ -4,6 +4,9 @@ import { containerRepository } from '../repositories/container.repository';
 import { getQueueStatus, pauseQueue, resumeQueue, clearQueue } from '../services/claude-queue.service';
 import { handleSelectCallback } from './commands/select.command';
 import { listCommand } from './commands/list.command';
+import { tasksCommand } from './commands/tasks.command';
+import { conversationService } from './services';
+import { reminderService } from './services/reminder.service';
 import { createChildLogger } from '../utils/logger';
 
 const logger = createChildLogger({ service: 'telegram-callback' });
@@ -99,12 +102,36 @@ export class CallbackHandler {
           await this.handleCancel(ctx);
           break;
 
+        case 'clear_confirm':
+          await this.handleClearConfirm(ctx);
+          break;
+
+        case 'clear_cancel':
+          await this.handleClearCancel(ctx);
+          break;
+
+        case 'mode_conversation':
+          await this.handleModeConversation(ctx);
+          break;
+
+        case 'mode_container':
+          await this.handleModeContainer(ctx);
+          break;
+
         case 'clear_selection':
           await this.handleClearSelection(ctx);
           break;
 
         case 'refresh':
           await this.handleRefresh(ctx, param0);
+          break;
+
+        case 'cancel_reminder':
+          await this.handleCancelReminder(ctx, param0);
+          break;
+
+        case 'refresh_tasks':
+          await this.handleRefreshTasks(ctx);
           break;
 
         default:
@@ -357,12 +384,136 @@ export class CallbackHandler {
    * Handle cancel action
    */
   private async handleCancel(ctx: BotContext): Promise<void> {
-    await ctx.answerCbQuery('\u{274C} Ação cancelada');
+    await ctx.answerCbQuery('\u{274C} Acao cancelada');
 
     try {
-      await ctx.editMessageText('_Ação cancelada\\._', { parse_mode: 'MarkdownV2' });
+      await ctx.editMessageText('_Acao cancelada\\._', { parse_mode: 'MarkdownV2' });
     } catch {
       // Message might be too old to edit
+    }
+  }
+
+  /**
+   * Handle conversation clear confirmation
+   */
+  private async handleClearConfirm(ctx: BotContext): Promise<void> {
+    try {
+      // Answer callback to remove loading state
+      await ctx.answerCbQuery();
+
+      const conversationId = ctx.session?.conversationId;
+      if (!conversationId) {
+        await ctx.editMessageText('Nenhuma conversa ativa.');
+        return;
+      }
+
+      // Clear conversation history
+      const deletedCount = await conversationService.clearHistory(conversationId);
+
+      // Reset session conversationId
+      if (ctx.session) {
+        ctx.session.conversationId = undefined;
+      }
+
+      logger.info(
+        { conversationId, userId: ctx.session?.userId, deletedCount },
+        'Conversation cleared via callback'
+      );
+
+      await ctx.editMessageText(
+        'Historico limpo com sucesso!\n\nVoce pode iniciar uma nova conversa.'
+      );
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      logger.error({ error: errorMessage }, 'Failed to clear conversation');
+      await ctx.editMessageText('Erro ao limpar historico. Tente novamente.');
+    }
+  }
+
+  /**
+   * Handle conversation clear cancellation
+   */
+  private async handleClearCancel(ctx: BotContext): Promise<void> {
+    await ctx.answerCbQuery('Operacao cancelada');
+    await ctx.editMessageText('Operacao cancelada.');
+  }
+
+  /**
+   * Handle switch to conversation mode
+   */
+  private async handleModeConversation(ctx: BotContext): Promise<void> {
+    const session = ctx.session;
+    if (!session) {
+      await ctx.answerCbQuery('\u{26A0} Sessao nao encontrada');
+      return;
+    }
+
+    if (session.mode === 'conversation') {
+      await ctx.answerCbQuery('\u{2705} Ja esta no modo conversa!');
+      return;
+    }
+
+    // Switch to conversation mode
+    session.mode = 'conversation';
+    session.selectedContainerId = undefined;
+
+    // Update conversation service if exists
+    if (session.conversationId) {
+      try {
+        await conversationService.switchMode(session.conversationId, 'conversation');
+      } catch (error) {
+        logger.warn({ error, conversationId: session.conversationId }, 'Failed to update conversation mode');
+      }
+    }
+
+    logger.info({ userId: session.userId }, 'Switched to conversation mode via callback');
+
+    await ctx.answerCbQuery('\u{1F4AC} Modo alterado!');
+
+    try {
+      await ctx.editMessageText(
+        '<b>Modo alterado para: Conversa</b>\n\n' +
+        'Agora voce pode conversar diretamente comigo.\n' +
+        'Use /select para voltar ao modo container.',
+        { parse_mode: 'HTML' }
+      );
+    } catch {
+      // Message might be too old to edit
+    }
+  }
+
+  /**
+   * Handle switch to container mode
+   */
+  private async handleModeContainer(ctx: BotContext): Promise<void> {
+    const session = ctx.session;
+    if (!session) {
+      await ctx.answerCbQuery('\u{26A0} Sessao nao encontrada');
+      return;
+    }
+
+    if (session.mode === 'container' && session.selectedContainerId) {
+      await ctx.answerCbQuery('\u{2705} Ja esta no modo container!');
+      return;
+    }
+
+    // Need to select a container first
+    await ctx.answerCbQuery();
+
+    try {
+      await ctx.editMessageText(
+        '<b>Modo Container</b>\n\n' +
+        'Para usar o modo container, primeiro selecione um container:\n\n' +
+        'Use /select para escolher um container disponivel.',
+        { parse_mode: 'HTML' }
+      );
+    } catch {
+      await ctx.reply(
+        '<b>Modo Container</b>\n\n' +
+        'Para usar o modo container, primeiro selecione um container:\n\n' +
+        'Use /select para escolher um container disponivel.',
+        { parse_mode: 'HTML' }
+      );
     }
   }
 
@@ -434,6 +585,57 @@ export class CallbackHandler {
       return `${minutes}m ${seconds % 60}s`;
     }
     return `${seconds}s`;
+  }
+
+  /**
+   * Handle reminder cancellation
+   */
+  private async handleCancelReminder(ctx: BotContext, reminderId: string): Promise<void> {
+    if (!reminderId) {
+      await ctx.answerCbQuery('\u{26A0} ID do lembrete inválido');
+      return;
+    }
+
+    const userId = ctx.from?.id;
+    if (!userId) {
+      await ctx.answerCbQuery('\u{26A0} Usuário não identificado');
+      return;
+    }
+
+    try {
+      const cancelled = await reminderService.cancelReminder(reminderId, userId);
+
+      if (cancelled) {
+        await ctx.answerCbQuery('\u{2705} Lembrete cancelado');
+        logger.info({ reminderId, userId }, 'Reminder cancelled via callback');
+
+        // Refresh the tasks list
+        await this.handleRefreshTasks(ctx);
+      } else {
+        await ctx.answerCbQuery('\u{26A0} Não foi possível cancelar o lembrete');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      logger.error({ error: errorMessage, reminderId, userId }, 'Failed to cancel reminder');
+      await ctx.answerCbQuery('\u{26A0} Erro ao cancelar lembrete');
+    }
+  }
+
+  /**
+   * Handle refresh tasks list
+   */
+  private async handleRefreshTasks(ctx: BotContext): Promise<void> {
+    await ctx.answerCbQuery('\u{1F504} Atualizando...');
+
+    try {
+      // Delete the old message and send a new one
+      await ctx.deleteMessage();
+    } catch {
+      // Message might be too old to delete
+    }
+
+    // Execute tasks command to refresh the list
+    await tasksCommand.execute(ctx, []);
   }
 }
 

@@ -2,9 +2,89 @@ import type { BotContext } from './telegram.types';
 import { commandRegistry } from './commands/command.registry';
 import { conversationHandler } from './conversation.handler';
 import { anthropicService } from '../services/anthropic.service';
+import { conversationService } from './services';
 import { createChildLogger } from '../utils/logger';
 
 const logger = createChildLogger({ service: 'telegram-router' });
+
+/**
+ * Simple in-memory rate limiter for Telegram messages
+ * Limits non-command messages per user
+ */
+class MessageRateLimiter {
+  private requests: Map<number, number[]> = new Map();
+  private readonly maxRequests: number;
+  private readonly windowMs: number;
+
+  constructor(maxRequests = 10, windowMs = 60_000) {
+    this.maxRequests = maxRequests;
+    this.windowMs = windowMs;
+
+    // Cleanup old entries every minute
+    setInterval(() => this.cleanup(), 60_000).unref();
+  }
+
+  /**
+   * Check if a user is rate limited
+   * @param userId - Telegram user ID
+   * @returns true if rate limited, false otherwise
+   */
+  isRateLimited(userId: number): boolean {
+    const now = Date.now();
+    const userRequests = this.requests.get(userId) || [];
+
+    // Filter requests within the window
+    const recentRequests = userRequests.filter(
+      (timestamp) => now - timestamp < this.windowMs
+    );
+
+    if (recentRequests.length >= this.maxRequests) {
+      return true;
+    }
+
+    // Add current request and update
+    recentRequests.push(now);
+    this.requests.set(userId, recentRequests);
+
+    return false;
+  }
+
+  /**
+   * Get remaining requests for a user
+   */
+  getRemainingRequests(userId: number): number {
+    const now = Date.now();
+    const userRequests = this.requests.get(userId) || [];
+    const recentRequests = userRequests.filter(
+      (timestamp) => now - timestamp < this.windowMs
+    );
+    return Math.max(0, this.maxRequests - recentRequests.length);
+  }
+
+  /**
+   * Cleanup expired entries
+   */
+  private cleanup(): void {
+    const now = Date.now();
+    const userIds = Array.from(this.requests.keys());
+
+    for (const userId of userIds) {
+      const userRequests = this.requests.get(userId) || [];
+      const recentRequests = userRequests.filter(
+        (timestamp) => now - timestamp < this.windowMs
+      );
+
+      if (recentRequests.length === 0) {
+        this.requests.delete(userId);
+      } else {
+        this.requests.set(userId, recentRequests);
+      }
+    }
+  }
+}
+
+// Rate limiter: 10 messages per minute for conversation messages
+const conversationRateLimiter = new MessageRateLimiter(10, 60_000);
 
 /**
  * MessageRouter - Routes messages to appropriate handlers
@@ -46,12 +126,25 @@ export class MessageRouter {
     );
 
     // 1. Explicit command (starts with /)
+    // Commands are not rate limited (they have their own controls)
     if (text.startsWith('/')) {
       await this.routeToCommand(ctx, text);
       return;
     }
 
-    // 2. Try to have a conversation with Claude API (not container)
+    // 2. Rate limit check for non-command messages
+    const userId = ctx.from?.id;
+    if (userId && conversationRateLimiter.isRateLimited(userId)) {
+      logger.warn({ userId }, 'User rate limited for conversation messages');
+      await ctx.reply(
+        '\u{26A0}\u{FE0F} Voce esta enviando mensagens muito rapido. ' +
+        'Aguarde um momento antes de tentar novamente.\n\n' +
+        '(Limite: 10 mensagens por minuto)'
+      );
+      return;
+    }
+
+    // 3. Try to have a conversation with Claude API (not container)
     // This applies to ALL non-command messages, regardless of container selection
     if (await this.tryRouteToClaudeConversation(ctx, text)) {
       return;
@@ -62,7 +155,8 @@ export class MessageRouter {
   }
 
   /**
-   * Route message to Claude API for direct conversation
+   * Route message to Claude API for direct conversation with history
+   * Uses persistent conversation storage for context continuity
    * Returns true if message was handled
    */
   private async tryRouteToClaudeConversation(ctx: BotContext, text: string): Promise<boolean> {
@@ -89,38 +183,112 @@ export class MessageRouter {
       }
     }
 
+    // Get user and chat info
+    const userId = ctx.from?.id;
+    const chatId = ctx.chat?.id;
+
+    if (!userId || !chatId) {
+      logger.warn('Missing user or chat ID for conversation');
+      return false;
+    }
+
+    // Get telegram message ID for tracking
+    const telegramMessageId = ctx.message && 'message_id' in ctx.message
+      ? ctx.message.message_id
+      : undefined;
+
     try {
+      // Check if user is in conversation mode (not container mode)
+      const sessionMode = ctx.session?.mode || 'conversation';
+      if (sessionMode !== 'conversation') {
+        // In container mode, let the container handle messages
+        logger.debug({ userId, mode: sessionMode }, 'User in container mode, skipping conversation');
+        return false;
+      }
+
       logger.info(
         {
-          userId: ctx.from?.id,
+          userId,
+          chatId,
           messageLength: text.length,
-          hasSelectedContainer: !!ctx.session?.selectedContainerId,
+          mode: sessionMode,
         },
-        'Routing message to Claude API conversation'
+        'Routing message to Claude API conversation with history'
       );
 
       // Show typing indicator
       await ctx.sendChatAction('typing');
 
-      // Send to Claude API
-      const response = await anthropicService.chat(text);
+      // 1. Get or create conversation
+      const conversation = await conversationService.getOrCreateConversation(
+        userId,
+        chatId,
+        'conversation'
+      );
+
+      // 2. Save user message to history
+      await conversationService.addMessage(
+        conversation.id,
+        'user',
+        text,
+        telegramMessageId
+      );
+
+      // 3. Get conversation context for Claude
+      const context = await conversationService.getContextForClaude(conversation.id);
+
+      logger.debug(
+        {
+          conversationId: conversation.id,
+          messageCount: context.messageCount,
+          totalTokens: context.totalTokens,
+          wasTruncated: context.wasTruncated,
+        },
+        'Built context for Claude API'
+      );
+
+      // 4. Call Anthropic with history
+      const response = await anthropicService.chatWithHistory(
+        context.messages.map(m => ({ role: m.role, content: m.content }))
+      );
+
+      // 5. Save assistant response to history
+      await conversationService.addMessage(
+        conversation.id,
+        'assistant',
+        response.text
+      );
+
+      // 6. Update session with conversation ID
+      if (ctx.session) {
+        ctx.session.conversationId = conversation.id;
+      }
 
       // Send response back to user
       await ctx.reply(response.text, { parse_mode: 'Markdown' });
 
       logger.info(
         {
-          userId: ctx.from?.id,
+          userId,
+          conversationId: conversation.id,
           inputTokens: response.inputTokens,
           outputTokens: response.outputTokens,
+          contextMessages: context.messageCount,
         },
-        'Claude API conversation completed'
+        'Claude API conversation with history completed'
       );
 
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
-      logger.error({ error }, 'Failed to route to Claude API conversation');
+      logger.error(
+        {
+          error: errorMessage,
+          userId,
+          chatId,
+        },
+        'Failed to route to Claude API conversation'
+      );
 
       // Don't show API errors to user, fall back to NLU
       if (errorMessage.includes('ANTHROPIC_API_KEY')) {

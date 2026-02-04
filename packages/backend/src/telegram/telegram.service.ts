@@ -13,6 +13,8 @@ import type {
 import { messageRouter } from './message.router'
 import { callbackHandler } from './callback.handler'
 import { initializeCommands, getCommandMenuDefinitions, commandRegistry } from './commands'
+import { createReminderWorker, stopReminderWorker } from './workers/reminder.worker'
+import { reminderService } from './services/reminder.service'
 
 /**
  * Telegram service logger
@@ -87,6 +89,7 @@ const createDefaultSession = (userId: number, username?: string, firstName?: str
     lastName,
     lastActivity: new Date(),
     selectedContainerId: undefined,
+    mode: 'conversation',
   }
 }
 
@@ -213,6 +216,10 @@ class TelegramService implements ITelegramService {
         await this.startPolling()
       }
 
+      // Start reminder worker
+      createReminderWorker(this.bot)
+      logger.info('Reminder worker started')
+
       this.running = true
       logger.info('Telegram bot started successfully')
 
@@ -234,6 +241,12 @@ class TelegramService implements ITelegramService {
 
     try {
       logger.info('Stopping Telegram bot')
+
+      // Stop reminder worker and queue
+      await stopReminderWorker()
+      await reminderService.close()
+      logger.info('Reminder worker stopped')
+
       this.bot.stop('Graceful shutdown')
       this.running = false
       this.bot = null

@@ -1,5 +1,6 @@
 import { BotContext } from '../telegram.types'
 import { logger } from '../../utils/logger'
+import { sanitizeUserForLogs } from '../../utils/sanitize'
 
 /**
  * Telegram bot authentication middleware
@@ -29,7 +30,7 @@ export function authMiddleware(allowedUsers: number[]) {
     // Dev mode: empty list allows everyone
     if (allowedUsers.length === 0) {
       authLogger.debug(
-        { userId, username, firstName },
+        sanitizeUserForLogs({ id: userId, username, firstName }),
         'Modo desenvolvimento: acesso permitido (lista vazia)'
       )
       return next()
@@ -37,16 +38,18 @@ export function authMiddleware(allowedUsers: number[]) {
 
     // Check if user is in whitelist
     if (!allowedUsers.includes(userId)) {
-      // Audit log for unauthorized access attempt
+      // Audit log for unauthorized access attempt (PII sanitized)
       authLogger.warn(
         {
-          userId,
-          username,
-          firstName,
-          lastName: ctx.from?.last_name,
+          ...sanitizeUserForLogs({
+            id: userId,
+            username,
+            firstName,
+            lastName: ctx.from?.last_name,
+          }),
           languageCode: ctx.from?.language_code,
           chatType: ctx.chat?.type,
-          messageText: 'text' in (ctx.message ?? {}) ? (ctx.message as { text?: string }).text : undefined,
+          // Note: message text intentionally omitted for privacy
         },
         'Tentativa de acesso nao autorizado'
       )
@@ -59,7 +62,10 @@ export function authMiddleware(allowedUsers: number[]) {
     }
 
     // Authorized user
-    authLogger.debug({ userId, username }, 'Acesso autorizado')
+    authLogger.debug(
+      sanitizeUserForLogs({ id: userId, username }),
+      'Acesso autorizado'
+    )
     return next()
   }
 }

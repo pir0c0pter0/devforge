@@ -145,10 +145,107 @@ const ownerTelegramIdMigration: Migration = {
 };
 
 /**
+ * Migration 005 - Add Telegram conversation system tables
+ * Stores conversation history, messages, and scheduled reminders for Telegram bot
+ */
+const telegramConversationsMigration: Migration = {
+  name: '005_telegram_conversations',
+  up: (db: Database.Database) => {
+    // Create telegram_conversations table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS telegram_conversations (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        chat_id INTEGER NOT NULL,
+        mode TEXT NOT NULL DEFAULT 'conversation' CHECK (mode IN ('conversation', 'container')),
+        container_id TEXT,
+        session_id TEXT,
+        context_tokens INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_message_at DATETIME,
+        FOREIGN KEY (container_id) REFERENCES containers(id) ON DELETE SET NULL
+      )
+    `);
+    logger.debug('Created telegram_conversations table');
+
+    // Create telegram_messages table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS telegram_messages (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL,
+        telegram_message_id INTEGER,
+        role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+        content TEXT NOT NULL,
+        token_count INTEGER DEFAULT 0,
+        metadata JSON,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (conversation_id) REFERENCES telegram_conversations(id) ON DELETE CASCADE
+      )
+    `);
+    logger.debug('Created telegram_messages table');
+
+    // Create telegram_reminders table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS telegram_reminders (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        chat_id INTEGER NOT NULL,
+        text TEXT NOT NULL,
+        scheduled_for DATETIME NOT NULL,
+        timezone TEXT DEFAULT 'America/Sao_Paulo',
+        recurring_type TEXT CHECK (recurring_type IN (NULL, 'daily', 'weekly', 'monthly', 'cron')),
+        recurring_value TEXT,
+        job_id TEXT,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'failed', 'cancelled')),
+        attempts INTEGER DEFAULT 0,
+        last_error TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        sent_at DATETIME
+      )
+    `);
+    logger.debug('Created telegram_reminders table');
+
+    // Create indexes for telegram_conversations
+    db.exec('CREATE INDEX IF NOT EXISTS idx_telegram_conversations_user_id ON telegram_conversations(user_id)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_telegram_conversations_chat_id ON telegram_conversations(chat_id)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_telegram_conversations_user_mode ON telegram_conversations(user_id, mode)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_telegram_conversations_last_message_at ON telegram_conversations(last_message_at)');
+    logger.debug('Created telegram_conversations indexes');
+
+    // Create indexes for telegram_messages
+    db.exec('CREATE INDEX IF NOT EXISTS idx_telegram_messages_conversation_created ON telegram_messages(conversation_id, created_at ASC)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_telegram_messages_created_at ON telegram_messages(created_at)');
+    logger.debug('Created telegram_messages indexes');
+
+    // Create indexes for telegram_reminders
+    db.exec('CREATE INDEX IF NOT EXISTS idx_telegram_reminders_user_id ON telegram_reminders(user_id)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_telegram_reminders_scheduled_status ON telegram_reminders(scheduled_for, status)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_telegram_reminders_job_id ON telegram_reminders(job_id)');
+    logger.debug('Created telegram_reminders indexes');
+
+    // Create trigger for auto-updating updated_at
+    db.exec(`
+      CREATE TRIGGER IF NOT EXISTS trigger_telegram_conversations_updated_at
+      AFTER UPDATE ON telegram_conversations
+      BEGIN
+        UPDATE telegram_conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+      END
+    `);
+    logger.debug('Created telegram_conversations trigger');
+  },
+  down: (db: Database.Database) => {
+    db.exec('DROP TABLE IF EXISTS telegram_messages');
+    db.exec('DROP TABLE IF EXISTS telegram_reminders');
+    db.exec('DROP TABLE IF EXISTS telegram_conversations');
+  },
+};
+
+/**
  * All migrations in order
  * Add new migrations here as the schema evolves
  */
-const migrations: readonly Migration[] = [initialMigration, usageTrackingMigration, claudeLogsMigration, ownerTelegramIdMigration];
+const migrations: readonly Migration[] = [initialMigration, usageTrackingMigration, claudeLogsMigration, ownerTelegramIdMigration, telegramConversationsMigration];
 
 /**
  * Check if a migration has been applied

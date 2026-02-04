@@ -1,6 +1,6 @@
 {
   "name": "@claude-docker/backend",
-  "version": "0.0.1-alpha",
+  "version": "0.1.0-alpha",
   "description": "Backend API for Docker container management with Claude Code",
   "main": "dist/index.js",
   "scripts": {

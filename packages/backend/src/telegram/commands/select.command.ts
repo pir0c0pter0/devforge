@@ -1,6 +1,10 @@
 import { BaseCommand, CommandCategory } from './base.command';
 import { containerRepository, type ContainerEntity, type UpdateContainerDto } from '../../repositories/container.repository';
 import type { BotContext } from '../telegram.types';
+import { conversationService } from '../services';
+import { createChildLogger } from '../../utils/logger';
+
+const logger = createChildLogger({ service: 'telegram-select-command' });
 
 /**
  * Status emoji mapping for container states
@@ -66,8 +70,20 @@ export class SelectCommand extends BaseCommand {
         return;
       }
 
-      // Update session with selected container
+      // Update session with selected container and switch to container mode
       this.setSelectedContainer(ctx, container.id);
+      if (ctx.session) {
+        ctx.session.mode = 'container';
+
+        // Update conversation service if conversation exists
+        if (ctx.session.conversationId) {
+          try {
+            await conversationService.switchMode(ctx.session.conversationId, 'container', container.id);
+          } catch (error) {
+            logger.warn({ error, conversationId: ctx.session.conversationId }, 'Failed to update conversation mode');
+          }
+        }
+      }
 
       // Update container's owner Telegram ID for notifications
       const userId = ctx.from?.id;
@@ -275,10 +291,20 @@ export async function handleSelectCallback(
     return;
   }
 
-  // Update session
+  // Update session and switch to container mode
   if (ctx.session) {
     ctx.session.selectedContainerId = containerId;
     ctx.session.lastActivity = new Date();
+    ctx.session.mode = 'container';
+
+    // Update conversation service if conversation exists
+    if (ctx.session.conversationId) {
+      try {
+        await conversationService.switchMode(ctx.session.conversationId, 'container', containerId);
+      } catch (error) {
+        logger.warn({ error, conversationId: ctx.session.conversationId }, 'Failed to update conversation mode');
+      }
+    }
   }
 
   // Update container's owner Telegram ID for notifications

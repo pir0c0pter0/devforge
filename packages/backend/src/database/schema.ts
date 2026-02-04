@@ -178,6 +178,64 @@ export const CLAUDE_MESSAGES_TABLE = `
 `;
 
 /**
+ * Telegram conversations table - stores conversation metadata
+ */
+export const TELEGRAM_CONVERSATIONS_TABLE = `
+  CREATE TABLE IF NOT EXISTS telegram_conversations (
+    id TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    chat_id INTEGER NOT NULL,
+    mode TEXT NOT NULL DEFAULT 'conversation' CHECK (mode IN ('conversation', 'container')),
+    container_id TEXT,
+    session_id TEXT,
+    context_tokens INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_message_at DATETIME,
+    FOREIGN KEY (container_id) REFERENCES containers(id) ON DELETE SET NULL
+  )
+`;
+
+/**
+ * Telegram messages table - stores conversation messages
+ */
+export const TELEGRAM_MESSAGES_TABLE = `
+  CREATE TABLE IF NOT EXISTS telegram_messages (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
+    telegram_message_id INTEGER,
+    role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+    content TEXT NOT NULL,
+    token_count INTEGER DEFAULT 0,
+    metadata JSON,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (conversation_id) REFERENCES telegram_conversations(id) ON DELETE CASCADE
+  )
+`;
+
+/**
+ * Telegram reminders table - stores scheduled reminders
+ */
+export const TELEGRAM_REMINDERS_TABLE = `
+  CREATE TABLE IF NOT EXISTS telegram_reminders (
+    id TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    chat_id INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    scheduled_for DATETIME NOT NULL,
+    timezone TEXT DEFAULT 'America/Sao_Paulo',
+    recurring_type TEXT CHECK (recurring_type IN (NULL, 'daily', 'weekly', 'monthly', 'cron')),
+    recurring_value TEXT,
+    job_id TEXT,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'failed', 'cancelled')),
+    attempts INTEGER DEFAULT 0,
+    last_error TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    sent_at DATETIME
+  )
+`;
+
+/**
  * All table creation statements in order (respecting foreign keys)
  */
 export const ALL_TABLES = [
@@ -190,6 +248,9 @@ export const ALL_TABLES = [
   { name: 'usage_tracking', sql: USAGE_TRACKING_TABLE },
   { name: 'claude_logs', sql: CLAUDE_LOGS_TABLE },
   { name: 'claude_messages', sql: CLAUDE_MESSAGES_TABLE },
+  { name: 'telegram_conversations', sql: TELEGRAM_CONVERSATIONS_TABLE },
+  { name: 'telegram_messages', sql: TELEGRAM_MESSAGES_TABLE },
+  { name: 'telegram_reminders', sql: TELEGRAM_REMINDERS_TABLE },
 ];
 
 /**
@@ -244,6 +305,21 @@ export const INDEXES = [
   'CREATE INDEX IF NOT EXISTS idx_claude_messages_type ON claude_messages(type)',
   'CREATE INDEX IF NOT EXISTS idx_claude_messages_created_at ON claude_messages(created_at)',
   'CREATE INDEX IF NOT EXISTS idx_claude_messages_container_created ON claude_messages(container_id, created_at ASC)',
+
+  // Telegram conversations indexes
+  'CREATE INDEX IF NOT EXISTS idx_telegram_conversations_user_id ON telegram_conversations(user_id)',
+  'CREATE INDEX IF NOT EXISTS idx_telegram_conversations_chat_id ON telegram_conversations(chat_id)',
+  'CREATE INDEX IF NOT EXISTS idx_telegram_conversations_user_mode ON telegram_conversations(user_id, mode)',
+  'CREATE INDEX IF NOT EXISTS idx_telegram_conversations_last_message_at ON telegram_conversations(last_message_at)',
+
+  // Telegram messages indexes
+  'CREATE INDEX IF NOT EXISTS idx_telegram_messages_conversation_created ON telegram_messages(conversation_id, created_at ASC)',
+  'CREATE INDEX IF NOT EXISTS idx_telegram_messages_created_at ON telegram_messages(created_at)',
+
+  // Telegram reminders indexes
+  'CREATE INDEX IF NOT EXISTS idx_telegram_reminders_user_id ON telegram_reminders(user_id)',
+  'CREATE INDEX IF NOT EXISTS idx_telegram_reminders_scheduled_status ON telegram_reminders(scheduled_for, status)',
+  'CREATE INDEX IF NOT EXISTS idx_telegram_reminders_job_id ON telegram_reminders(job_id)',
 ];
 
 /**
@@ -266,5 +342,11 @@ export const TRIGGERS = [
    AFTER UPDATE ON users
    BEGIN
      UPDATE users SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+   END`,
+
+  `CREATE TRIGGER IF NOT EXISTS trigger_telegram_conversations_updated_at
+   AFTER UPDATE ON telegram_conversations
+   BEGIN
+     UPDATE telegram_conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
    END`,
 ];

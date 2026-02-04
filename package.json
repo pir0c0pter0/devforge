@@ -1,6 +1,6 @@
 {
   "name": "claude-docker-web",
-  "version": "0.0.1-alpha",
+  "version": "0.1.0-alpha",
   "description": "Web dashboard for managing Docker containers with Claude Code + VS Code",
   "private": true,
   "type": "module",

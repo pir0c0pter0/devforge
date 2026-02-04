@@ -23,6 +23,11 @@ export { selectCommand, handleSelectCallback, SelectCommand } from './select.com
 export { statsCommand, StatsCommand } from './stats.command';
 export { queueCommand, QueueCommand } from './queue.command';
 export { execCommand, ExecCommand } from './exec.command';
+export { clearCommand, ClearCommand } from './clear.command';
+export { exitCommand, ExitCommand } from './exit.command';
+export { modeCommand, ModeCommand } from './mode.command';
+export { remindCommand, RemindCommand } from './remind.command';
+export { tasksCommand, TasksCommand } from './tasks.command';
 
 // Import commands to trigger registration
 import { helpCommand, startCommand } from './help.command';
@@ -31,6 +36,11 @@ import { selectCommand } from './select.command';
 import { statsCommand } from './stats.command';
 import { queueCommand } from './queue.command';
 import { execCommand } from './exec.command';
+import { clearCommand } from './clear.command';
+import { exitCommand } from './exit.command';
+import { modeCommand } from './mode.command';
+import { remindCommand } from './remind.command';
+import { tasksCommand } from './tasks.command';
 import { registerCommand } from './command.registry';
 
 /**
@@ -41,6 +51,11 @@ export function initializeCommands(): void {
   // Register general commands
   registerCommand(startCommand);
   registerCommand(helpCommand);
+  registerCommand(clearCommand);
+  registerCommand(exitCommand);
+  registerCommand(modeCommand);
+  registerCommand(remindCommand);
+  registerCommand(tasksCommand);
 
   // Register container commands
   registerCommand(listCommand);
@@ -63,6 +78,11 @@ export function getCommandMenuDefinitions(): Array<{
   return [
     { command: 'start', description: 'Mensagem de boas-vindas' },
     { command: 'help', description: 'Lista todos os comandos' },
+    { command: 'clear', description: 'Limpar historico da conversa' },
+    { command: 'exit', description: 'Sair do modo container' },
+    { command: 'mode', description: 'Ver ou trocar modo' },
+    { command: 'remind', description: 'Agendar um lembrete' },
+    { command: 'tasks', description: 'Listar lembretes pendentes' },
     { command: 'list', description: 'Lista containers' },
     { command: 'select', description: 'Seleciona um container' },
     { command: 'stats', description: 'Estatisticas do container' },
