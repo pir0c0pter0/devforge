@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { I18nProvider, useI18n } from '@/lib/i18n'
 import { ModalProvider } from '@/components/ui/modal'
+import { ToastProvider } from '@/components/ui/toast'
 import { APP_INFO } from '@/lib/version'
 
 function Header() {
@@ -85,9 +86,11 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
 export function ClientLayout({ children }: { children: React.ReactNode }) {
   return (
     <I18nProvider>
-      <ModalProvider>
-        <LayoutContent>{children}</LayoutContent>
-      </ModalProvider>
+      <ToastProvider>
+        <ModalProvider>
+          <LayoutContent>{children}</LayoutContent>
+        </ModalProvider>
+      </ToastProvider>
     </I18nProvider>
   )
 }
