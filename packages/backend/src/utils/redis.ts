@@ -10,7 +10,7 @@ let redisClient: Redis | null = null
 export const getRedisConnection = (): Redis => {
   if (!redisClient) {
     const options = {
-      maxRetriesPerRequest: 3,
+      maxRetriesPerRequest: null, // Required for BullMQ
       retryStrategy: (times: number) => {
         const delay = Math.min(times * 50, 2000)
         return delay
