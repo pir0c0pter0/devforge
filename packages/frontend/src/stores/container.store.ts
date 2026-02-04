@@ -62,10 +62,11 @@ export const useContainerStore = create<ContainerState>((set) => ({
   updateMetrics: (metrics) =>
     set((state) => {
       // Extract flat values from nested ContainerMetrics structure
+      // Note: disk.usage is in MB, convert to GB for display
       const flatMetrics = {
         cpu: metrics.cpu?.usage ?? 0,
-        memory: metrics.memory?.percentage ?? 0,
-        disk: metrics.disk?.percentage ?? 0,
+        memory: metrics.memory?.usage ?? 0, // MB
+        disk: (metrics.disk?.usage ?? 0) / 1024, // Convert MB to GB
         cpuPerCore: metrics.cpu?.perCore,
       }
 
