@@ -98,6 +98,25 @@ export interface UseClaudeDaemonReturn {
 }
 
 /**
+ * Extract text content from Claude message content array
+ * Claude returns content as array: [{"type": "text", "text": "..."}]
+ */
+function extractTextContent(content: unknown): string {
+  if (typeof content === 'string') {
+    return content
+  }
+  if (Array.isArray(content)) {
+    return content
+      .filter((item): item is { type: string; text: string } =>
+        item && typeof item === 'object' && item.type === 'text' && typeof item.text === 'string'
+      )
+      .map((item) => item.text)
+      .join('\n')
+  }
+  return ''
+}
+
+/**
  * Parse ClaudeEvent to ClaudeMessage
  */
 function parseClaudeEventToMessage(event: ClaudeEvent, messageId: string): ClaudeMessage | null {
@@ -105,8 +124,9 @@ function parseClaudeEventToMessage(event: ClaudeEvent, messageId: string): Claud
 
   switch (type) {
     case 'assistant': {
-      const assistantData = data as { message?: { content?: string } }
-      const content = assistantData?.message?.content || ''
+      const assistantData = data as { message?: { content?: unknown }; result?: string }
+      // Try message.content first, then result field
+      const content = extractTextContent(assistantData?.message?.content) || assistantData?.result || ''
       if (!content) return null
       return {
         id: messageId,
@@ -117,8 +137,8 @@ function parseClaudeEventToMessage(event: ClaudeEvent, messageId: string): Claud
     }
 
     case 'user': {
-      const userData = data as { message?: { content?: string } }
-      const content = userData?.message?.content || ''
+      const userData = data as { message?: { content?: unknown } }
+      const content = extractTextContent(userData?.message?.content)
       if (!content) return null
       return {
         id: messageId,
@@ -129,49 +149,70 @@ function parseClaudeEventToMessage(event: ClaudeEvent, messageId: string): Claud
     }
 
     case 'tool_use': {
-      const toolData = data as { tool?: string; input?: unknown }
+      const toolData = data as { tool?: string; name?: string; input?: unknown }
+      const toolName = toolData?.tool || toolData?.name || 'unknown'
       return {
         id: messageId,
         type: 'tool_use',
-        content: `Using tool: ${toolData?.tool || 'unknown'}`,
+        content: `Using tool: ${toolName}`,
         timestamp: new Date(timestamp),
-        toolName: toolData?.tool,
+        toolName,
         toolInput: toolData?.input,
       }
     }
 
     case 'tool_result': {
-      const resultData = data as { content?: string; isError?: boolean }
+      const resultData = data as { content?: unknown; isError?: boolean }
+      const content = typeof resultData?.content === 'string'
+        ? resultData.content
+        : JSON.stringify(resultData?.content || '')
       return {
         id: messageId,
         type: 'tool_result',
-        content: resultData?.content || '',
+        content,
         timestamp: new Date(timestamp),
       }
     }
 
     case 'error': {
-      const errorData = data as { message?: string; error?: string }
+      const errorData = data as { message?: string; error?: string; errors?: string[] }
+      const content = errorData?.message || errorData?.error || errorData?.errors?.join(', ') || 'Unknown error'
       return {
         id: messageId,
         type: 'error',
-        content: errorData?.message || errorData?.error || 'Unknown error',
+        content,
         timestamp: new Date(timestamp),
       }
     }
 
     case 'system': {
-      const systemData = data as { message?: string }
+      // Skip system init/hook events, only show meaningful messages
+      const systemData = data as { subtype?: string; message?: string; raw?: string; stderr?: string }
+      if (systemData?.subtype === 'init' || systemData?.subtype?.startsWith('hook')) {
+        return null
+      }
+      const content = systemData?.message || systemData?.raw || systemData?.stderr || ''
+      if (!content) return null
       return {
         id: messageId,
         type: 'system',
-        content: systemData?.message || '',
+        content,
         timestamp: new Date(timestamp),
       }
     }
 
     case 'result': {
-      // Result events indicate completion, not a message to display
+      // Result events contain the final answer - show it!
+      const resultData = data as { result?: string; is_error?: boolean; errors?: string[] }
+      if (resultData?.is_error) {
+        return {
+          id: messageId,
+          type: 'error',
+          content: resultData?.errors?.join(', ') || 'Execution failed',
+          timestamp: new Date(timestamp),
+        }
+      }
+      // Don't duplicate - result is usually same as last assistant message
       return null
     }
 
