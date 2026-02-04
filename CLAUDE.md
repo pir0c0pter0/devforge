@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções
 
-## Versão Atual: 0.0.57-alpha
+## Versão Atual: 0.0.58-alpha
 
 ## Estrutura do Projeto
 
@@ -11,6 +11,8 @@ claude-docker/
 │   ├── backend/      # Express + Dockerode (porta 8000)
 │   └── shared/       # Tipos compartilhados
 ├── scripts/          # Scripts de gerenciamento
+│   ├── install.sh    # Instalação completa com systemd
+│   ├── uninstall.sh  # Remover serviços systemd
 │   ├── start.sh      # Iniciar serviços
 │   ├── stop.sh       # Parar serviços
 │   ├── restart.sh    # Reiniciar serviços
@@ -20,19 +22,60 @@ claude-docker/
 └── docker/           # Dockerfiles para containers
 ```
 
+## Instalação
+
+### Instalação Rápida (Recomendado)
+
+```bash
+# Clone o repositório
+git clone https://github.com/MarioJuniorPro/claude-docker.git
+cd claude-docker
+
+# Execute a instalação completa
+./scripts/install.sh
+
+# Comandos sudo necessários (solicitados pelo script):
+sudo systemctl enable valkey   # ou redis
+sudo systemctl start valkey
+sudo loginctl enable-linger $USER
+```
+
+O script `install.sh` faz automaticamente:
+1. Verifica dependências (Node.js, pnpm, Docker, Redis/Valkey)
+2. Instala dependências do projeto (`pnpm install`)
+3. Configura o `.env` do backend (porta 8000)
+4. Compila o projeto (`pnpm build`)
+5. Cria serviços systemd para backend e frontend
+6. Habilita auto-start no boot
+7. Inicia os serviços
+8. Mostra comandos sudo necessários
+
+### Dependências
+
+- **Node.js** >= 18
+- **pnpm** >= 8
+- **Docker** com acesso ao socket
+- **Redis** ou **Valkey** (fork do Redis)
+
 ## Scripts de Gerenciamento
 
 ```bash
-# Iniciar todos os serviços
+# Instalação completa com serviços systemd
+./scripts/install.sh
+
+# Desinstalar serviços systemd
+./scripts/uninstall.sh
+
+# Iniciar serviços (usa systemd se instalado)
 ./scripts/start.sh
 
-# Parar todos os serviços
+# Parar serviços
 ./scripts/stop.sh
 
 # Reiniciar serviços
 ./scripts/restart.sh
 
-# Ver status dos serviços
+# Ver status completo (serviços + systemd + linger)
 ./scripts/status.sh
 
 # Ver logs
@@ -40,6 +83,30 @@ claude-docker/
 
 # Executar diagnóstico do sistema
 ./scripts/diagnose.sh
+```
+
+### Serviços Systemd
+
+Após a instalação, dois serviços são criados:
+
+| Serviço | Descrição | Porta |
+|---------|-----------|-------|
+| `claude-docker-backend` | API Express + WebSocket | 8000 |
+| `claude-docker-frontend` | Next.js | 3000 |
+
+**Comandos úteis:**
+
+```bash
+# Ver status dos serviços
+systemctl --user status claude-docker-backend
+systemctl --user status claude-docker-frontend
+
+# Ver logs em tempo real
+journalctl --user -u claude-docker-backend -f
+journalctl --user -u claude-docker-frontend -f
+
+# Reiniciar um serviço específico
+systemctl --user restart claude-docker-backend
 ```
 
 ## API Endpoints
@@ -811,6 +878,17 @@ ALLOWED_ORIGINS=https://myapp.com,https://api.myapp.com
 ```
 
 ## Histórico de Versões
+
+### v0.0.58-alpha
+- Feat: **Scripts de instalação com serviços systemd**
+- Feat: `install.sh` - Instalação completa automatizada
+- Feat: `uninstall.sh` - Remover serviços systemd
+- Feat: Serviços `claude-docker-backend` e `claude-docker-frontend` para systemd
+- Feat: Auto-start no boot via `loginctl enable-linger`
+- Feat: Scripts `start.sh`, `stop.sh`, `restart.sh` agora usam systemd se disponível
+- Feat: `status.sh` mostra status do systemd, auto-start e linger
+- Fix: Porta do backend corrigida para 8000 no `.env`
+- Fix: EnvironmentFile para carregar variáveis do `.env` nos serviços
 
 ### v0.0.57-alpha
 - Feat: **Fila de instruções com WebSocket em tempo real**
