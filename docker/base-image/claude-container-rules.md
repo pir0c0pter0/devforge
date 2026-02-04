@@ -71,6 +71,38 @@ telegram-send "Sua mensagem aqui"
 
 A mensagem sera enviada automaticamente para o usuario dono deste container.
 
+## Acesso Externo (Portas)
+
+Quando o usuario precisar acessar um servico de fora do container (ex: testar no navegador):
+
+### Regra: Sempre bind em 0.0.0.0
+
+```bash
+# CORRETO - acessivel de fora
+pnpm dev --host 0.0.0.0
+python -m http.server 8000 --bind 0.0.0.0
+uvicorn main:app --host 0.0.0.0
+
+# ERRADO - so funciona dentro do container
+pnpm dev
+python -m http.server 8000
+```
+
+### Descobrir IP do container
+
+```bash
+hostname -I | awk '{print $1}'
+```
+
+### Informar URL ao usuario
+
+Apos iniciar o servico, informe:
+```
+Acesse: http://<IP>:<PORTA>
+```
+
+Exemplo: `http://172.17.0.2:3000`
+
 ## Dicas
 
 - Use `pnpm` ao inves de npm ou yarn

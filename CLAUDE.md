@@ -1,6 +1,14 @@
 # Claude Docker Web - Instruções
 
-## Versão Atual: 0.0.85-alpha
+## Versão Atual: 0.1.0-alpha
+
+## Links Úteis
+
+| Recurso | Link |
+|---------|------|
+| **Repositório** | https://github.com/pir0c0pter0/claude-docker |
+| **Issues** | https://github.com/pir0c0pter0/claude-docker/issues |
+| **Issue #10** | [CLAUDE.md genérico para containers](https://github.com/pir0c0pter0/claude-docker/issues/10) |
 
 ## Estrutura do Projeto
 
@@ -28,7 +36,7 @@ claude-docker/
 
 ```bash
 # Clone o repositório
-git clone https://github.com/MarioJuniorPro/claude-docker.git
+git clone https://github.com/pir0c0pter0/claude-docker.git
 cd claude-docker
 
 # Execute a instalação completa
@@ -878,6 +886,23 @@ ALLOWED_ORIGINS=https://myapp.com,https://api.myapp.com
 ```
 
 ## Histórico de Versões
+
+### v0.1.0-alpha
+- Feat: **Sistema Avancado de Conversacao Claude no Telegram** (Issue #8)
+- Feat: Historico de conversa persistente em SQLite
+- Feat: Modo dual: Conversa direta vs Container
+- Feat: Context manager com sliding window (8000 tokens)
+- Feat: Comando /clear com confirmacao inline
+- Feat: Comando /exit para trocar de modo
+- Feat: Comando /mode para visualizar/trocar modo
+- Feat: Sistema de lembretes com BullMQ (/remind, /tasks)
+- Feat: Rate limiting para conversas (10 msg/min)
+- Feat: Sanitizacao de PII nos logs
+- Feat: 15+ padroes perigosos bloqueados
+- Feat: Redis session manager com fallback in-memory
+- Feat: Migracao SQLite 005: telegram_conversations, telegram_messages, telegram_reminders
+- Security: Protecao contra fork bombs, reverse shells, container escape
+- Security: Bloqueio de credential theft patterns
 
 ### v0.0.85-alpha
 - Feat: **Histórico de chat Claude persistente no SQLite**
