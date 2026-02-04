@@ -103,13 +103,21 @@ export function MetricsChart({ container }: MetricsChartProps) {
       const response = await apiClient.getMetricsHistory(container.id, 5)
 
       if (response.success && response.data) {
-        const historyData: DataPoint[] = response.data.map((point: MetricsHistoryPoint) => ({
-          time: formatTime(point.timestamp),
-          timestamp: point.timestamp,
-          cpu: point.cpu,
-          memory: point.memory,
-          disk: point.disk,
-        }))
+        // Get disk limit for percentage calculation (history returns disk in GB)
+        const diskLimitGB = container.limits?.diskGB ?? 1
+
+        const historyData: DataPoint[] = response.data.map((point: MetricsHistoryPoint) => {
+          // Convert disk from GB to percentage
+          const diskPercent = diskLimitGB > 0 ? (point.disk / diskLimitGB) * 100 : 0
+
+          return {
+            time: formatTime(point.timestamp),
+            timestamp: point.timestamp,
+            cpu: point.cpu,
+            memory: point.memory,
+            disk: Math.min(diskPercent, 100),
+          }
+        })
 
         setData(historyData)
       } else {
@@ -121,7 +129,7 @@ export function MetricsChart({ container }: MetricsChartProps) {
     } finally {
       setIsLoading(false)
     }
-  }, [container?.id])
+  }, [container?.id, container?.limits?.diskGB])
 
   // Fetch history on mount
   useEffect(() => {

@@ -114,7 +114,7 @@ class ApiClient {
     }
   }>> {
     return this.request(`/api/containers/${id}/limits`, {
-      method: 'PATCH',
+      method: 'PUT',
       body: JSON.stringify(limits),
     })
   }

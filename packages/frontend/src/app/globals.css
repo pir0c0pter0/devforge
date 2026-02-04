@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@300;400;500;600;700&display=swap');
 @import 'xterm/css/xterm.css';
 
 @tailwind base;
@@ -11,6 +11,7 @@
   --terminal-green: #3fb950;
   --terminal-cyan: #58a6ff;
   --terminal-border: #30363d;
+  --scale-factor: 0.85;
 }
 
 @media (prefers-color-scheme: light) {
@@ -21,15 +22,16 @@
 }
 
 * {
-  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Monaco, Consolas, monospace;
+  font-family: 'IBM Plex Mono', 'JetBrains Mono', 'Courier New', Courier, monospace;
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Monaco, Consolas, monospace;
-  font-size: 14px;
-  line-height: 1.6;
+  font-family: 'IBM Plex Mono', 'JetBrains Mono', 'Courier New', Courier, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
 }
 
 /* Terminal-style scrollbar */
@@ -73,16 +75,16 @@ body {
 
 @layer components {
   .btn-primary {
-    @apply bg-primary-600 hover:bg-primary-500 text-terminal-bg font-semibold py-2 px-4 rounded transition-all border border-primary-500;
+    @apply bg-primary-600 hover:bg-primary-500 text-terminal-bg font-semibold py-1.5 px-3 rounded transition-all border border-primary-500 text-sm;
     text-shadow: none;
   }
 
   .btn-primary:hover {
-    box-shadow: 0 0 12px rgba(63, 185, 80, 0.4);
+    box-shadow: 0 0 10px rgba(63, 185, 80, 0.4);
   }
 
   .btn-secondary {
-    @apply bg-terminal-bgLight hover:bg-terminal-border text-terminal-text font-medium py-2 px-4 rounded transition-all border border-terminal-border;
+    @apply bg-terminal-bgLight hover:bg-terminal-border text-terminal-text font-medium py-1.5 px-3 rounded transition-all border border-terminal-border text-sm;
   }
 
   .btn-secondary:hover {
@@ -90,26 +92,26 @@ body {
   }
 
   .btn-danger {
-    @apply bg-terminal-red/20 hover:bg-terminal-red/30 text-terminal-red font-medium py-2 px-4 rounded transition-all border border-terminal-red/50;
+    @apply bg-terminal-red/20 hover:bg-terminal-red/30 text-terminal-red font-medium py-1.5 px-3 rounded transition-all border border-terminal-red/50 text-sm;
   }
 
   .btn-danger:hover {
     @apply border-terminal-red;
-    box-shadow: 0 0 12px rgba(248, 81, 73, 0.3);
+    box-shadow: 0 0 10px rgba(248, 81, 73, 0.3);
   }
 
   .btn-warning {
-    @apply bg-terminal-yellow/20 hover:bg-terminal-yellow/30 text-terminal-yellow font-medium py-2 px-4 rounded transition-all border border-terminal-yellow/50;
+    @apply bg-terminal-yellow/20 hover:bg-terminal-yellow/30 text-terminal-yellow font-medium py-1.5 px-3 rounded transition-all border border-terminal-yellow/50 text-sm;
   }
 
   .btn-warning:hover {
     @apply border-terminal-yellow;
-    box-shadow: 0 0 12px rgba(214, 158, 47, 0.3);
+    box-shadow: 0 0 10px rgba(214, 158, 47, 0.3);
   }
 
   .card {
-    @apply bg-terminal-bgLight rounded-lg border border-terminal-border overflow-hidden;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    @apply bg-terminal-bgLight rounded border border-terminal-border overflow-hidden;
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25);
   }
 
   .card:hover {
@@ -117,19 +119,19 @@ body {
   }
 
   .input {
-    @apply w-full px-3 py-2 bg-terminal-bg border border-terminal-border rounded focus:outline-none focus:border-terminal-green focus:ring-1 focus:ring-terminal-green/50 text-terminal-text placeholder-terminal-textMuted transition-all;
+    @apply w-full px-2.5 py-1.5 bg-terminal-bg border border-terminal-border rounded focus:outline-none focus:border-terminal-green focus:ring-1 focus:ring-terminal-green/50 text-terminal-text placeholder-terminal-textMuted transition-all text-sm;
   }
 
   .input:focus {
-    box-shadow: 0 0 8px rgba(63, 185, 80, 0.2);
+    box-shadow: 0 0 6px rgba(63, 185, 80, 0.2);
   }
 
   .label {
-    @apply block text-sm font-medium text-terminal-text mb-1;
+    @apply block text-xs font-medium text-terminal-text mb-0.5;
   }
 
   .badge {
-    @apply inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium border;
+    @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border;
   }
 
   .badge-success {
@@ -183,7 +185,7 @@ body {
 
   /* Stats card */
   .stats-card {
-    @apply bg-terminal-bgLight border border-terminal-border rounded-lg p-4;
+    @apply bg-terminal-bgLight border border-terminal-border rounded p-3;
   }
 
   .stats-card:hover {
@@ -191,16 +193,16 @@ body {
   }
 
   .stats-value {
-    @apply text-2xl font-bold text-terminal-green;
+    @apply text-xl font-bold text-terminal-green;
   }
 
   .stats-label {
-    @apply text-sm text-terminal-textMuted;
+    @apply text-xs text-terminal-textMuted;
   }
 
   /* Status indicators */
   .status-dot {
-    @apply w-2 h-2 rounded-full;
+    @apply w-1.5 h-1.5 rounded-full;
   }
 
   .status-running {
