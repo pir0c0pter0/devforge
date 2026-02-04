@@ -78,17 +78,11 @@ const generateLogId = () => `log-${Date.now()}-${++logIdCounter}`
 function shouldFilterLog(type: ClaudeEventType, content: string): boolean {
   if (!content || !content.trim()) return true
 
-  const lower = content.toLowerCase().trim()
-
-  // Filtrar mensagens de status genericas
-  if (type === 'system') {
-    if (lower === 'daemon status: running') return true
-    if (lower === 'daemon status: stopped') return true
-    if (lower === 'health: unknown') return true
-    if (lower.startsWith('health:') && lower.length < 20) return true
-  }
+  // Filtrar TODOS os logs de sistema
+  if (type === 'system') return true
 
   // Filtrar conteudo muito curto sem significado
+  const lower = content.toLowerCase().trim()
   if (lower.length < 2) return true
 
   return false
@@ -565,7 +559,7 @@ export function ClaudeCodeLogs({ containerId, className }: ClaudeCodeLogsProps) 
 
           {/* Type filter */}
           <div className="flex items-center gap-1 flex-wrap">
-            {(['all', 'stdin', 'stdout', 'stderr', 'assistant', 'tool_use', 'result', 'error', 'system'] as const).map((type) => (
+            {(['all', 'stdin', 'stdout', 'stderr', 'assistant', 'tool_use', 'result', 'error'] as const).map((type) => (
               <button
                 key={type}
                 onClick={() => setTypeFilter(type)}
