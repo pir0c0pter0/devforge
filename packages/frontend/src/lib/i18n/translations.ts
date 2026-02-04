@@ -100,6 +100,18 @@ export const translations = {
       total: 'Total',
     },
 
+    // Metrics Chart
+    metricsChart: {
+      cpu: 'CPU',
+      memory: 'Memória',
+      disk: 'Disco',
+      last5Hours: 'Últimas 5 horas',
+      loading: 'Carregando histórico de métricas...',
+      noData: 'Sem dados de métricas disponíveis',
+      usagePercent: 'Uso (%)',
+      usageGB: 'Uso (GB)',
+    },
+
     // Disk Metrics
     disk: {
       expandTitle: 'Expandir Disco',
@@ -199,6 +211,16 @@ export const translations = {
       dangerZone: 'Zona de Perigo',
       dangerZoneWarning: 'Uma vez que você excluir um container, não há como voltar atrás. Por favor, tenha certeza.',
       deleteContainer: 'Excluir Container',
+      // Resource limits editor
+      editLimits: 'Editar Limites',
+      saveLimits: 'Salvar',
+      cancelEdit: 'Cancelar',
+      limitsUpdated: 'Limites atualizados com sucesso',
+      limitsUpdateFailed: 'Falha ao atualizar limites',
+      cpuRange: '0.5 - 16 cores',
+      memoryRange: '512 - 32768 MB',
+      diskRange: '5 - 500 GB',
+      mustBeStopped: 'Pare o container para editar os limites',
     },
 
     // Claude Chat
@@ -511,6 +533,36 @@ export const translations = {
         sshRequired: 'Para repositórios privados, configure uma chave SSH em Configurações.',
       },
     },
+
+    // Token Usage
+    usage: {
+      title: 'Uso de Tokens',
+      daily: 'Total Diario',
+      weekly: 'Total Semanal',
+      session: 'Total Sessao',
+      tokens: 'tokens',
+      resetsIn: 'Reseta em',
+      noData: 'Sem dados',
+    },
+
+    // Claude Code Logs
+    claudeCodeLogs: {
+      title: 'Logs do Claude Code',
+      pending: 'pendentes',
+      searchPlaceholder: 'Buscar logs...',
+      pause: 'Pausar',
+      resume: 'Retomar',
+      download: 'Baixar',
+      clear: 'Limpar',
+      waiting: 'Aguardando eventos do Claude Code...',
+      waitingHint: 'Execute uma instrucao para ver os logs',
+      newLogs: 'Novos logs',
+      logs: 'logs',
+      filtered: 'filtrado',
+      connected: 'Conectado',
+      disconnected: 'Desconectado',
+      paused: 'Pausado',
+    },
   },
 
   en: {
@@ -612,6 +664,18 @@ export const translations = {
       total: 'Total',
     },
 
+    // Metrics Chart
+    metricsChart: {
+      cpu: 'CPU',
+      memory: 'Memory',
+      disk: 'Disk',
+      last5Hours: 'Last 5 hours',
+      loading: 'Loading metrics history...',
+      noData: 'No metrics data available',
+      usagePercent: 'Usage (%)',
+      usageGB: 'Usage (GB)',
+    },
+
     // Disk Metrics
     disk: {
       expandTitle: 'Expand Disk',
@@ -711,6 +775,16 @@ export const translations = {
       dangerZone: 'Danger Zone',
       dangerZoneWarning: 'Once you delete a container, there is no going back. Please be certain.',
       deleteContainer: 'Delete Container',
+      // Resource limits editor
+      editLimits: 'Edit Limits',
+      saveLimits: 'Save',
+      cancelEdit: 'Cancel',
+      limitsUpdated: 'Limits updated successfully',
+      limitsUpdateFailed: 'Failed to update limits',
+      cpuRange: '0.5 - 16 cores',
+      memoryRange: '512 - 32768 MB',
+      diskRange: '5 - 500 GB',
+      mustBeStopped: 'Stop the container to edit limits',
     },
 
     // Claude Chat
@@ -1022,6 +1096,36 @@ export const translations = {
         cloneDescription: 'Could not clone the Git repository.',
         sshRequired: 'For private repositories, configure an SSH key in Settings.',
       },
+    },
+
+    // Token Usage
+    usage: {
+      title: 'Token Usage',
+      daily: 'Daily Total',
+      weekly: 'Weekly Total',
+      session: 'Session Total',
+      tokens: 'tokens',
+      resetsIn: 'Resets in',
+      noData: 'No data',
+    },
+
+    // Claude Code Logs
+    claudeCodeLogs: {
+      title: 'Claude Code Logs',
+      pending: 'pending',
+      searchPlaceholder: 'Search logs...',
+      pause: 'Pause',
+      resume: 'Resume',
+      download: 'Download',
+      clear: 'Clear',
+      waiting: 'Waiting for Claude Code events...',
+      waitingHint: 'Execute an instruction to see the logs',
+      newLogs: 'New logs',
+      logs: 'logs',
+      filtered: 'filtered',
+      connected: 'Connected',
+      disconnected: 'Disconnected',
+      paused: 'Paused',
     },
   },
 } as const

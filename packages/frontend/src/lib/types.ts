@@ -53,6 +53,13 @@ export interface Metrics {
   disk: number
 }
 
+export interface MetricsHistoryPoint {
+  timestamp: string
+  cpu: number
+  memory: number
+  disk: number
+}
+
 export interface Instruction {
   id: string
   containerId: string

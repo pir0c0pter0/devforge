@@ -2,6 +2,7 @@ import type {
   Container,
   CreateContainerRequest,
   Metrics,
+  MetricsHistoryPoint,
   QueueItem,
   JobDetails,
   ApiResponse,
@@ -98,8 +99,32 @@ class ApiClient {
     })
   }
 
+  async updateContainerLimits(id: string, limits: {
+    cpuCores?: number
+    memoryMB?: number
+    diskGB?: number
+  }): Promise<ApiResponse<{
+    id: string
+    name: string
+    status: string
+    limits: {
+      cpuCores: number
+      memoryMB: number
+      diskGB: number
+    }
+  }>> {
+    return this.request(`/api/containers/${id}/limits`, {
+      method: 'PATCH',
+      body: JSON.stringify(limits),
+    })
+  }
+
   async getMetrics(id: string): Promise<ApiResponse<Metrics>> {
     return this.request<Metrics>(`/api/containers/${id}/metrics`)
+  }
+
+  async getMetricsHistory(id: string, hours: number = 5): Promise<ApiResponse<MetricsHistoryPoint[]>> {
+    return this.request<MetricsHistoryPoint[]>(`/api/containers/${id}/metrics/history?hours=${hours}`)
   }
 
   async getQueue(id: string): Promise<ApiResponse<QueueItem[]>> {
@@ -217,6 +242,15 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify({ newLimitMB }),
     })
+  }
+
+  // Token Usage
+  async getContainerUsage(id: string): Promise<ApiResponse<{
+    daily: { tokens: number; cost: number }
+    weekly: { tokens: number; cost: number }
+    session: { tokens: number; cost: number; endsAt: string }
+  }>> {
+    return this.request(`/api/containers/${id}/usage`)
   }
 }
 
