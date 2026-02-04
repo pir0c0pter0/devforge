@@ -79,6 +79,15 @@ export interface AggregatedUsage {
 const SESSION_SLOT_HOURS = [2, 7, 12, 17, 22] as const;
 
 /**
+ * Format Date to SQLite-compatible string (YYYY-MM-DD HH:MM:SS)
+ * SQLite stores datetimes in this format, not ISO 8601 with T and Z
+ */
+function toSqliteDateTime(date: Date): string {
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`;
+}
+
+/**
  * Calculate the current session slot based on the current time
  * Returns the slot index (0-4) and the start hour
  */
@@ -183,12 +192,12 @@ export class UsageRepository extends BaseRepository<
 
     if (filters?.fromDate) {
       conditions.push('recorded_at >= ?');
-      params.push(filters.fromDate.toISOString());
+      params.push(toSqliteDateTime(filters.fromDate));
     }
 
     if (filters?.toDate) {
       conditions.push('recorded_at <= ?');
-      params.push(filters.toDate.toISOString());
+      params.push(toSqliteDateTime(filters.toDate));
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -307,7 +316,7 @@ export class UsageRepository extends BaseRepository<
   deleteOld(olderThan: Date): number {
     const result = this.db
       .prepare(`DELETE FROM ${this.tableName} WHERE recorded_at < ?`)
-      .run(olderThan.toISOString());
+      .run(toSqliteDateTime(olderThan));
     return result.changes;
   }
 
@@ -330,12 +339,12 @@ export class UsageRepository extends BaseRepository<
 
     if (filters?.fromDate) {
       conditions.push('recorded_at >= ?');
-      params.push(filters.fromDate.toISOString());
+      params.push(toSqliteDateTime(filters.fromDate));
     }
 
     if (filters?.toDate) {
       conditions.push('recorded_at <= ?');
-      params.push(filters.toDate.toISOString());
+      params.push(toSqliteDateTime(filters.toDate));
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -358,12 +367,12 @@ export class UsageRepository extends BaseRepository<
 
     if (options?.fromDate) {
       conditions.push('recorded_at >= ?');
-      params.push(options.fromDate.toISOString());
+      params.push(toSqliteDateTime(options.fromDate));
     }
 
     if (options?.toDate) {
       conditions.push('recorded_at <= ?');
-      params.push(options.toDate.toISOString());
+      params.push(toSqliteDateTime(options.toDate));
     }
 
     const whereClause = `WHERE ${conditions.join(' AND ')}`;
