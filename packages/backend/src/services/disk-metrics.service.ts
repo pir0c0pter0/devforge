@@ -64,16 +64,42 @@ export class DiskMetricsService {
 
   /**
    * Collect disk usage breakdown by category
+   * Measures: /workspace + /home/developer (where Claude Code data lives)
    */
   private async collectBreakdown(containerId: string): Promise<DiskBreakdown> {
     try {
       // Get total workspace size
-      const totalResult = await dockerService.executeCommand(
-        containerId,
-        ['du', '-sm', '/workspace'],
-        { user: 'root' }
-      );
-      const total = this.parseDuOutput(totalResult.stdout);
+      let workspaceTotal = 0;
+      try {
+        const workspaceResult = await dockerService.executeCommand(
+          containerId,
+          ['du', '-sm', '/workspace'],
+          { user: 'root' }
+        );
+        if (workspaceResult.exitCode === 0) {
+          workspaceTotal = this.parseDuOutput(workspaceResult.stdout);
+        }
+      } catch {
+        // Workspace might not exist
+      }
+
+      // Get home directory total (includes .claude, .cache, .npm, etc.)
+      let homeTotal = 0;
+      try {
+        const homeResult = await dockerService.executeCommand(
+          containerId,
+          ['du', '-sm', '/home/developer'],
+          { user: 'root' }
+        );
+        if (homeResult.exitCode === 0) {
+          homeTotal = this.parseDuOutput(homeResult.stdout);
+        }
+      } catch {
+        // Home might not exist
+      }
+
+      // Total = workspace + home
+      const total = workspaceTotal + homeTotal;
 
       // Get node_modules size (may not exist)
       let nodeModules = 0;
@@ -90,10 +116,27 @@ export class DiskMetricsService {
         // node_modules doesn't exist
       }
 
+      // Get Claude Code directory size (.claude contains sessions, history, etc.)
+      let claudeCode = 0;
+      try {
+        const claudeResult = await dockerService.executeCommand(
+          containerId,
+          ['du', '-sm', '/home/developer/.claude'],
+          { user: 'root' }
+        );
+        if (claudeResult.exitCode === 0) {
+          claudeCode = this.parseDuOutput(claudeResult.stdout);
+        }
+      } catch {
+        // .claude doesn't exist
+      }
+
       // Get cache directories (.cache, .npm, .pnpm-store, etc.)
       let cache = 0;
-      const cacheDirs = ['.cache', '.npm', '.pnpm-store', '.yarn/cache'];
-      for (const dir of cacheDirs) {
+
+      // Workspace cache directories
+      const workspaceCacheDirs = ['.cache', '.npm', '.pnpm-store', '.yarn/cache'];
+      for (const dir of workspaceCacheDirs) {
         try {
           const cacheResult = await dockerService.executeCommand(
             containerId,
@@ -108,8 +151,8 @@ export class DiskMetricsService {
         }
       }
 
-      // Also check home directory caches
-      const homeCacheDirs = ['.cache', '.npm', '.pnpm-store'];
+      // Home directory caches (excluding .claude which is counted separately)
+      const homeCacheDirs = ['.cache', '.npm', '.pnpm-store', '.local'];
       for (const dir of homeCacheDirs) {
         try {
           const cacheResult = await dockerService.executeCommand(
@@ -125,16 +168,38 @@ export class DiskMetricsService {
         }
       }
 
-      // Calculate workspace (excluding node_modules)
-      const workspace = Math.max(0, total - nodeModules);
+      // Calculate workspace (project files only, excluding node_modules)
+      // workspace = workspaceTotal - node_modules - workspace caches
+      let workspaceCacheSize = 0;
+      for (const dir of workspaceCacheDirs) {
+        try {
+          const result = await dockerService.executeCommand(
+            containerId,
+            ['du', '-sm', `/workspace/${dir}`],
+            { user: 'root' }
+          );
+          if (result.exitCode === 0) {
+            workspaceCacheSize += this.parseDuOutput(result.stdout);
+          }
+        } catch {
+          // Doesn't exist
+        }
+      }
+      const workspace = Math.max(0, workspaceTotal - nodeModules - workspaceCacheSize);
 
-      // Other is what's left after subtracting known categories
-      const other = Math.max(0, total - workspace - nodeModules - cache);
+      // Other = total - workspace - nodeModules - cache - claudeCode
+      const other = Math.max(0, total - workspace - nodeModules - cache - claudeCode);
+
+      logger.debug({
+        containerId,
+        breakdown: { total, workspace, nodeModules, cache, claudeCode, other, workspaceTotal, homeTotal }
+      }, 'Disk breakdown collected');
 
       return {
         workspace,
         nodeModules,
         cache,
+        claudeCode,
         other,
         total,
       };

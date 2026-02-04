@@ -186,6 +186,7 @@ class ApiClient {
       workspace: number
       nodeModules: number
       cache: number
+      claudeCode?: number
       other: number
       total: number
     }

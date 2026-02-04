@@ -2,12 +2,14 @@
  * Disk usage breakdown by category
  */
 export interface DiskBreakdown {
-  /** Total workspace usage in MB */
+  /** Total workspace usage in MB (project files) */
   workspace: number
   /** node_modules usage in MB */
   nodeModules: number
   /** Cache directories usage in MB (.cache, .npm, .pnpm-store, etc.) */
   cache: number
+  /** Claude Code data in MB (.claude directory - sessions, history, etc.) */
+  claudeCode?: number
   /** Other files in MB */
   other: number
   /** Total disk usage in MB */
