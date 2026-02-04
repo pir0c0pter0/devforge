@@ -27,12 +27,16 @@ export class MetricsService {
       const stats = await dockerService.getContainerStats(containerId);
 
       // Calculate CPU usage percentage
+      // Docker returns CPU usage across all cores, so we normalize to 0-100%
       const cpuDelta = stats.cpu_stats.cpu_usage.total_usage -
                        (stats.precpu_stats.cpu_usage?.total_usage || 0);
       const systemDelta = stats.cpu_stats.system_cpu_usage -
                          (stats.precpu_stats.system_cpu_usage || 0);
       const cpuCount = stats.cpu_stats.online_cpus || 1;
-      const cpuUsage = systemDelta > 0 ? (cpuDelta / systemDelta) * cpuCount * 100 : 0;
+      // Calculate raw CPU usage (can exceed 100% on multi-core)
+      const rawCpuUsage = systemDelta > 0 ? (cpuDelta / systemDelta) * cpuCount * 100 : 0;
+      // Normalize to percentage of allocated cores (0-100%)
+      const cpuUsage = Math.min(rawCpuUsage / cpuCount, 100);
 
       // Calculate memory usage
       const memoryUsage = stats.memory_stats.usage || 0;
