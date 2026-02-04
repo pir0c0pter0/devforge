@@ -115,18 +115,44 @@ export type {
 
 // Export all Claude Daemon types
 export type {
+  // Status & State
   DaemonStatus,
   DaemonState,
+  DaemonSession,
+  DaemonStatusResponse,
+  // Events
   ClaudeEventType,
+  BaseClaudeEvent,
+  ClaudeStatusEvent,
+  ClaudeOutputEvent,
+  ClaudeToolUseEvent,
+  ClaudeResultEvent,
+  ClaudeErrorEvent,
+  ClaudeHealthEvent,
+  ClaudeRecoveringEvent,
+  ClaudeRecoveredEvent,
+  ClaudeRecoveryFailedEvent,
+  GenericClaudeEvent,
   ClaudeEvent,
+  // Chat Messages
   ClaudeMessageType,
   ClaudeMessage,
+  // Queue
+  InstructionMode,
+  QueuedInstruction,
+  // Health Monitor
+  HealthStatus,
+  HealthConfig,
+  // API Types
   SendInstructionRequest,
   InstructionReceivedResponse,
+  SendInstructionResponse,
   DaemonControlRequest,
-  DaemonStatusResponse,
+  DaemonControlResponse,
+  // WebSocket
   ClaudeDaemonClientToServerEvents,
   ClaudeDaemonServerToClientEvents,
+  // Claude Code Format
   ClaudeStreamInput,
   ClaudeResult,
   ClaudeToolUse,

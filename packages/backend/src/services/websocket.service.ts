@@ -808,7 +808,7 @@ export const emitTaskEvent = (taskId: string, payload: TaskEventPayload): void =
  */
 export const emitClaudeEvent = (
   containerId: string,
-  event: { type: string; containerId: string; status?: string; message: string; timestamp: string; attempts?: number; lastError?: string }
+  event: Record<string, unknown>
 ): void => {
   if (!io) return
   io.of('/claude-daemon').to(`claude:${containerId}`).emit('health:event' as any, event)
