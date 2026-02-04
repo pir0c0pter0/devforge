@@ -218,6 +218,30 @@ router.post('/telegram-config', strictRateLimiter, async (req: Request, res: Res
         telegramService.reloadConfig(); // Reload config from updated process.env
         await telegramService.start();
         logger.info('Telegram bot restarted with new configuration');
+
+        // Send welcome message to allowed users
+        if (telegramService.isRunning() && allowedUsers) {
+          const userIds = allowedUsers.split(',').map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id));
+          const welcomeMessage =
+            '🎉 *Bot Configurado com Sucesso\\!*\n\n' +
+            '✅ Seu bot Claude Docker está pronto para uso\\.\n\n' +
+            '📋 *Comandos disponíveis:*\n' +
+            '• `/help` \\- Lista todos os comandos\n' +
+            '• `/list` \\- Lista containers\n' +
+            '• `/stats` \\- Estatísticas do container\n' +
+            '• `/queue` \\- Fila de instruções\n' +
+            '• `/exec <instrução>` \\- Enviar instrução\n\n' +
+            '_Digite /help para mais detalhes\\._';
+
+          for (const userId of userIds) {
+            try {
+              await telegramService.sendMessage(userId, welcomeMessage, { parseMode: 'MarkdownV2' });
+              logger.info({ userId }, 'Welcome message sent to user');
+            } catch (msgError) {
+              logger.warn({ userId, error: msgError }, 'Failed to send welcome message');
+            }
+          }
+        }
       } catch (restartError) {
         logger.warn({ error: restartError }, 'Failed to restart Telegram bot, may need manual restart');
       }
