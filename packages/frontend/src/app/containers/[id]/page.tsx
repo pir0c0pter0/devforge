@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { apiClient } from '@/lib/api-client'
@@ -103,13 +103,31 @@ export default function ContainerDetailPage() {
   const { t } = useI18n()
   const containerId = params.id as string
   const initialTab = (searchParams.get('tab') as TabType) || 'overview'
-  const [container, setContainer] = useState<Container | null>(null)
+  const [containerBase, setContainerBase] = useState<Container | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<TabType>(initialTab)
   const [terminalSubTab, setTerminalSubTab] = useState<TerminalSubTab>('shell')
   const [vscodeUrl, setVscodeUrl] = useState<string | null>(null)
-  const { updateContainer } = useContainerStore()
+  const { updateContainer, containers } = useContainerStore()
+
+  // Get real-time metrics from store (updated via WebSocket)
+  const storeContainer = useMemo(() => {
+    return containers.find(c => c.id === containerId)
+  }, [containers, containerId])
+
+  // Merge base container data with real-time metrics from store
+  const container = useMemo(() => {
+    if (!containerBase) return null
+    if (storeContainer?.metrics) {
+      return {
+        ...containerBase,
+        metrics: storeContainer.metrics,
+        status: storeContainer.status || containerBase.status,
+      }
+    }
+    return containerBase
+  }, [containerBase, storeContainer])
 
   useEffect(() => {
     const tabFromUrl = searchParams.get('tab') as TabType | null
@@ -128,7 +146,7 @@ export default function ContainerDetailPage() {
       const response = await apiClient.getContainer(containerId)
 
       if (response.success && response.data) {
-        setContainer(response.data)
+        setContainerBase(response.data)
       } else {
         setError(response.error || t.containerDetail.containerNotFound)
       }

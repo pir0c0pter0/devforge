@@ -205,33 +205,33 @@ export function DiskMetricsCard({
                   )}
                 </div>
 
-                {/* Legend with values */}
-                <div className={clsx('grid gap-2 text-xs', hasClaudeCode ? 'grid-cols-2 lg:grid-cols-3' : 'grid-cols-2')}>
+                {/* Legend with values - vertical layout */}
+                <div className="space-y-2 text-xs">
                   <div className="flex items-center gap-2">
                     <span className="w-3 h-3 rounded bg-terminal-cyan flex-shrink-0" />
-                    <span className="text-terminal-textMuted truncate">{t.disk.workspace}</span>
+                    <span className="text-terminal-textMuted">{t.disk.workspace}</span>
                     <span className="font-mono text-terminal-text ml-auto">{formatSize(breakdown.workspace)}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="w-3 h-3 rounded bg-terminal-magenta flex-shrink-0" />
-                    <span className="text-terminal-textMuted truncate">node_modules</span>
+                    <span className="text-terminal-textMuted">node_modules</span>
                     <span className="font-mono text-terminal-text ml-auto">{formatSize(breakdown.nodeModules)}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="w-3 h-3 rounded bg-terminal-yellow flex-shrink-0" />
-                    <span className="text-terminal-textMuted truncate">{t.disk.cache}</span>
+                    <span className="text-terminal-textMuted">{t.disk.cache}</span>
                     <span className="font-mono text-terminal-text ml-auto">{formatSize(breakdown.cache)}</span>
                   </div>
                   {hasClaudeCode && (
                     <div className="flex items-center gap-2">
                       <span className="w-3 h-3 rounded bg-terminal-green flex-shrink-0" />
-                      <span className="text-terminal-textMuted truncate">{t.disk.claudeCode || 'Claude Code'}</span>
+                      <span className="text-terminal-textMuted">{t.disk.claudeCode || 'Claude Code'}</span>
                       <span className="font-mono text-terminal-text ml-auto">{formatSize(claudeCodeSize)}</span>
                     </div>
                   )}
                   <div className="flex items-center gap-2">
                     <span className="w-3 h-3 rounded bg-terminal-textMuted flex-shrink-0" />
-                    <span className="text-terminal-textMuted truncate">{t.disk.other}</span>
+                    <span className="text-terminal-textMuted">{t.disk.other}</span>
                     <span className="font-mono text-terminal-text ml-auto">{formatSize(breakdown.other)}</span>
                   </div>
                 </div>
