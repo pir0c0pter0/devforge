@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events'
 import Docker from 'dockerode'
-import { spawn, ChildProcess } from 'child_process'
+import { spawn } from 'child_process'
+import { randomUUID } from 'crypto'
 import { dockerLogger as logger } from '../utils/logger'
 import { containerRepository } from '../repositories'
 import type {
@@ -11,23 +12,26 @@ import type {
 } from '@claude-docker/shared'
 
 /**
- * Active daemon tracking structure
+ * Active session tracking structure
+ * Unlike the old daemon approach, we now use session-based execution
+ * where each instruction spawns a new process but maintains context via session ID
  */
-interface ActiveDaemon {
+interface ActiveSession {
   state: DaemonState
-  process: ChildProcess
   dockerId: string
-  outputBuffer: string
-  stdinReady: boolean
+  sessionId: string
+  isProcessing: boolean
 }
 
 /**
- * Claude Daemon flags for execution
+ * Claude flags for execution (print mode with streaming JSON)
  */
-const CLAUDE_FLAGS = [
+const CLAUDE_BASE_FLAGS = [
+  '--print',
   '--dangerously-skip-permissions',
   '--input-format', 'stream-json',
   '--output-format', 'stream-json',
+  '--verbose',
 ]
 
 /**
@@ -41,12 +45,17 @@ const CONTAINER_WORKSPACE = '/home/developer/workspace'
 const INACTIVITY_TIMEOUT = 30 * 60 * 1000
 
 /**
- * ClaudeDaemonService manages Claude Code daemon processes running inside Docker containers.
- * It handles starting/stopping daemons, sending instructions, and parsing JSON output.
+ * ClaudeDaemonService manages Claude Code sessions running inside Docker containers.
+ *
+ * New Architecture (v0.0.37):
+ * - Each container gets a unique session ID (UUID)
+ * - Instructions spawn individual processes that use --session-id or --resume
+ * - Session context is maintained by Claude Code between instructions
+ * - No persistent daemon process - each instruction is fire-and-forget
  */
 class ClaudeDaemonService extends EventEmitter {
   private docker: Docker
-  private daemons: Map<string, ActiveDaemon> = new Map()
+  private sessions: Map<string, ActiveSession> = new Map()
   private cleanupInterval: NodeJS.Timeout | null = null
 
   constructor() {
@@ -58,21 +67,22 @@ class ClaudeDaemonService extends EventEmitter {
   }
 
   /**
-   * Start a Claude Code daemon in a container
+   * Start a Claude Code session for a container
+   * This doesn't spawn a persistent process, just initializes the session
    */
   async startDaemon(containerId: string, dockerId: string): Promise<DaemonState> {
-    // Check if daemon already exists
-    const existing = this.daemons.get(containerId)
+    // Check if session already exists
+    const existing = this.sessions.get(containerId)
     if (existing) {
-      if (existing.state.status === 'running' || existing.state.status === 'starting') {
-        logger.warn({ containerId }, 'Daemon already running')
+      if (existing.state.status === 'running') {
+        logger.warn({ containerId }, 'Session already active')
         return existing.state
       }
-      // Clean up old daemon
-      await this.stopDaemon(containerId)
+      // Clean up old session
+      this.sessions.delete(containerId)
     }
 
-    logger.info({ containerId, dockerId }, 'Starting Claude daemon')
+    logger.info({ containerId, dockerId }, 'Starting Claude session')
 
     const state: DaemonState = {
       containerId,
@@ -101,35 +111,128 @@ class ClaudeDaemonService extends EventEmitter {
         throw new Error('Container is not running')
       }
 
-      // Spawn docker exec process with Claude Code
+      // Generate a unique session ID for this container
+      const sessionId = randomUUID()
+
+      const activeSession: ActiveSession = {
+        state,
+        dockerId: resolvedDockerId,
+        sessionId,
+        isProcessing: false,
+      }
+
+      // Update state to running
+      state.status = 'running'
+
+      this.sessions.set(containerId, activeSession)
+
+      logger.info({ containerId, sessionId }, 'Claude session started')
+      this.emit('daemon:started', { containerId, state })
+
+      return state
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      state.status = 'error'
+      state.error = errorMessage
+
+      logger.error({ containerId, error: errorMessage }, 'Failed to start Claude session')
+      this.emit('daemon:error', { containerId, error: errorMessage })
+
+      throw error
+    }
+  }
+
+  /**
+   * Stop a Claude Code session
+   */
+  async stopDaemon(containerId: string): Promise<void> {
+    const session = this.sessions.get(containerId)
+    if (!session) {
+      logger.debug({ containerId }, 'No session to stop')
+      return
+    }
+
+    logger.info({ containerId }, 'Stopping Claude session')
+    session.state.status = 'stopping'
+
+    // No persistent process to kill, just clean up
+    session.state.status = 'stopped'
+    this.sessions.delete(containerId)
+
+    logger.info({ containerId }, 'Claude session stopped')
+    this.emit('daemon:stopped', { containerId })
+  }
+
+  /**
+   * Send an instruction to Claude Code
+   * Spawns a new process for each instruction, using --resume for subsequent calls
+   */
+  async sendInstruction(containerId: string, instruction: string): Promise<void> {
+    const session = this.sessions.get(containerId)
+    if (!session) {
+      throw new Error(`No session active for container ${containerId}`)
+    }
+
+    if (session.state.status !== 'running') {
+      throw new Error(`Session is not running (status: ${session.state.status})`)
+    }
+
+    if (session.isProcessing) {
+      throw new Error('Session is already processing an instruction')
+    }
+
+    session.isProcessing = true
+    session.state.lastActivity = new Date()
+
+    logger.info({ containerId, instructionLength: instruction.length, sessionId: session.sessionId }, 'Sending instruction to Claude')
+
+    try {
+      // Build command flags
+      const flags = [...CLAUDE_BASE_FLAGS]
+
+      // First instruction uses --session-id, subsequent use --resume
+      if (session.state.instructionCount === 0) {
+        flags.push('--session-id', session.sessionId)
+      } else {
+        flags.push('--resume', session.sessionId)
+      }
+
+      // Format instruction as stream-json input
+      const streamInput: ClaudeStreamInput = {
+        type: 'user',
+        message: {
+          role: 'user',
+          content: instruction,
+        },
+      }
+
+      const jsonInput = JSON.stringify(streamInput)
+
+      // Spawn docker exec process
       const process = spawn('docker', [
         'exec',
         '-i',
         '-w', CONTAINER_WORKSPACE,
-        resolvedDockerId,
+        session.dockerId,
         'claude',
-        ...CLAUDE_FLAGS,
+        ...flags,
       ], {
         stdio: ['pipe', 'pipe', 'pipe'],
       })
 
-      const activeDaemon: ActiveDaemon = {
-        state,
-        process,
-        dockerId: resolvedDockerId,
-        outputBuffer: '',
-        stdinReady: true,
-      }
+      let outputBuffer = ''
 
       // Handle stdout (JSON streaming)
       process.stdout?.on('data', (chunk: Buffer) => {
-        this.handleOutput(containerId, chunk.toString('utf-8'))
+        const data = chunk.toString('utf-8')
+        outputBuffer += data
+        this.handleOutput(containerId, data)
       })
 
       // Handle stderr
       process.stderr?.on('data', (chunk: Buffer) => {
         const errorOutput = chunk.toString('utf-8')
-        logger.warn({ containerId, error: errorOutput }, 'Claude daemon stderr')
+        logger.warn({ containerId, error: errorOutput }, 'Claude stderr')
 
         // Emit as system event
         const event: ClaudeEvent = {
@@ -140,198 +243,88 @@ class ClaudeDaemonService extends EventEmitter {
         this.emit('claude:event', { containerId, event })
       })
 
+      // Write instruction to stdin and close
+      process.stdin?.write(jsonInput)
+      process.stdin?.end()
+
       // Handle process exit
       process.on('exit', (code, signal) => {
-        logger.info({ containerId, code, signal }, 'Claude daemon process exited')
-        this.handleDaemonExit(containerId, code, signal)
+        session.isProcessing = false
+        session.state.instructionCount++
+        session.state.lastActivity = new Date()
+
+        if (code === 0) {
+          logger.info({ containerId, code }, 'Instruction completed successfully')
+        } else {
+          logger.warn({ containerId, code, signal }, 'Instruction process exited with non-zero code')
+
+          // Check if there's an error in the output
+          if (outputBuffer.includes('"is_error":true')) {
+            const event: ClaudeEvent = {
+              type: 'error',
+              timestamp: new Date(),
+              data: { code, signal, message: 'Instruction failed' },
+            }
+            this.emit('claude:event', { containerId, event })
+          }
+        }
       })
 
       // Handle process error
       process.on('error', (error) => {
-        logger.error({ containerId, error }, 'Claude daemon process error')
-        this.handleDaemonError(containerId, error)
-      })
+        session.isProcessing = false
+        logger.error({ containerId, error }, 'Instruction process error')
 
-      // Handle stdin drain
-      process.stdin?.on('drain', () => {
-        const daemon = this.daemons.get(containerId)
-        if (daemon) {
-          daemon.stdinReady = true
+        const event: ClaudeEvent = {
+          type: 'error',
+          timestamp: new Date(),
+          data: { error: error.message },
         }
+        this.emit('claude:event', { containerId, event })
       })
 
-      // Update state to running
-      state.status = 'running'
-      state.pid = process.pid
-
-      this.daemons.set(containerId, activeDaemon)
-
-      logger.info({ containerId, pid: process.pid }, 'Claude daemon started')
-      this.emit('daemon:started', { containerId, state })
-
-      return state
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      state.status = 'error'
-      state.error = errorMessage
-
-      logger.error({ containerId, error: errorMessage }, 'Failed to start Claude daemon')
-      this.emit('daemon:error', { containerId, error: errorMessage })
-
+      session.isProcessing = false
       throw error
     }
   }
 
   /**
-   * Stop a Claude Code daemon gracefully
-   */
-  async stopDaemon(containerId: string): Promise<void> {
-    const daemon = this.daemons.get(containerId)
-    if (!daemon) {
-      logger.debug({ containerId }, 'No daemon to stop')
-      return
-    }
-
-    logger.info({ containerId }, 'Stopping Claude daemon')
-    daemon.state.status = 'stopping'
-
-    try {
-      // Send SIGTERM first for graceful shutdown
-      if (daemon.process && !daemon.process.killed) {
-        // Close stdin to signal end of input
-        daemon.process.stdin?.end()
-
-        // Give it a moment to exit gracefully
-        await new Promise<void>((resolve) => {
-          const timeout = setTimeout(() => {
-            // Force kill if still running
-            if (!daemon.process.killed) {
-              logger.warn({ containerId }, 'Force killing Claude daemon')
-              daemon.process.kill('SIGKILL')
-            }
-            resolve()
-          }, 5000)
-
-          daemon.process.once('exit', () => {
-            clearTimeout(timeout)
-            resolve()
-          })
-
-          daemon.process.kill('SIGTERM')
-        })
-      }
-
-      daemon.state.status = 'stopped'
-      this.daemons.delete(containerId)
-
-      logger.info({ containerId }, 'Claude daemon stopped')
-      this.emit('daemon:stopped', { containerId })
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      daemon.state.status = 'error'
-      daemon.state.error = errorMessage
-
-      logger.error({ containerId, error: errorMessage }, 'Error stopping Claude daemon')
-      this.emit('daemon:error', { containerId, error: errorMessage })
-
-      // Force cleanup
-      this.daemons.delete(containerId)
-      throw error
-    }
-  }
-
-  /**
-   * Send an instruction to the Claude daemon via stdin
-   */
-  async sendInstruction(containerId: string, instruction: string): Promise<void> {
-    const daemon = this.daemons.get(containerId)
-    if (!daemon) {
-      throw new Error(`No daemon running for container ${containerId}`)
-    }
-
-    if (daemon.state.status !== 'running') {
-      throw new Error(`Daemon is not running (status: ${daemon.state.status})`)
-    }
-
-    if (!daemon.process.stdin || daemon.process.stdin.destroyed) {
-      throw new Error('Daemon stdin is not available')
-    }
-
-    logger.info({ containerId, instructionLength: instruction.length }, 'Sending instruction to Claude daemon')
-
-    // Format instruction as stream-json input
-    const streamInput: ClaudeStreamInput = {
-      type: 'user',
-      message: {
-        role: 'user',
-        content: instruction,
-      },
-    }
-
-    const jsonInput = JSON.stringify(streamInput) + '\n'
-
-    // Wait for stdin to be ready if needed
-    if (!daemon.stdinReady) {
-      await new Promise<void>((resolve) => {
-        daemon.process.stdin?.once('drain', resolve)
-      })
-    }
-
-    // Write to stdin
-    const written = daemon.process.stdin.write(jsonInput)
-    if (!written) {
-      daemon.stdinReady = false
-    }
-
-    // Update state
-    daemon.state.instructionCount++
-    daemon.state.lastActivity = new Date()
-
-    logger.debug({ containerId, instructionCount: daemon.state.instructionCount }, 'Instruction sent')
-  }
-
-  /**
-   * Get the current status of a daemon
+   * Get the current status of a session
    */
   getStatus(containerId: string): DaemonState | null {
-    const daemon = this.daemons.get(containerId)
-    if (!daemon) {
+    const session = this.sessions.get(containerId)
+    if (!session) {
       return null
     }
 
     // Return a copy to maintain immutability
-    return { ...daemon.state }
+    return { ...session.state }
   }
 
   /**
-   * List all active daemons
+   * List all active sessions
    */
   listDaemons(): DaemonState[] {
-    return Array.from(this.daemons.values()).map(d => ({ ...d.state }))
+    return Array.from(this.sessions.values()).map(s => ({ ...s.state }))
   }
 
   /**
-   * Handle output from Claude daemon (JSON streaming)
+   * Handle output from Claude (JSON streaming)
    * Parses complete JSON lines and emits events
    */
-  handleOutput(containerId: string, data: string): void {
-    const daemon = this.daemons.get(containerId)
-    if (!daemon) {
-      logger.warn({ containerId }, 'Received output for unknown daemon')
+  private handleOutput(containerId: string, data: string): void {
+    const session = this.sessions.get(containerId)
+    if (!session) {
+      logger.warn({ containerId }, 'Received output for unknown session')
       return
     }
 
     // Update activity
-    daemon.state.lastActivity = new Date()
-
-    // Append to buffer
-    daemon.outputBuffer += data
+    session.state.lastActivity = new Date()
 
     // Process complete lines
-    const lines = daemon.outputBuffer.split('\n')
-
-    // Keep incomplete line in buffer
-    daemon.outputBuffer = lines.pop() || ''
+    const lines = data.split('\n')
 
     for (const line of lines) {
       const trimmed = line.trim()
@@ -345,7 +338,7 @@ class ClaudeDaemonService extends EventEmitter {
           logger.debug({ containerId, eventType: event.type }, 'Claude event received')
           this.emit('claude:event', { containerId, event })
         }
-      } catch (parseError) {
+      } catch {
         // Not valid JSON, emit as raw system message
         logger.debug({ containerId, line: trimmed }, 'Non-JSON output from Claude')
         const event: ClaudeEvent = {
@@ -399,62 +392,19 @@ class ClaudeDaemonService extends EventEmitter {
   }
 
   /**
-   * Handle daemon process exit
-   */
-  private handleDaemonExit(containerId: string, code: number | null, signal: NodeJS.Signals | null): void {
-    const daemon = this.daemons.get(containerId)
-    if (!daemon) return
-
-    if (daemon.state.status === 'stopping') {
-      // Expected exit during stop
-      daemon.state.status = 'stopped'
-    } else {
-      // Unexpected exit
-      daemon.state.status = 'error'
-      daemon.state.error = `Process exited with code ${code}, signal ${signal}`
-
-      this.emit('daemon:error', {
-        containerId,
-        error: daemon.state.error,
-      })
-    }
-
-    this.daemons.delete(containerId)
-    this.emit('daemon:stopped', { containerId })
-  }
-
-  /**
-   * Handle daemon process error
-   */
-  private handleDaemonError(containerId: string, error: Error): void {
-    const daemon = this.daemons.get(containerId)
-    if (!daemon) return
-
-    daemon.state.status = 'error'
-    daemon.state.error = error.message
-
-    this.emit('daemon:error', {
-      containerId,
-      error: error.message,
-    })
-
-    this.daemons.delete(containerId)
-  }
-
-  /**
-   * Start cleanup timer for inactive daemons
+   * Start cleanup timer for inactive sessions
    */
   private startCleanupTimer(): void {
     this.cleanupInterval = setInterval(() => {
       const now = Date.now()
 
-      for (const [containerId, daemon] of this.daemons) {
-        const inactiveMs = now - (daemon.state.lastActivity?.getTime() || 0)
+      for (const [containerId, session] of this.sessions) {
+        const inactiveMs = now - (session.state.lastActivity?.getTime() || 0)
 
         if (inactiveMs > INACTIVITY_TIMEOUT) {
-          logger.info({ containerId, inactiveMs }, 'Stopping inactive Claude daemon')
+          logger.info({ containerId, inactiveMs }, 'Stopping inactive Claude session')
           this.stopDaemon(containerId).catch((error) => {
-            logger.error({ containerId, error }, 'Error stopping inactive daemon')
+            logger.error({ containerId, error }, 'Error stopping inactive session')
           })
         }
       }
@@ -462,16 +412,16 @@ class ClaudeDaemonService extends EventEmitter {
   }
 
   /**
-   * Stop all daemons for a specific container (e.g., when container is deleted)
+   * Stop all sessions for a specific container
    */
   async stopDaemonForContainer(containerId: string): Promise<void> {
-    if (this.daemons.has(containerId)) {
+    if (this.sessions.has(containerId)) {
       await this.stopDaemon(containerId)
     }
   }
 
   /**
-   * Stop all daemons and cleanup
+   * Stop all sessions and cleanup
    */
   async destroy(): Promise<void> {
     if (this.cleanupInterval) {
@@ -479,9 +429,9 @@ class ClaudeDaemonService extends EventEmitter {
       this.cleanupInterval = null
     }
 
-    const stopPromises = Array.from(this.daemons.keys()).map((containerId) =>
+    const stopPromises = Array.from(this.sessions.keys()).map((containerId) =>
       this.stopDaemon(containerId).catch((error) => {
-        logger.error({ containerId, error }, 'Error stopping daemon during destroy')
+        logger.error({ containerId, error }, 'Error stopping session during destroy')
       })
     )
 

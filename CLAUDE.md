@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções
 
-## Versão Atual: 0.0.36-alpha
+## Versão Atual: 0.0.37-alpha
 
 ## Estrutura do Projeto
 
@@ -698,6 +698,14 @@ ALLOWED_ORIGINS=https://myapp.com,https://api.myapp.com
 ```
 
 ## Histórico de Versões
+
+### v0.0.37-alpha
+- Fix: **Claude Code Daemon - arquitetura session-based** (corrige processo que parava)
+- Feat: Cada instrução agora spawn um novo processo (não processo persistente)
+- Feat: Sessões mantêm contexto via `--session-id` e `--resume`
+- Feat: Flags corrigidas: `--print --verbose` necessárias para stream-json
+- Feat: Session ID único (UUID) por container para manter histórico de conversa
+- Fix: Claude Code 2.1.29 requer `--print` para `--input-format stream-json`
 
 ### v0.0.36-alpha
 - Feat: **Indicadores visuais de status melhorados** com ícones animados
