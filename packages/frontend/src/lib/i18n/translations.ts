@@ -8,8 +8,12 @@ export const translations = {
     nav: {
       dashboard: 'Painel',
       containers: 'Containers',
+      templates: 'Templates',
+      metrics: 'Métricas',
       settings: 'Configurações',
       newContainer: 'Novo Container',
+      signOut: 'Sair',
+      manager: 'Gerenciador',
     },
 
     // Dashboard
@@ -69,6 +73,125 @@ export const translations = {
       diskWarning: 'Uso de disco acima de 80%',
       diskCritical: 'Uso de disco crítico! Acima de 95%',
       softLimit: 'Limite soft',
+      // Actions
+      restart: 'Reiniciar',
+      restarting: 'Reiniciando',
+      processing: 'Processando',
+      waiting: 'Aguardando',
+      reconnecting: 'Reconectando',
+      connecting: 'Conectando',
+    },
+
+    // Container Detail Page
+    containerDetail: {
+      // Tabs
+      tabs: {
+        overview: 'Visão Geral',
+        metrics: 'Métricas',
+        instructions: 'Instruções',
+        logs: 'Logs',
+        terminal: 'Terminal',
+        settings: 'Configurações',
+      },
+      // Sub-tabs
+      subTabs: {
+        shell: 'Shell',
+        claudeCode: 'Claude Code',
+      },
+      // Loading states
+      loadingTerminal: 'Carregando terminal',
+      loadingClaudeChat: 'Carregando Claude Chat',
+      loadingContainer: 'Carregando container',
+      errorLoading: 'Erro ao Carregar Container',
+      containerNotFound: 'Container não encontrado',
+      backToContainers: 'Voltar para Containers',
+      // Info section
+      repository: 'Repositório',
+      containerId: 'ID',
+      createdAt: 'Criado em',
+      activeAgents: 'Agentes Ativos',
+      queueLength: 'Tamanho da Fila',
+      containerInfo: 'Informações do Container',
+      // Metrics section
+      cpuUsage: 'Uso de CPU',
+      memoryUsage: 'Uso de Memória',
+      diskUsage: 'Uso de Disco',
+      coresAllocated: 'cores alocados',
+      mbLimit: 'MB limite',
+      gbLimit: 'GB limite',
+      realTimeMetrics: 'Métricas em Tempo Real',
+      resourceLimits: 'Limites de Recursos',
+      currentUsage: 'Uso Atual',
+      usagePercentage: 'Percentual de Uso',
+      // VS Code section
+      vscodeWeb: 'VS Code Web',
+      openInNewTab: 'Abrir em nova aba',
+      // Logs section
+      containerLogs: 'Logs do Container',
+      logsPlaceholder: '[Streaming de logs será implementado com conexão WebSocket]',
+      // Terminal section
+      terminalUnavailable: 'Terminal Indisponível',
+      startContainerForTerminal: 'Inicie o container para acessar o terminal.',
+      // Settings section
+      containerSettings: 'Configurações do Container',
+      containerName: 'Nome do Container',
+      template: 'Template',
+      mode: 'Modo',
+      resourceLimitsTitle: 'Limites de Recursos',
+      cpuCores: 'Núcleos de CPU',
+      memoryMb: 'Memória (MB)',
+      diskGb: 'Disco (GB)',
+      cannotModifyRunning: 'Limites de recursos não podem ser modificados enquanto o container está rodando.',
+      // Danger zone
+      dangerZone: 'Zona de Perigo',
+      dangerZoneWarning: 'Uma vez que você excluir um container, não há como voltar atrás. Por favor, tenha certeza.',
+      deleteContainer: 'Excluir Container',
+    },
+
+    // Claude Chat
+    claudeChat: {
+      title: 'Claude Code',
+      clear: 'Limpar',
+      stop: 'Parar',
+      start: 'Iniciar',
+      sendMessage: 'Envie uma mensagem para o Claude Code',
+      startFirst: 'Inicie o Claude Code primeiro',
+      thinking: 'Pensando',
+      error: 'Erro',
+      connected: 'Conectado',
+      disconnected: 'Desconectado',
+      connecting: 'Conectando',
+    },
+
+    // Templates Page
+    templatesPage: {
+      title: 'Templates',
+      subtitle: 'Escolha um template para seu container',
+      useTemplate: 'Usar Template',
+      nodejs: {
+        name: 'Node.js',
+        description: 'Runtime JavaScript com npm, yarn e pnpm pré-instalados. Ideal para desenvolvimento web e serviços backend.',
+      },
+      python: {
+        name: 'Python',
+        description: 'Python 3.x com pip e suporte a ambiente virtual. Perfeito para ciência de dados, ML e scripts.',
+      },
+      golang: {
+        name: 'Go',
+        description: 'Linguagem de programação Go com suporte a módulos. Ótimo para construir software eficiente e confiável.',
+      },
+      rust: {
+        name: 'Rust',
+        description: 'Rust com gerenciador de pacotes Cargo. Construa software de sistema rápido, confiável e eficiente.',
+      },
+      java: {
+        name: 'Java',
+        description: 'OpenJDK com Maven e Gradle. Ambiente de desenvolvimento enterprise.',
+      },
+      claude: {
+        name: 'Claude Code',
+        description: 'Ambiente Claude Code com todas as capacidades de IA habilitadas. Suporte completo a desenvolvimento autônomo.',
+      },
     },
 
     // Status
@@ -296,8 +419,12 @@ export const translations = {
     nav: {
       dashboard: 'Dashboard',
       containers: 'Containers',
+      templates: 'Templates',
+      metrics: 'Metrics',
       settings: 'Settings',
       newContainer: 'New Container',
+      signOut: 'Sign out',
+      manager: 'Manager',
     },
 
     // Dashboard
@@ -357,6 +484,125 @@ export const translations = {
       diskWarning: 'Disk usage above 80%',
       diskCritical: 'Critical disk usage! Above 95%',
       softLimit: 'Soft limit',
+      // Actions
+      restart: 'Restart',
+      restarting: 'Restarting',
+      processing: 'Processing',
+      waiting: 'Waiting',
+      reconnecting: 'Reconnecting',
+      connecting: 'Connecting',
+    },
+
+    // Container Detail Page
+    containerDetail: {
+      // Tabs
+      tabs: {
+        overview: 'Overview',
+        metrics: 'Metrics',
+        instructions: 'Instructions',
+        logs: 'Logs',
+        terminal: 'Terminal',
+        settings: 'Settings',
+      },
+      // Sub-tabs
+      subTabs: {
+        shell: 'Shell',
+        claudeCode: 'Claude Code',
+      },
+      // Loading states
+      loadingTerminal: 'Loading terminal',
+      loadingClaudeChat: 'Loading Claude Chat',
+      loadingContainer: 'Loading container',
+      errorLoading: 'Error Loading Container',
+      containerNotFound: 'Container not found',
+      backToContainers: 'Back to Containers',
+      // Info section
+      repository: 'Repository',
+      containerId: 'ID',
+      createdAt: 'Created At',
+      activeAgents: 'Active Agents',
+      queueLength: 'Queue Length',
+      containerInfo: 'Container Info',
+      // Metrics section
+      cpuUsage: 'CPU Usage',
+      memoryUsage: 'Memory Usage',
+      diskUsage: 'Disk Usage',
+      coresAllocated: 'cores allocated',
+      mbLimit: 'MB limit',
+      gbLimit: 'GB limit',
+      realTimeMetrics: 'Real-time Metrics',
+      resourceLimits: 'Resource Limits',
+      currentUsage: 'Current Usage',
+      usagePercentage: 'Usage Percentage',
+      // VS Code section
+      vscodeWeb: 'VS Code Web',
+      openInNewTab: 'Open in new tab',
+      // Logs section
+      containerLogs: 'Container Logs',
+      logsPlaceholder: '[Log streaming will be implemented with WebSocket connection]',
+      // Terminal section
+      terminalUnavailable: 'Terminal Unavailable',
+      startContainerForTerminal: 'Start the container to access the terminal.',
+      // Settings section
+      containerSettings: 'Container Settings',
+      containerName: 'Container Name',
+      template: 'Template',
+      mode: 'Mode',
+      resourceLimitsTitle: 'Resource Limits',
+      cpuCores: 'CPU Cores',
+      memoryMb: 'Memory (MB)',
+      diskGb: 'Disk (GB)',
+      cannotModifyRunning: 'Resource limits cannot be modified while the container is running.',
+      // Danger zone
+      dangerZone: 'Danger Zone',
+      dangerZoneWarning: 'Once you delete a container, there is no going back. Please be certain.',
+      deleteContainer: 'Delete Container',
+    },
+
+    // Claude Chat
+    claudeChat: {
+      title: 'Claude Code',
+      clear: 'Clear',
+      stop: 'Stop',
+      start: 'Start',
+      sendMessage: 'Send a message to Claude Code',
+      startFirst: 'Start Claude Code first',
+      thinking: 'Thinking',
+      error: 'Error',
+      connected: 'Connected',
+      disconnected: 'Disconnected',
+      connecting: 'Connecting',
+    },
+
+    // Templates Page
+    templatesPage: {
+      title: 'Templates',
+      subtitle: 'Choose a template for your container',
+      useTemplate: 'Use Template',
+      nodejs: {
+        name: 'Node.js',
+        description: 'JavaScript runtime with npm, yarn, and pnpm pre-installed. Ideal for web development and backend services.',
+      },
+      python: {
+        name: 'Python',
+        description: 'Python 3.x with pip and virtual environment support. Perfect for data science, ML, and scripting.',
+      },
+      golang: {
+        name: 'Go',
+        description: 'Go programming language with modules support. Great for building efficient, reliable software.',
+      },
+      rust: {
+        name: 'Rust',
+        description: 'Rust with Cargo package manager. Build fast, reliable, and efficient system software.',
+      },
+      java: {
+        name: 'Java',
+        description: 'OpenJDK with Maven and Gradle. Enterprise-grade development environment.',
+      },
+      claude: {
+        name: 'Claude Code',
+        description: 'Claude Code environment with all AI capabilities enabled. Full autonomous development support.',
+      },
     },
 
     // Status

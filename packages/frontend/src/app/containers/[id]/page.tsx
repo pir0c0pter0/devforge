@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic'
 import { apiClient } from '@/lib/api-client'
 import { useMetrics } from '@/hooks/use-metrics'
 import { useContainerStore } from '@/stores/container.store'
+import { useI18n } from '@/lib/i18n'
 import { MetricsChart } from '@/components/metrics-chart'
 import { InstructionQueue } from '@/components/instruction-queue'
 import { ContainerDetailSkeleton } from '@/components/ui/skeleton'
@@ -15,111 +16,75 @@ import clsx from 'clsx'
 
 const InteractiveTerminal = dynamic(
   () => import('@/components/interactive-terminal').then(mod => mod.InteractiveTerminal),
-  { ssr: false, loading: () => <div className="card p-6 text-center">Loading terminal...</div> }
+  { ssr: false, loading: () => <LoadingPlaceholder textKey="terminal" /> }
 )
 
 const ClaudeChat = dynamic(
   () => import('@/components/claude-chat').then(mod => mod.ClaudeChat),
-  { ssr: false, loading: () => <div className="card p-6 text-center">Loading Claude Chat...</div> }
+  { ssr: false, loading: () => <LoadingPlaceholder textKey="claude" /> }
 )
+
+function LoadingPlaceholder({ textKey }: { textKey: 'terminal' | 'claude' }) {
+  const { t } = useI18n()
+  const text = textKey === 'terminal' ? t.containerDetail.loadingTerminal : t.containerDetail.loadingClaudeChat
+  return <div className="card p-6 text-center"><AnimatedDots text={text} /></div>
+}
 
 type TabType = 'overview' | 'metrics' | 'instructions' | 'logs' | 'terminal' | 'settings'
 type TerminalSubTab = 'shell' | 'claude'
 
 interface TabConfig {
   id: TabType
-  name: string
   icon: React.ReactNode
 }
 
-const tabs: TabConfig[] = [
+const tabConfigs: TabConfig[] = [
   {
     id: 'overview',
-    name: 'Overview',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-        />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
       </svg>
     ),
   },
   {
     id: 'metrics',
-    name: 'Metrics',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-        />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
       </svg>
     ),
   },
   {
     id: 'instructions',
-    name: 'Instructions',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M4 6h16M4 12h16M4 18h16"
-        />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
       </svg>
     ),
   },
   {
     id: 'logs',
-    name: 'Logs',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-        />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
       </svg>
     ),
   },
   {
     id: 'terminal',
-    name: 'Terminal',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-        />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
       </svg>
     ),
   },
   {
     id: 'settings',
-    name: 'Settings',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-        />
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-        />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
       </svg>
     ),
   },
@@ -128,6 +93,7 @@ const tabs: TabConfig[] = [
 export default function ContainerDetailPage() {
   const params = useParams()
   const searchParams = useSearchParams()
+  const { t } = useI18n()
   const containerId = params.id as string
   const initialTab = (searchParams.get('tab') as TabType) || 'overview'
   const [container, setContainer] = useState<Container | null>(null)
@@ -138,10 +104,9 @@ export default function ContainerDetailPage() {
   const [vscodeUrl, setVscodeUrl] = useState<string | null>(null)
   const { updateContainer } = useContainerStore()
 
-  // Sync activeTab with searchParams when URL changes
   useEffect(() => {
     const tabFromUrl = searchParams.get('tab') as TabType | null
-    if (tabFromUrl && tabs.some(t => t.id === tabFromUrl)) {
+    if (tabFromUrl && tabConfigs.some(tc => tc.id === tabFromUrl)) {
       setActiveTab(tabFromUrl)
     }
   }, [searchParams])
@@ -158,60 +123,57 @@ export default function ContainerDetailPage() {
       if (response.success && response.data) {
         setContainer(response.data)
       } else {
-        setError(response.error || 'Failed to fetch container')
+        setError(response.error || t.containerDetail.containerNotFound)
       }
 
       setIsLoading(false)
     }
 
     fetchContainer()
-  }, [containerId])
+  }, [containerId, t.containerDetail.containerNotFound])
 
   const handleStart = async () => {
     if (!container) return
-
     updateContainer(container.id, { status: 'creating' })
     const response = await apiClient.startContainer(container.id)
-
     if (!response.success) {
-      setError(response.error || 'Failed to start container')
+      setError(response.error || t.container.failedStart)
       updateContainer(container.id, { status: 'stopped' })
     }
   }
 
   const handleStop = async () => {
     if (!container) return
-
     updateContainer(container.id, { status: 'stopped' })
     const response = await apiClient.stopContainer(container.id)
-
     if (!response.success) {
-      setError(response.error || 'Failed to stop container')
+      setError(response.error || t.container.failedStop)
       updateContainer(container.id, { status: 'running' })
     }
   }
 
   const handleRestart = async () => {
     if (!container) return
-
     updateContainer(container.id, { status: 'creating' })
     const response = await apiClient.restartContainer(container.id)
-
     if (!response.success) {
-      setError(response.error || 'Failed to restart container')
+      setError(response.error || t.container.failedStart)
     }
   }
 
   const handleOpenVSCode = async () => {
     if (!container) return
-
     const response = await apiClient.openVSCode(container.id)
     if (response.success && response.data?.url) {
       setVscodeUrl(response.data.url)
       setActiveTab('overview')
     } else {
-      setError(response.error || 'Failed to open VS Code')
+      setError(response.error || t.container.failedVscode)
     }
+  }
+
+  const getTabName = (id: TabType): string => {
+    return t.containerDetail.tabs[id]
   }
 
   if (isLoading) {
@@ -222,20 +184,10 @@ export default function ContainerDetailPage() {
     return (
       <div className="card p-6">
         <div className="text-center text-terminal-red">
-          <svg
-            className="mx-auto h-12 w-12 mb-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-            />
+          <svg className="mx-auto h-12 w-12 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
-          <h3 className="text-lg font-semibold mb-2">Error Loading Container</h3>
+          <h3 className="text-lg font-semibold mb-2">{t.containerDetail.errorLoading}</h3>
           <p className="text-sm">{error}</p>
         </div>
       </div>
@@ -273,19 +225,17 @@ export default function ContainerDetailPage() {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-3 mb-2">
-            <h2 className="text-2xl font-bold text-terminal-text">
-              {container.name}
-            </h2>
+            <h2 className="text-2xl font-bold text-terminal-text">{container.name}</h2>
             <span className={clsx('badge', statusColors[container.status])}>
-              {container.status}
+              {t.status[container.status as keyof typeof t.status] || container.status}
             </span>
           </div>
           <div className="flex flex-wrap gap-2">
             <span className={clsx('badge', templateColors[container.template])}>
-              {container.template}
+              {t.templates[container.template]}
             </span>
             <span className={clsx('badge', modeColors[container.mode])}>
-              {container.mode}
+              {t.modes[container.mode]}
             </span>
             {container.repositoryUrl && (
               <a
@@ -297,7 +247,7 @@ export default function ContainerDetailPage() {
                 <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
                 </svg>
-                Repository
+                {t.containerDetail.repository}
               </a>
             )}
           </div>
@@ -306,12 +256,8 @@ export default function ContainerDetailPage() {
         <div className="flex gap-2">
           {container.status === 'running' ? (
             <>
-              <button onClick={handleStop} className="btn-secondary">
-                Stop
-              </button>
-              <button onClick={handleRestart} className="btn-secondary">
-                Restart
-              </button>
+              <button onClick={handleStop} className="btn-secondary">{t.container.stop}</button>
+              <button onClick={handleRestart} className="btn-secondary">{t.container.restart}</button>
             </>
           ) : (
             <button
@@ -319,16 +265,12 @@ export default function ContainerDetailPage() {
               className="btn-primary"
               disabled={container.status === 'creating'}
             >
-              {container.status === 'creating' ? <AnimatedDots text="Starting" /> : 'Start'}
+              {container.status === 'creating' ? <AnimatedDots text={t.container.starting} /> : t.container.start}
             </button>
           )}
           {(container.template === 'vscode' || container.template === 'both') && (
-            <button
-              onClick={handleOpenVSCode}
-              className="btn-secondary"
-              disabled={container.status !== 'running'}
-            >
-              VS Code
+            <button onClick={handleOpenVSCode} className="btn-secondary" disabled={container.status !== 'running'}>
+              {t.container.vscode}
             </button>
           )}
         </div>
@@ -343,7 +285,7 @@ export default function ContainerDetailPage() {
       {/* Tabs */}
       <div className="border-b border-terminal-border">
         <nav className="-mb-px flex space-x-8">
-          {tabs.map((tab) => (
+          {tabConfigs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
@@ -355,7 +297,7 @@ export default function ContainerDetailPage() {
               )}
             >
               {tab.icon}
-              {tab.name}
+              {getTabName(tab.id)}
             </button>
           ))}
         </nav>
@@ -367,92 +309,47 @@ export default function ContainerDetailPage() {
           {/* Quick Stats */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="card p-6">
-              <h3 className="text-sm font-medium text-terminal-textMuted mb-1">
-                CPU Usage
-              </h3>
-              <p className="text-2xl font-bold text-terminal-text">
-                {(container.metrics?.cpu ?? 0).toFixed(1)}%
-              </p>
+              <h3 className="text-sm font-medium text-terminal-textMuted mb-1">{t.containerDetail.cpuUsage}</h3>
+              <p className="text-2xl font-bold text-terminal-text">{(container.metrics?.cpu ?? 0).toFixed(1)}%</p>
               <div className="w-full bg-terminal-border rounded-full h-2 mt-2">
                 <div
-                  className={clsx(
-                    'h-2 rounded-full transition-all',
-                    (container.metrics?.cpu ?? 0) > 80
-                      ? 'bg-terminal-red'
-                      : (container.metrics?.cpu ?? 0) > 60
-                      ? 'bg-terminal-yellow'
-                      : 'bg-terminal-green'
-                  )}
+                  className={clsx('h-2 rounded-full transition-all', (container.metrics?.cpu ?? 0) > 80 ? 'bg-terminal-red' : (container.metrics?.cpu ?? 0) > 60 ? 'bg-terminal-yellow' : 'bg-terminal-green')}
                   style={{ width: `${Math.min(container.metrics?.cpu ?? 0, 100)}%` }}
                 />
               </div>
-              <p className="text-xs text-terminal-textMuted mt-1">
-                {container.limits?.cpuCores ?? 0} cores allocated
-              </p>
+              <p className="text-xs text-terminal-textMuted mt-1">{container.limits?.cpuCores ?? 0} {t.containerDetail.coresAllocated}</p>
             </div>
 
             <div className="card p-6">
-              <h3 className="text-sm font-medium text-terminal-textMuted mb-1">
-                Memory Usage
-              </h3>
-              <p className="text-2xl font-bold text-terminal-text">
-                {(container.metrics?.memory ?? 0).toFixed(0)} MB
-              </p>
+              <h3 className="text-sm font-medium text-terminal-textMuted mb-1">{t.containerDetail.memoryUsage}</h3>
+              <p className="text-2xl font-bold text-terminal-text">{(container.metrics?.memory ?? 0).toFixed(0)} MB</p>
               {(() => {
                 const memLimit = container.limits?.memoryMB ?? 1
                 const memPercent = memLimit > 0 ? ((container.metrics?.memory ?? 0) / memLimit) * 100 : 0
                 return (
                   <>
                     <div className="w-full bg-terminal-border rounded-full h-2 mt-2">
-                      <div
-                        className={clsx(
-                          'h-2 rounded-full transition-all',
-                          memPercent > 80
-                            ? 'bg-terminal-red'
-                            : memPercent > 60
-                            ? 'bg-terminal-yellow'
-                            : 'bg-terminal-green'
-                        )}
-                        style={{ width: `${Math.min(memPercent, 100)}%` }}
-                      />
+                      <div className={clsx('h-2 rounded-full transition-all', memPercent > 80 ? 'bg-terminal-red' : memPercent > 60 ? 'bg-terminal-yellow' : 'bg-terminal-green')} style={{ width: `${Math.min(memPercent, 100)}%` }} />
                     </div>
-                    <p className="text-xs text-terminal-textMuted mt-1">
-                      {container.limits?.memoryMB ?? 0} MB limit
-                    </p>
+                    <p className="text-xs text-terminal-textMuted mt-1">{container.limits?.memoryMB ?? 0} {t.containerDetail.mbLimit}</p>
                   </>
                 )
               })()}
             </div>
 
             <div className="card p-6">
-              <h3 className="text-sm font-medium text-terminal-textMuted mb-1">
-                Disk Usage
-              </h3>
-              <p className="text-2xl font-bold text-terminal-text">
-                {(container.metrics?.disk ?? 0).toFixed(2)} GB
-              </p>
+              <h3 className="text-sm font-medium text-terminal-textMuted mb-1">{t.containerDetail.diskUsage}</h3>
+              <p className="text-2xl font-bold text-terminal-text">{(container.metrics?.disk ?? 0).toFixed(2)} GB</p>
               {(() => {
                 const diskLimit = container.limits?.diskGB ?? 1
                 const diskPercent = diskLimit > 0 ? ((container.metrics?.disk ?? 0) / diskLimit) * 100 : 0
                 return (
                   <div className="w-full bg-terminal-border rounded-full h-2 mt-2">
-                    <div
-                      className={clsx(
-                        'h-2 rounded-full transition-all',
-                        diskPercent > 80
-                          ? 'bg-terminal-red'
-                          : diskPercent > 60
-                          ? 'bg-terminal-yellow'
-                          : 'bg-terminal-green'
-                      )}
-                      style={{ width: `${Math.min(diskPercent, 100)}%` }}
-                    />
+                    <div className={clsx('h-2 rounded-full transition-all', diskPercent > 80 ? 'bg-terminal-red' : diskPercent > 60 ? 'bg-terminal-yellow' : 'bg-terminal-green')} style={{ width: `${Math.min(diskPercent, 100)}%` }} />
                   </div>
                 )
               })()}
-              <p className="text-xs text-terminal-textMuted mt-1">
-                {container.limits?.diskGB ?? 0} GB limit
-              </p>
+              <p className="text-xs text-terminal-textMuted mt-1">{container.limits?.diskGB ?? 0} {t.containerDetail.gbLimit}</p>
             </div>
           </div>
 
@@ -464,68 +361,39 @@ export default function ContainerDetailPage() {
                   <svg className="w-5 h-5 text-blue-600" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M23.15 2.587L18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z" />
                   </svg>
-                  <span className="text-sm font-medium text-terminal-text">
-                    VS Code Web
-                  </span>
+                  <span className="text-sm font-medium text-terminal-text">{t.containerDetail.vscodeWeb}</span>
                 </div>
-                <a
-                  href={vscodeUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400"
-                >
-                  Open in new tab
+                <a href={vscodeUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400">
+                  {t.containerDetail.openInNewTab}
                 </a>
               </div>
-              <iframe
-                src={vscodeUrl}
-                className="w-full h-[600px] border-0"
-                title="VS Code"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
-              />
+              <iframe src={vscodeUrl} className="w-full h-[600px] border-0" title="VS Code" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals" />
             </div>
           )}
 
           {/* Container Info */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="card p-6">
-              <h3 className="text-lg font-semibold text-terminal-text mb-4">
-                Container Info
-              </h3>
+              <h3 className="text-lg font-semibold text-terminal-text mb-4">{t.containerDetail.containerInfo}</h3>
               <dl className="space-y-3">
                 <div>
-                  <dt className="text-sm font-medium text-terminal-textMuted">ID</dt>
-                  <dd className="text-sm text-terminal-text font-mono">
-                    {container.id}
-                  </dd>
+                  <dt className="text-sm font-medium text-terminal-textMuted">{t.containerDetail.containerId}</dt>
+                  <dd className="text-sm text-terminal-text font-mono">{container.id}</dd>
                 </div>
                 <div>
-                  <dt className="text-sm font-medium text-terminal-textMuted">
-                    Created At
-                  </dt>
-                  <dd className="text-sm text-terminal-text">
-                    {new Date(container.createdAt).toLocaleString()}
-                  </dd>
+                  <dt className="text-sm font-medium text-terminal-textMuted">{t.containerDetail.createdAt}</dt>
+                  <dd className="text-sm text-terminal-text">{new Date(container.createdAt).toLocaleString()}</dd>
                 </div>
                 <div>
-                  <dt className="text-sm font-medium text-terminal-textMuted">
-                    Active Agents
-                  </dt>
-                  <dd className="text-sm text-terminal-text">
-                    {container.activeAgents}
-                  </dd>
+                  <dt className="text-sm font-medium text-terminal-textMuted">{t.containerDetail.activeAgents}</dt>
+                  <dd className="text-sm text-terminal-text">{container.activeAgents}</dd>
                 </div>
                 <div>
-                  <dt className="text-sm font-medium text-terminal-textMuted">
-                    Queue Length
-                  </dt>
-                  <dd className="text-sm text-terminal-text">
-                    {container.queueLength}
-                  </dd>
+                  <dt className="text-sm font-medium text-terminal-textMuted">{t.containerDetail.queueLength}</dt>
+                  <dd className="text-sm text-terminal-text">{container.queueLength}</dd>
                 </div>
               </dl>
             </div>
-
             <InstructionQueue containerId={container.id} />
           </div>
         </div>
@@ -534,78 +402,56 @@ export default function ContainerDetailPage() {
       {activeTab === 'metrics' && (
         <div className="space-y-6">
           <div className="card p-6">
-            <h3 className="text-lg font-semibold text-terminal-text mb-4">
-              Real-time Metrics
-            </h3>
+            <h3 className="text-lg font-semibold text-terminal-text mb-4">{t.containerDetail.realTimeMetrics}</h3>
             <MetricsChart container={container} />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="card p-6">
-              <h4 className="text-sm font-medium text-terminal-textMuted mb-3">
-                Resource Limits
-              </h4>
+              <h4 className="text-sm font-medium text-terminal-textMuted mb-3">{t.containerDetail.resourceLimits}</h4>
               <dl className="space-y-2">
                 <div className="flex justify-between">
-                  <dt className="text-sm text-terminal-textMuted">CPU Cores</dt>
-                  <dd className="text-sm font-medium text-terminal-text">
-                    {container.limits?.cpuCores ?? 0}
-                  </dd>
+                  <dt className="text-sm text-terminal-textMuted">{t.containerDetail.cpuCores}</dt>
+                  <dd className="text-sm font-medium text-terminal-text">{container.limits?.cpuCores ?? 0}</dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-sm text-terminal-textMuted">Memory</dt>
-                  <dd className="text-sm font-medium text-terminal-text">
-                    {container.limits?.memoryMB ?? 0} MB
-                  </dd>
+                  <dt className="text-sm text-terminal-textMuted">{t.container.memory}</dt>
+                  <dd className="text-sm font-medium text-terminal-text">{container.limits?.memoryMB ?? 0} MB</dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-sm text-terminal-textMuted">Disk</dt>
-                  <dd className="text-sm font-medium text-terminal-text">
-                    {container.limits?.diskGB ?? 0} GB
-                  </dd>
+                  <dt className="text-sm text-terminal-textMuted">{t.container.disk}</dt>
+                  <dd className="text-sm font-medium text-terminal-text">{container.limits?.diskGB ?? 0} GB</dd>
                 </div>
               </dl>
             </div>
 
             <div className="card p-6">
-              <h4 className="text-sm font-medium text-terminal-textMuted mb-3">
-                Current Usage
-              </h4>
+              <h4 className="text-sm font-medium text-terminal-textMuted mb-3">{t.containerDetail.currentUsage}</h4>
               <dl className="space-y-2">
                 <div className="flex justify-between">
-                  <dt className="text-sm text-terminal-textMuted">CPU</dt>
-                  <dd className="text-sm font-medium text-terminal-text">
-                    {(container.metrics?.cpu ?? 0).toFixed(1)}%
-                  </dd>
+                  <dt className="text-sm text-terminal-textMuted">{t.container.cpu}</dt>
+                  <dd className="text-sm font-medium text-terminal-text">{(container.metrics?.cpu ?? 0).toFixed(1)}%</dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-sm text-terminal-textMuted">Memory</dt>
-                  <dd className="text-sm font-medium text-terminal-text">
-                    {(container.metrics?.memory ?? 0).toFixed(0)} MB
-                  </dd>
+                  <dt className="text-sm text-terminal-textMuted">{t.container.memory}</dt>
+                  <dd className="text-sm font-medium text-terminal-text">{(container.metrics?.memory ?? 0).toFixed(0)} MB</dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-sm text-terminal-textMuted">Disk</dt>
-                  <dd className="text-sm font-medium text-terminal-text">
-                    {(container.metrics?.disk ?? 0).toFixed(2)} GB
-                  </dd>
+                  <dt className="text-sm text-terminal-textMuted">{t.container.disk}</dt>
+                  <dd className="text-sm font-medium text-terminal-text">{(container.metrics?.disk ?? 0).toFixed(2)} GB</dd>
                 </div>
               </dl>
             </div>
 
             <div className="card p-6">
-              <h4 className="text-sm font-medium text-terminal-textMuted mb-3">
-                Usage Percentage
-              </h4>
+              <h4 className="text-sm font-medium text-terminal-textMuted mb-3">{t.containerDetail.usagePercentage}</h4>
               <dl className="space-y-2">
                 <div className="flex justify-between">
-                  <dt className="text-sm text-terminal-textMuted">CPU</dt>
-                  <dd className="text-sm font-medium text-terminal-text">
-                    {(container.metrics?.cpu ?? 0).toFixed(1)}%
-                  </dd>
+                  <dt className="text-sm text-terminal-textMuted">{t.container.cpu}</dt>
+                  <dd className="text-sm font-medium text-terminal-text">{(container.metrics?.cpu ?? 0).toFixed(1)}%</dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-sm text-terminal-textMuted">Memory</dt>
+                  <dt className="text-sm text-terminal-textMuted">{t.container.memory}</dt>
                   <dd className="text-sm font-medium text-terminal-text">
                     {(() => {
                       const memLimit = container.limits?.memoryMB ?? 1
@@ -614,7 +460,7 @@ export default function ContainerDetailPage() {
                   </dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-sm text-terminal-textMuted">Disk</dt>
+                  <dt className="text-sm text-terminal-textMuted">{t.container.disk}</dt>
                   <dd className="text-sm font-medium text-terminal-text">
                     {(() => {
                       const diskLimit = container.limits?.diskGB ?? 1
@@ -636,19 +482,14 @@ export default function ContainerDetailPage() {
 
       {activeTab === 'logs' && (
         <div className="card p-6">
-          <h3 className="text-lg font-semibold text-terminal-text mb-4">
-            Container Logs
-          </h3>
+          <h3 className="text-lg font-semibold text-terminal-text mb-4">{t.containerDetail.containerLogs}</h3>
           <div className="bg-terminal-bg rounded-lg p-4 font-mono text-sm text-terminal-text h-96 overflow-y-auto">
-            <p className="text-terminal-textMuted">
-              [Log streaming will be implemented with WebSocket connection]
-            </p>
+            <p className="text-terminal-textMuted">{t.containerDetail.logsPlaceholder}</p>
             <p className="text-terminal-textMuted mt-2">
-              {new Date().toISOString()} - Container {container.name} is {container.status}
+              {new Date().toISOString()} - Container {container.name} is {t.status[container.status as keyof typeof t.status] || container.status}
             </p>
             <p className="text-terminal-textMuted">
-              {new Date().toISOString()} - CPU: {(container.metrics?.cpu ?? 0).toFixed(1)}% | Memory:{' '}
-              {(container.metrics?.memory ?? 0).toFixed(0)} MB
+              {new Date().toISOString()} - CPU: {(container.metrics?.cpu ?? 0).toFixed(1)}% | Memory: {(container.metrics?.memory ?? 0).toFixed(0)} MB
             </p>
           </div>
         </div>
@@ -672,7 +513,7 @@ export default function ContainerDetailPage() {
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
-                  Shell
+                  {t.containerDetail.subTabs.shell}
                 </button>
                 <button
                   onClick={() => setTerminalSubTab('claude')}
@@ -686,17 +527,12 @@ export default function ContainerDetailPage() {
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                   </svg>
-                  Claude Code
+                  {t.containerDetail.subTabs.claudeCode}
                 </button>
               </div>
 
-              {/* Sub-tab content */}
               {terminalSubTab === 'shell' && (
-                <InteractiveTerminal
-                  containerId={container.id}
-                  onClose={() => setActiveTab('overview')}
-                  className="h-[500px]"
-                />
+                <InteractiveTerminal containerId={container.id} onClose={() => setActiveTab('overview')} className="h-[500px]" />
               )}
 
               {terminalSubTab === 'claude' && (
@@ -707,25 +543,11 @@ export default function ContainerDetailPage() {
             </>
           ) : (
             <div className="p-6 text-center">
-              <svg
-                className="mx-auto h-12 w-12 text-terminal-textMuted mb-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                />
+              <svg className="mx-auto h-12 w-12 text-terminal-textMuted mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
-              <h3 className="text-lg font-semibold text-terminal-text mb-2">
-                Terminal Unavailable
-              </h3>
-              <p className="text-sm text-terminal-textMuted">
-                Start the container to access the terminal.
-              </p>
+              <h3 className="text-lg font-semibold text-terminal-text mb-2">{t.containerDetail.terminalUnavailable}</h3>
+              <p className="text-sm text-terminal-textMuted">{t.containerDetail.startContainerForTerminal}</p>
             </div>
           )}
         </div>
@@ -734,92 +556,46 @@ export default function ContainerDetailPage() {
       {activeTab === 'settings' && (
         <div className="space-y-6">
           <div className="card p-6">
-            <h3 className="text-lg font-semibold text-terminal-text mb-4">
-              Container Settings
-            </h3>
+            <h3 className="text-lg font-semibold text-terminal-text mb-4">{t.containerDetail.containerSettings}</h3>
             <div className="space-y-4">
               <div>
-                <label className="label">Container Name</label>
-                <input
-                  type="text"
-                  className="input"
-                  value={container.name}
-                  readOnly
-                  disabled
-                />
+                <label className="label">{t.containerDetail.containerName}</label>
+                <input type="text" className="input" value={container.name} readOnly disabled />
               </div>
               <div>
-                <label className="label">Template</label>
-                <input
-                  type="text"
-                  className="input"
-                  value={container.template}
-                  readOnly
-                  disabled
-                />
+                <label className="label">{t.containerDetail.template}</label>
+                <input type="text" className="input" value={container.template} readOnly disabled />
               </div>
               <div>
-                <label className="label">Mode</label>
-                <input
-                  type="text"
-                  className="input"
-                  value={container.mode}
-                  readOnly
-                  disabled
-                />
+                <label className="label">{t.containerDetail.mode}</label>
+                <input type="text" className="input" value={container.mode} readOnly disabled />
               </div>
             </div>
           </div>
 
           <div className="card p-6">
-            <h3 className="text-lg font-semibold text-terminal-text mb-4">
-              Resource Limits
-            </h3>
+            <h3 className="text-lg font-semibold text-terminal-text mb-4">{t.containerDetail.resourceLimitsTitle}</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="label">CPU Cores</label>
-                <input
-                  type="number"
-                  className="input"
-                  value={container.limits.cpuCores}
-                  readOnly
-                  disabled
-                />
+                <label className="label">{t.containerDetail.cpuCores}</label>
+                <input type="number" className="input" value={container.limits.cpuCores} readOnly disabled />
               </div>
               <div>
-                <label className="label">Memory (MB)</label>
-                <input
-                  type="number"
-                  className="input"
-                  value={container.limits.memoryMB}
-                  readOnly
-                  disabled
-                />
+                <label className="label">{t.containerDetail.memoryMb}</label>
+                <input type="number" className="input" value={container.limits.memoryMB} readOnly disabled />
               </div>
               <div>
-                <label className="label">Disk (GB)</label>
-                <input
-                  type="number"
-                  className="input"
-                  value={container.limits.diskGB}
-                  readOnly
-                  disabled
-                />
+                <label className="label">{t.containerDetail.diskGb}</label>
+                <input type="number" className="input" value={container.limits.diskGB} readOnly disabled />
               </div>
             </div>
-            <p className="text-sm text-terminal-textMuted mt-4">
-              Resource limits cannot be modified while the container is running.
-            </p>
+            <p className="text-sm text-terminal-textMuted mt-4">{t.containerDetail.cannotModifyRunning}</p>
           </div>
 
           <div className="card p-6 border-terminal-red/30">
-            <h3 className="text-lg font-semibold text-terminal-red mb-4">
-              Danger Zone
-            </h3>
-            <p className="text-sm text-terminal-textMuted mb-4">
-              Once you delete a container, there is no going back. Please be certain.
-            </p>
-            <button className="btn-danger">Delete Container</button>
+            <h3 className="text-lg font-semibold text-terminal-red mb-4">{t.containerDetail.dangerZone}</h3>
+            <p className="text-sm text-terminal-textMuted mb-4">{t.containerDetail.dangerZoneWarning}</p>
+            <button className="btn-danger">{t.containerDetail.deleteContainer}</button>
           </div>
         </div>
       )}

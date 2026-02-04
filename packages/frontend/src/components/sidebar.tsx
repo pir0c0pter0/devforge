@@ -5,16 +5,17 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
 import { useAuth } from '@/contexts/AuthContext'
+import { useI18n } from '@/lib/i18n'
 
 interface NavItem {
-  name: string
+  key: 'dashboard' | 'containers' | 'templates' | 'metrics' | 'settings'
   href: string
   icon: React.ReactNode
 }
 
 const navItems: NavItem[] = [
   {
-    name: 'Dashboard',
+    key: 'dashboard',
     href: '/',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -28,7 +29,7 @@ const navItems: NavItem[] = [
     ),
   },
   {
-    name: 'Containers',
+    key: 'containers',
     href: '/containers',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -42,7 +43,7 @@ const navItems: NavItem[] = [
     ),
   },
   {
-    name: 'Templates',
+    key: 'templates',
     href: '/templates',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -56,7 +57,7 @@ const navItems: NavItem[] = [
     ),
   },
   {
-    name: 'Metrics',
+    key: 'metrics',
     href: '/metrics',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -70,7 +71,7 @@ const navItems: NavItem[] = [
     ),
   },
   {
-    name: 'Settings',
+    key: 'settings',
     href: '/settings',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -94,10 +95,15 @@ const navItems: NavItem[] = [
 export function Sidebar() {
   const pathname = usePathname()
   const { user, logout, isAuthenticated } = useAuth()
+  const { t } = useI18n()
   const [isCollapsed, setIsCollapsed] = useState(false)
 
   if (!isAuthenticated) {
     return null
+  }
+
+  const getNavName = (key: NavItem['key']): string => {
+    return t.nav[key]
   }
 
   return (
@@ -132,7 +138,7 @@ export function Sidebar() {
                   <h1 className="text-lg font-bold text-terminal-text truncate">
                     Claude Docker
                   </h1>
-                  <p className="text-xs text-terminal-textMuted">Manager</p>
+                  <p className="text-xs text-terminal-textMuted">{t.nav.manager}</p>
                 </div>
               )}
             </div>
@@ -165,6 +171,7 @@ export function Sidebar() {
           {navItems.map((item) => {
             const isActive = pathname === item.href ||
               (item.href !== '/' && pathname.startsWith(item.href))
+            const name = getNavName(item.key)
 
             return (
               <Link
@@ -177,10 +184,10 @@ export function Sidebar() {
                     : 'text-terminal-text hover:bg-terminal-bg hover:text-terminal-green',
                   isCollapsed && 'justify-center'
                 )}
-                title={isCollapsed ? item.name : undefined}
+                title={isCollapsed ? name : undefined}
               >
                 {item.icon}
-                {!isCollapsed && <span className="font-medium">{item.name}</span>}
+                {!isCollapsed && <span className="font-medium">{name}</span>}
               </Link>
             )
           })}
@@ -201,7 +208,7 @@ export function Sidebar() {
                   d="M12 6v6m0 0v6m0-6h6m-6 0H6"
                 />
               </svg>
-              New Container
+              {t.nav.newContainer}
             </Link>
           </div>
         )}
@@ -223,7 +230,7 @@ export function Sidebar() {
                   onClick={logout}
                   className="text-xs text-terminal-textMuted hover:text-terminal-green transition-colors"
                 >
-                  Sign out
+                  {t.nav.signOut}
                 </button>
               </div>
             )}
