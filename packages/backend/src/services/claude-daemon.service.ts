@@ -231,13 +231,10 @@ class ClaudeDaemonService extends EventEmitter {
     return new Promise((resolve, reject) => {
       try {
         // Build command flags
+        // --dangerously-skip-permissions already handles autonomous execution
         const flags = [...CLAUDE_BASE_FLAGS]
 
-        // For autonomous mode, add --yes to auto-accept all prompts
-        if (session.mode === 'autonomous') {
-          flags.push('--yes')
-          logger.debug({ containerId }, 'Autonomous mode: adding --yes flag')
-        }
+        logger.debug({ containerId, mode: session.mode }, 'Building command flags')
 
         // First instruction uses --session-id, subsequent use --resume
         if (session.state.instructionCount === 0) {
