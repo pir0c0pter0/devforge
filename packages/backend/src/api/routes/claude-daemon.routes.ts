@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { claudeDaemonService } from '../../services/claude-daemon.service';
 import { containerService } from '../../services/container.service';
+import { containerRepository } from '../../repositories';
 import {
   queueInstruction,
   getQueueStatus,
@@ -212,19 +213,24 @@ router.post(
   async (req: Request, res: Response): Promise<void> => {
     try {
       const containerId = req.params['containerId'] as string;
-      const { instruction, mode = 'interactive' } = req.body;
+      const { instruction } = req.body;
+
+      // Buscar modo do container no repositório (fonte da verdade)
+      const container = containerRepository.findById(containerId);
+      const mode = (container?.mode as 'interactive' | 'autonomous') || 'interactive';
 
       logger.info({
         containerId,
         instructionLength: instruction.length,
-        mode
+        mode,
+        containerMode: container?.mode
       }, 'Queueing instruction');
 
       // Adicionar instrução na fila (em vez de envio direto)
       const jobInfo = await queueInstruction(
         containerId,
         instruction,
-        mode as 'interactive' | 'autonomous'
+        mode
       );
 
       logger.info({
