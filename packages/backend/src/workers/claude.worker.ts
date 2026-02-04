@@ -11,6 +11,7 @@ import {
   emitQueueStatsUpdate,
 } from '../services/websocket.service'
 import { moveToDeadLetterQueue, getQueueStatus } from '../services/claude-queue.service'
+import { usageService } from '../services/usage.service'
 import type { InstructionJobData, InstructionEventData, InstructionStage, InstructionProgress } from '@claude-docker/shared'
 
 /**
@@ -164,9 +165,10 @@ export function getOrCreateWorker(containerId: string): Worker {
 
         // Send instruction to Claude daemon and wait for completion
         // Now returns captured output when the instruction finishes (including background agents)
+        // Pass jobId for log association
         let result
         try {
-          result = await claudeDaemonService.sendInstruction(containerId, safeInstruction)
+          result = await claudeDaemonService.sendInstruction(containerId, safeInstruction, job.id)
         } finally {
           // Remove event listener
           claudeDaemonService.off('claude:event', eventHandler)
@@ -185,7 +187,20 @@ export function getOrCreateWorker(containerId: string): Worker {
         await job.updateProgress(progressValidatingResult)
         emitInstructionProgress({ ...baseEventData, progress: 90, progressDetail: progressValidatingResult })
 
-        // Stage 8: Completed
+        // Stage 8: Recording usage
+        const progressRecordUsage = createProgressData(95, 'finalizing', 'Registrando uso de tokens...')
+        await job.updateProgress(progressRecordUsage)
+        emitInstructionProgress({ ...baseEventData, progress: 95, progressDetail: progressRecordUsage })
+
+        // Record token usage from Claude output
+        try {
+          usageService.recordUsageFromOutput(containerId, job.id, result.stdout)
+        } catch (usageError) {
+          // Don't fail the job if usage tracking fails
+          logger.warn({ usageError, containerId, jobId: job.id }, 'Failed to record usage, continuing')
+        }
+
+        // Stage 9: Completed
         const progressCompleted = createProgressData(100, 'completed', 'Instrução executada com sucesso')
         await job.updateProgress(progressCompleted)
 

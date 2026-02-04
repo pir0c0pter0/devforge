@@ -15,6 +15,7 @@ export {
   type ContainerEntity,
   type CreateContainerDto,
   type UpdateContainerDto,
+  type UpdateLimitsDto,
   type ContainerFilters,
 } from './container.repository';
 
@@ -40,6 +41,7 @@ export {
   type CreateMetricsDto,
   type UpdateMetricsDto,
   type MetricsFilters,
+  type MetricsHistoryPoint,
 } from './metrics.repository';
 
 // User repository
@@ -66,3 +68,15 @@ export {
   type UpdateSessionDto,
   type SessionFilters,
 } from './session.repository';
+
+// Usage repository
+export {
+  UsageRepository,
+  usageRepository,
+  sessionUtils,
+  type UsageEntity,
+  type AggregatedUsage,
+  type CreateUsageDto,
+  type UpdateUsageDto,
+  type UsageFilters,
+} from './usage.repository';

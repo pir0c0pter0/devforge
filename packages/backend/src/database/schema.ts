@@ -121,6 +121,23 @@ export const CONTAINER_LOGS_TABLE = `
 `;
 
 /**
+ * Usage tracking table - tracks Claude API token usage and costs
+ */
+export const USAGE_TRACKING_TABLE = `
+  CREATE TABLE IF NOT EXISTS usage_tracking (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    container_id TEXT NOT NULL,
+    instruction_id TEXT,
+    input_tokens INTEGER DEFAULT 0,
+    output_tokens INTEGER DEFAULT 0,
+    total_cost_usd REAL DEFAULT 0,
+    session_id TEXT,
+    recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (container_id) REFERENCES containers(id) ON DELETE CASCADE
+  )
+`;
+
+/**
  * All table creation statements in order (respecting foreign keys)
  */
 export const ALL_TABLES = [
@@ -130,6 +147,7 @@ export const ALL_TABLES = [
   { name: 'users', sql: USERS_TABLE },
   { name: 'sessions', sql: SESSIONS_TABLE },
   { name: 'container_logs', sql: CONTAINER_LOGS_TABLE },
+  { name: 'usage_tracking', sql: USAGE_TRACKING_TABLE },
 ];
 
 /**
@@ -166,6 +184,12 @@ export const INDEXES = [
   'CREATE INDEX IF NOT EXISTS idx_container_logs_container_id ON container_logs(container_id)',
   'CREATE INDEX IF NOT EXISTS idx_container_logs_level ON container_logs(level)',
   'CREATE INDEX IF NOT EXISTS idx_container_logs_recorded_at ON container_logs(recorded_at)',
+
+  // Usage tracking indexes
+  'CREATE INDEX IF NOT EXISTS idx_usage_tracking_container_id ON usage_tracking(container_id)',
+  'CREATE INDEX IF NOT EXISTS idx_usage_tracking_session_id ON usage_tracking(session_id)',
+  'CREATE INDEX IF NOT EXISTS idx_usage_tracking_recorded_at ON usage_tracking(recorded_at)',
+  'CREATE INDEX IF NOT EXISTS idx_usage_tracking_container_recorded ON usage_tracking(container_id, recorded_at DESC)',
 ];
 
 /**

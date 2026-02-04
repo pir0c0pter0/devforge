@@ -57,10 +57,43 @@ const initialMigration: Migration = {
 };
 
 /**
+ * Migration 002 - Add usage_tracking table
+ */
+const usageTrackingMigration: Migration = {
+  name: '002_usage_tracking',
+  up: (db: Database.Database) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS usage_tracking (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        container_id TEXT NOT NULL,
+        instruction_id TEXT,
+        input_tokens INTEGER DEFAULT 0,
+        output_tokens INTEGER DEFAULT 0,
+        total_cost_usd REAL DEFAULT 0,
+        session_id TEXT,
+        recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (container_id) REFERENCES containers(id) ON DELETE CASCADE
+      )
+    `);
+    logger.debug('Created usage_tracking table');
+
+    // Create indexes
+    db.exec('CREATE INDEX IF NOT EXISTS idx_usage_tracking_container_id ON usage_tracking(container_id)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_usage_tracking_session_id ON usage_tracking(session_id)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_usage_tracking_recorded_at ON usage_tracking(recorded_at)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_usage_tracking_container_recorded ON usage_tracking(container_id, recorded_at DESC)');
+    logger.debug('Created usage_tracking indexes');
+  },
+  down: (db: Database.Database) => {
+    db.exec('DROP TABLE IF EXISTS usage_tracking');
+  },
+};
+
+/**
  * All migrations in order
  * Add new migrations here as the schema evolves
  */
-const migrations: readonly Migration[] = [initialMigration];
+const migrations: readonly Migration[] = [initialMigration, usageTrackingMigration];
 
 /**
  * Check if a migration has been applied

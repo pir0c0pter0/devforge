@@ -25,6 +25,8 @@ import { destroyAllQueues } from './services/claude-queue.service';
 import { stopAllWorkers } from './workers/claude.worker';
 import { healthMonitorService } from './services/health-monitor.service';
 import { claudeDaemonService } from './services/claude-daemon.service';
+import { metricsCollectorService } from './services/metrics-collector.service';
+import { usageService } from './services/usage.service';
 
 // Load environment variables
 dotenv.config();
@@ -230,18 +232,26 @@ const gracefulShutdown = async (signal: string) => {
   logger.info({ signal }, 'Received shutdown signal, starting graceful shutdown');
 
   try {
-    // 1. Parar health monitoring (primeiro para não gerar eventos durante shutdown)
+    // 1. Parar metrics collector (background job)
+    logger.info('Stopping metrics collector...');
+    metricsCollectorService.stop();
+
+    // 1.5. Parar usage cleanup timer
+    logger.info('Stopping usage cleanup timer...');
+    usageService.stopCleanupTimer();
+
+    // 2. Parar health monitoring (primeiro para não gerar eventos durante shutdown)
     logger.info('Stopping health monitors...');
     healthMonitorService.stopAllMonitoring();
 
-    // 2. Aguardar jobs ativos terminarem (max 30s)
+    // 3. Aguardar jobs ativos terminarem (max 30s)
     logger.info('Waiting for active workers to finish (max 30s)...');
     await Promise.race([
       stopAllWorkers(),
       new Promise(resolve => setTimeout(resolve, 30000))
     ]);
 
-    // 3. Parar todos os daemons
+    // 4. Parar todos os daemons
     logger.info('Stopping all Claude daemons...');
     try {
       await claudeDaemonService.destroy();
@@ -249,7 +259,7 @@ const gracefulShutdown = async (signal: string) => {
       logger.warn({ error }, 'Error stopping Claude daemons');
     }
 
-    // 4. Destruir todas as queues
+    // 5. Destruir todas as queues
     logger.info('Destroying all queues...');
     try {
       await destroyAllQueues();
@@ -257,7 +267,7 @@ const gracefulShutdown = async (signal: string) => {
       logger.warn({ error }, 'Error destroying queues');
     }
 
-    // 5. Fechar WebSocket
+    // 6. Fechar WebSocket
     const socketServer = getSocketServer();
     if (socketServer) {
       await new Promise<void>((resolve) => {
@@ -268,7 +278,7 @@ const gracefulShutdown = async (signal: string) => {
       });
     }
 
-    // 6. Fechar HTTP server
+    // 7. Fechar HTTP server
     await new Promise<void>((resolve) => {
       httpServer.close(() => {
         logger.info('HTTP server closed');
@@ -276,7 +286,7 @@ const gracefulShutdown = async (signal: string) => {
       });
     });
 
-    // 7. Fechar database
+    // 8. Fechar database
     closeDatabase();
 
     logger.info('Graceful shutdown completed');
@@ -351,6 +361,14 @@ const startServer = async () => {
     // Initialize WebSocket server with namespaces
     logger.info('Initializing WebSocket server');
     io = initializeWebSocket(httpServer);
+
+    // Start background metrics collector (for 5-hour chart history)
+    logger.info('Starting background metrics collector');
+    metricsCollectorService.start();
+
+    // Start usage cleanup timer (deletes records older than 30 days)
+    logger.info('Starting usage cleanup timer');
+    usageService.startCleanupTimer();
 
     // Start HTTP server
     httpServer.listen(PORT, HOST, () => {

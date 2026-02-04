@@ -8,6 +8,7 @@ import { CreateContainerRequestSchema } from '../../models/container.model';
 import { apiLogger as logger } from '../../utils/logger';
 import { strictRateLimiter } from '../../middleware/rate-limit';
 import { diskMetricsService } from '../../services/disk-metrics.service';
+import { usageService } from '../../services/usage.service';
 
 const router: Router = Router();
 
@@ -44,6 +45,29 @@ const ContainerLogsQuerySchema = z.object({
       message: 'tail must be a number between 1 and 10000',
     }),
 });
+
+/**
+ * Update container limits schema
+ */
+const UpdateLimitsSchema = z.object({
+  cpuCores: z.number()
+    .min(0.5, 'CPU deve ser no mínimo 0.5 cores')
+    .max(16, 'CPU deve ser no máximo 16 cores')
+    .optional(),
+  memoryMB: z.number()
+    .int('Memória deve ser um número inteiro')
+    .min(512, 'Memória deve ser no mínimo 512 MB')
+    .max(32768, 'Memória deve ser no máximo 32768 MB (32 GB)')
+    .optional(),
+  diskGB: z.number()
+    .int('Disco deve ser um número inteiro')
+    .min(5, 'Disco deve ser no mínimo 5 GB')
+    .max(500, 'Disco deve ser no máximo 500 GB')
+    .optional(),
+}).refine(
+  (data) => data.cpuCores !== undefined || data.memoryMB !== undefined || data.diskGB !== undefined,
+  { message: 'Pelo menos um limite deve ser fornecido (cpuCores, memoryMB, ou diskGB)' }
+);
 
 /**
  * List containers query schema
@@ -427,6 +451,85 @@ router.get(
 );
 
 /**
+ * Metrics history query schema
+ */
+const MetricsHistoryQuerySchema = z.object({
+  hours: z.string()
+    .optional()
+    .transform((val) => val ? parseInt(val, 10) : 5)
+    .refine((val) => !isNaN(val) && val > 0 && val <= 24, {
+      message: 'hours must be a number between 1 and 24',
+    }),
+  interval: z.string()
+    .optional()
+    .transform((val) => val ? parseInt(val, 10) : 1)
+    .refine((val) => !isNaN(val) && val >= 1 && val <= 60, {
+      message: 'interval must be a number between 1 and 60 minutes',
+    }),
+});
+
+/**
+ * GET /api/containers/:id/metrics/history
+ * Get metrics history for charting (default 5 hours)
+ */
+router.get(
+  '/:id/metrics/history',
+  validateParams(ContainerIdParamsSchema),
+  validateQuery(MetricsHistoryQuerySchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const id = req.params['id'] as string;
+      const { hours, interval } = req.query as unknown as { hours: number; interval: number };
+
+      logger.debug({ containerId: id, hours, interval }, 'Getting container metrics history');
+
+      // Calculate date range
+      const toDate = new Date();
+      const fromDate = new Date(toDate.getTime() - hours * 60 * 60 * 1000);
+
+      // Import metrics repository
+      const { metricsRepository } = await import('../../repositories');
+
+      // Get container to verify it exists
+      const container = await containerService.getById(id);
+      if (!container) {
+        res.status(404).json(errorResponse('Container not found', 404));
+        return;
+      }
+
+      // Get time series data
+      const timeSeries = metricsRepository.getTimeSeries(id, {
+        fromDate,
+        toDate,
+        intervalMinutes: interval,
+        limit: 300, // Max 300 points for 5 hours at 1 min interval
+      });
+
+      // Transform to frontend format (reverse to chronological order)
+      const history = [...timeSeries].reverse().map((point) => ({
+        timestamp: point.timestamp.toISOString(),
+        cpu: Number(point.cpuPercent.toFixed(2)),
+        memory: Number(point.memoryUsage.toFixed(2)),
+        disk: Number(point.diskUsage.toFixed(2)),
+      }));
+
+      logger.info({ containerId: id, points: history.length }, 'Metrics history retrieved');
+
+      res.json(successResponse(history));
+    } catch (error) {
+      logger.error({ error, containerId: req.params['id'] }, 'Failed to get metrics history');
+
+      res.status(500).json(
+        errorResponse(
+          error instanceof Error ? error.message : 'Failed to get metrics history',
+          500
+        )
+      );
+    }
+  }
+);
+
+/**
  * Get detailed disk metrics with breakdown
  * GET /api/containers/:id/disk-metrics
  */
@@ -502,6 +605,47 @@ router.get('/:id/disk-cleanup-suggestions', async (req, res) => {
     });
   }
 });
+
+/**
+ * PUT /api/containers/:id/limits
+ * Update container resource limits (CPU, Memory, Disk)
+ * Note: If container is running, CPU and Memory are updated in Docker at runtime
+ *       Disk limit can only be updated in the database (takes effect on next start)
+ */
+router.put(
+  '/:id/limits',
+  strictRateLimiter,
+  validateParams(ContainerIdParamsSchema),
+  validateBody(UpdateLimitsSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const id = req.params['id'] as string;
+      const { cpuCores, memoryMB, diskGB } = req.body;
+
+      logger.info({ containerId: id, limits: req.body }, 'Updating container limits');
+
+      // Update limits using container service (handles Docker update if running)
+      const updatedContainer = await containerService.updateLimits(id, {
+        cpuCores,
+        memoryMB,
+        diskGB,
+      });
+
+      logger.info({ containerId: id, limits: { cpuCores, memoryMB, diskGB } }, 'Container limits updated successfully');
+
+      res.json(successResponse(updatedContainer, 'Limites do container atualizados com sucesso'));
+    } catch (error) {
+      logger.error({ error, containerId: req.params['id'] }, 'Failed to update container limits');
+
+      const errorMessage = error instanceof Error ? error.message : 'Falha ao atualizar limites do container';
+      const statusCode = errorMessage.includes('não encontrado') ? 404 : 500;
+
+      res.status(statusCode).json(
+        errorResponse(errorMessage, statusCode)
+      );
+    }
+  }
+);
 
 // Rate limit tracking for disk expansion (in-memory, per container)
 const diskExpansionRateLimits = new Map<string, number[]>();
@@ -625,5 +769,42 @@ router.post('/:id/expand-disk', async (req, res) => {
     });
   }
 });
+
+/**
+ * GET /api/containers/:id/usage
+ * Get token usage summary for a container (daily, weekly, session)
+ */
+router.get(
+  '/:id/usage',
+  validateParams(ContainerIdParamsSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const id = req.params['id'] as string;
+
+      logger.debug({ containerId: id }, 'Getting container usage summary');
+
+      // Verify container exists
+      const container = await containerService.getById(id);
+      if (!container) {
+        res.status(404).json(errorResponse('Container not found', 404));
+        return;
+      }
+
+      // Get usage summary
+      const usage = usageService.getUsageSummary(id);
+
+      res.json(successResponse(usage));
+    } catch (error) {
+      logger.error({ error, containerId: req.params['id'] }, 'Failed to get container usage');
+
+      res.status(500).json(
+        errorResponse(
+          error instanceof Error ? error.message : 'Failed to get container usage',
+          500
+        )
+      );
+    }
+  }
+);
 
 export default router;
