@@ -175,6 +175,27 @@ app.get('/', (_req: Request, res: Response) => {
       tasks: '/api/tasks',
       claudeDaemon: '/api/claude-daemon',
     },
+    queueEndpoints: {
+      sendInstruction: 'POST /api/claude-daemon/:containerId/instruction',
+      getStatus: 'GET /api/claude-daemon/:containerId/queue',
+      getHistory: 'GET /api/claude-daemon/:containerId/queue/history',
+      getJob: 'GET /api/claude-daemon/:containerId/queue/jobs/:jobId',
+      cancelJob: 'POST /api/claude-daemon/:containerId/queue/jobs/:jobId/cancel',
+      retryJob: 'POST /api/claude-daemon/:containerId/queue/jobs/:jobId/retry',
+      clearQueue: 'DELETE /api/claude-daemon/:containerId/queue',
+      pauseQueue: 'POST /api/claude-daemon/:containerId/queue/pause',
+      resumeQueue: 'POST /api/claude-daemon/:containerId/queue/resume',
+      getDeadLetterQueue: 'GET /api/claude-daemon/:containerId/queue/dlq',
+    },
+    websocketNamespaces: {
+      metrics: '/metrics',
+      queue: '/queue',
+      logs: '/logs',
+      tasks: '/tasks',
+      terminal: '/terminal',
+      claudeDaemon: '/claude-daemon',
+      creation: '/creation',
+    },
   });
 });
 

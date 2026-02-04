@@ -1,9 +1,13 @@
-import { Queue, QueueEvents, JobsOptions } from 'bullmq'
+import { Queue, QueueEvents, JobsOptions, Job } from 'bullmq'
 import { logger } from '../utils/logger'
 import { validateContainerId, validateInstruction } from '../validators/claude.validators'
 import { getOrCreateWorker, stopWorker } from '../workers/claude.worker'
 import { getRedisConnection } from '../utils/redis'
-import type { InstructionJobData } from '@claude-docker/shared'
+import {
+  emitInstructionPending,
+  emitInstructionFailed,
+} from './websocket.service'
+import type { InstructionJobData, InstructionEventData } from '@claude-docker/shared'
 
 /**
  * Estrutura simplificada de informações do job
@@ -12,6 +16,48 @@ export interface JobInfo {
   id: string
   position: number
   status: string
+}
+
+/**
+ * Detalhes completos de um job
+ */
+export interface JobDetails {
+  id: string
+  instruction: string
+  mode: 'interactive' | 'autonomous'
+  status: string
+  progress?: {
+    percentage: number
+    message: string
+    timestamp: Date
+  }
+  result?: {
+    stdout: string
+    stderr: string
+    exitCode: number
+    duration: number
+    completedAt: Date
+  }
+  error?: string
+  attemptsMade: number
+  maxAttempts: number
+  createdAt: Date
+  processedAt?: Date
+  finishedAt?: Date
+}
+
+/**
+ * Histórico de jobs
+ */
+export interface JobHistoryItem {
+  id: string
+  instruction: string
+  mode: 'interactive' | 'autonomous'
+  status: string
+  createdAt: Date
+  finishedAt?: Date
+  duration?: number
+  error?: string
 }
 
 /**
@@ -140,6 +186,16 @@ export async function queueInstruction(
     },
     'Instruction queued'
   )
+
+  // Emitir evento de pending via WebSocket
+  const pendingData: InstructionEventData = {
+    id: job.id!,
+    containerId: validated,
+    instruction: safeInstruction.substring(0, 200) + (safeInstruction.length > 200 ? '...' : ''),
+    status: 'pending',
+    createdAt: new Date(),
+  }
+  emitInstructionPending(pendingData)
 
   return {
     id: job.id!,
@@ -315,4 +371,204 @@ export async function destroyAllQueues(): Promise<void> {
  */
 export function getActiveQueues(): string[] {
   return Array.from(queues.keys())
+}
+
+/**
+ * Obtém detalhes de um job específico
+ *
+ * @param containerId - ID do container
+ * @param jobId - ID do job
+ * @returns Detalhes do job ou null se não encontrado
+ */
+export async function getJob(containerId: string, jobId: string): Promise<JobDetails | null> {
+  const validated = validateContainerId(containerId)
+  const queue = getQueue(validated)
+
+  const job = await queue.getJob(jobId)
+  if (!job) {
+    return null
+  }
+
+  const state = await job.getState()
+  const progress = job.progress as { percentage?: number; message?: string; timestamp?: Date } | undefined
+
+  return {
+    id: job.id!,
+    instruction: job.data.instruction,
+    mode: job.data.mode,
+    status: state,
+    progress: progress && typeof progress === 'object' ? {
+      percentage: progress.percentage || 0,
+      message: progress.message || '',
+      timestamp: progress.timestamp || new Date(),
+    } : undefined,
+    result: job.returnvalue as JobDetails['result'],
+    error: job.failedReason || undefined,
+    attemptsMade: job.attemptsMade,
+    maxAttempts: job.opts.attempts || 3,
+    createdAt: new Date(job.timestamp),
+    processedAt: job.processedOn ? new Date(job.processedOn) : undefined,
+    finishedAt: job.finishedOn ? new Date(job.finishedOn) : undefined,
+  }
+}
+
+/**
+ * Obtém histórico de jobs de um container
+ *
+ * @param containerId - ID do container
+ * @param limit - Número máximo de jobs a retornar (default: 50)
+ * @returns Lista de jobs ordenados por data de criação (mais recentes primeiro)
+ */
+export async function getJobHistory(
+  containerId: string,
+  limit: number = 50
+): Promise<JobHistoryItem[]> {
+  const validated = validateContainerId(containerId)
+  const queue = getQueue(validated)
+
+  // Buscar jobs de todos os estados
+  const [waiting, active, completed, failed, delayed] = await Promise.all([
+    queue.getJobs(['waiting'], 0, limit),
+    queue.getJobs(['active'], 0, limit),
+    queue.getJobs(['completed'], 0, limit),
+    queue.getJobs(['failed'], 0, limit),
+    queue.getJobs(['delayed'], 0, limit),
+  ])
+
+  const allJobs = [...waiting, ...active, ...completed, ...failed, ...delayed]
+
+  // Ordenar por timestamp descendente (mais recentes primeiro)
+  allJobs.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+
+  // Limitar resultado
+  const limitedJobs = allJobs.slice(0, limit)
+
+  // Mapear para formato simplificado
+  const history: JobHistoryItem[] = await Promise.all(
+    limitedJobs.map(async (job) => {
+      const state = await job.getState()
+      const duration = job.finishedOn && job.processedOn
+        ? job.finishedOn - job.processedOn
+        : undefined
+
+      return {
+        id: job.id!,
+        instruction: job.data.instruction.substring(0, 200) + (job.data.instruction.length > 200 ? '...' : ''),
+        mode: job.data.mode,
+        status: state,
+        createdAt: new Date(job.timestamp),
+        finishedAt: job.finishedOn ? new Date(job.finishedOn) : undefined,
+        duration,
+        error: job.failedReason || undefined,
+      }
+    })
+  )
+
+  return history
+}
+
+/**
+ * Retenta um job que falhou
+ *
+ * @param containerId - ID do container
+ * @param jobId - ID do job
+ * @returns true se o retry foi iniciado, false se o job não pode ser retentado
+ */
+export async function retryJob(containerId: string, jobId: string): Promise<boolean> {
+  const validated = validateContainerId(containerId)
+  const queue = getQueue(validated)
+
+  const job = await queue.getJob(jobId)
+  if (!job) {
+    logger.warn({ containerId: validated, jobId }, 'Job not found for retry')
+    return false
+  }
+
+  const state = await job.getState()
+  if (state !== 'failed') {
+    logger.warn({ containerId: validated, jobId, state }, 'Cannot retry job in this state')
+    return false
+  }
+
+  // Retentar o job
+  await job.retry()
+  logger.info({ containerId: validated, jobId }, 'Job retry initiated')
+
+  return true
+}
+
+/**
+ * Move job para Dead Letter Queue (DLQ)
+ * Chamado automaticamente quando um job excede o número máximo de tentativas
+ *
+ * @param containerId - ID do container
+ * @param job - Job que falhou
+ * @param error - Mensagem de erro
+ */
+export async function moveToDeadLetterQueue(
+  containerId: string,
+  job: Job<InstructionJobData>,
+  error: string
+): Promise<void> {
+  const validated = validateContainerId(containerId)
+
+  logger.error({
+    containerId: validated,
+    jobId: job.id,
+    error,
+    attemptsMade: job.attemptsMade,
+  }, 'Moving job to Dead Letter Queue')
+
+  // Emitir evento de falha permanente via WebSocket
+  const failedData: InstructionEventData = {
+    id: job.id || 'unknown',
+    containerId: validated,
+    instruction: job.data.instruction,
+    status: 'failed',
+    createdAt: new Date(job.timestamp),
+    completedAt: new Date(),
+    error: `[DLQ] ${error} - Todas as ${job.attemptsMade} tentativas falharam`,
+  }
+  emitInstructionFailed(failedData)
+
+  // Por agora, apenas loga. Futuro: persistir em SQLite para auditoria
+  // TODO: Implementar persistência SQLite para DLQ
+}
+
+/**
+ * Obtém jobs na Dead Letter Queue (jobs que falharam todas as tentativas)
+ *
+ * @param containerId - ID do container
+ * @param limit - Número máximo de jobs a retornar
+ * @returns Lista de jobs na DLQ
+ */
+export async function getDeadLetterJobs(
+  containerId: string,
+  limit: number = 20
+): Promise<JobHistoryItem[]> {
+  const validated = validateContainerId(containerId)
+  const queue = getQueue(validated)
+
+  // Jobs falhos são mantidos por 24h (configurado no defaultJobOptions)
+  const failedJobs = await queue.getJobs(['failed'], 0, limit * 2)
+
+  // Filtrar apenas jobs que excederam todas as tentativas
+  const dlqJobs = failedJobs.filter((job) => {
+    const maxAttempts = job.opts.attempts || 3
+    return job.attemptsMade >= maxAttempts
+  })
+
+  // Ordenar e limitar
+  dlqJobs.sort((a, b) => (b.finishedOn || 0) - (a.finishedOn || 0))
+  const limitedJobs = dlqJobs.slice(0, limit)
+
+  return limitedJobs.map((job) => ({
+    id: job.id!,
+    instruction: job.data.instruction.substring(0, 200) + (job.data.instruction.length > 200 ? '...' : ''),
+    mode: job.data.mode,
+    status: 'dead-letter',
+    createdAt: new Date(job.timestamp),
+    finishedAt: job.finishedOn ? new Date(job.finishedOn) : undefined,
+    error: job.failedReason || 'Unknown error',
+  }))
 }
