@@ -128,8 +128,9 @@ export const ContainerMetricsSchema = z.object({
   containerId: z.string(),
   timestamp: z.date(),
   cpu: z.object({
-    usage: z.number(), // percentage
+    usage: z.number(), // percentage (average)
     limit: z.number(), // cores
+    perCore: z.array(z.number()).optional(), // usage per core (0-100% each)
   }),
   memory: z.object({
     usage: z.number(), // MB

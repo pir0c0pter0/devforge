@@ -38,6 +38,21 @@ export class MetricsService {
       // Normalize to percentage of allocated cores (0-100%)
       const cpuUsage = Math.min(rawCpuUsage / cpuCount, 100);
 
+      // Calculate per-core CPU usage
+      let perCoreUsage: number[] | undefined;
+      const currentPerCpu = stats.cpu_stats.cpu_usage.percpu_usage;
+      const prevPerCpu = stats.precpu_stats.cpu_usage?.percpu_usage;
+
+      if (currentPerCpu && prevPerCpu && currentPerCpu.length === prevPerCpu.length && systemDelta > 0) {
+        perCoreUsage = currentPerCpu.map((current: number, index: number) => {
+          const prev = prevPerCpu[index] || 0;
+          const coreDelta = current - prev;
+          // Each core's usage as percentage (0-100%)
+          const coreUsage = (coreDelta / systemDelta) * cpuCount * 100;
+          return Number(Math.min(Math.max(coreUsage, 0), 100).toFixed(1));
+        });
+      }
+
       // Calculate memory usage
       const memoryUsage = stats.memory_stats.usage || 0;
       const memoryLimit = stats.memory_stats.limit || 0;
@@ -67,6 +82,7 @@ export class MetricsService {
         cpu: {
           usage: Number(cpuUsage.toFixed(2)),
           limit: cpuCount,
+          perCore: perCoreUsage,
         },
         memory: {
           usage: Number(memoryUsageMB.toFixed(2)),

@@ -91,6 +91,15 @@ export const translations = {
       containerNotReadyMessage: 'O container não está pronto. Aguarde a criação finalizar ou verifique se há erros.',
     },
 
+    // CPU Metrics
+    cpu: {
+      perCore: 'Por Core',
+      min: 'Min',
+      avg: 'Média',
+      max: 'Max',
+      total: 'Total',
+    },
+
     // Disk Metrics
     disk: {
       expandTitle: 'Expandir Disco',
@@ -592,6 +601,15 @@ export const translations = {
       startAndOpen: 'Start and Open',
       containerNotReady: 'Container Not Available',
       containerNotReadyMessage: 'The container is not ready. Wait for creation to finish or check for errors.',
+    },
+
+    // CPU Metrics
+    cpu: {
+      perCore: 'Per Core',
+      min: 'Min',
+      avg: 'Avg',
+      max: 'Max',
+      total: 'Total',
     },
 
     // Disk Metrics

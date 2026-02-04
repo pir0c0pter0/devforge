@@ -19,6 +19,7 @@ export interface Container {
     cpu: number
     memory: number
     disk: number
+    cpuPerCore?: number[] // CPU usage per core (0-100% each)
   }
   limits: {
     cpuCores: number

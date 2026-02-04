@@ -10,6 +10,7 @@ import { useI18n } from '@/lib/i18n'
 import { MetricsChart } from '@/components/metrics-chart'
 import { InstructionQueue } from '@/components/instruction-queue'
 import { DiskMetricsCard } from '@/components/disk-metrics-card'
+import { CpuMetricsCard } from '@/components/cpu-metrics-card'
 import { ContainerDetailSkeleton } from '@/components/ui/skeleton'
 import { AnimatedDots } from '@/components/ui/animated-dots'
 import type { Container } from '@/lib/types'
@@ -314,17 +315,13 @@ export default function ContainerDetailPage() {
         <div className="space-y-6">
           {/* Quick Stats */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="card p-6">
-              <h3 className="text-sm font-medium text-terminal-textMuted mb-1">{t.containerDetail.cpuUsage}</h3>
-              <p className="text-2xl font-bold text-terminal-text">{(container.metrics?.cpu ?? 0).toFixed(1)}%</p>
-              <div className="w-full bg-terminal-border rounded-full h-2 mt-2">
-                <div
-                  className={clsx('h-2 rounded-full transition-all', (container.metrics?.cpu ?? 0) > 80 ? 'bg-terminal-red' : (container.metrics?.cpu ?? 0) > 60 ? 'bg-terminal-yellow' : 'bg-terminal-green')}
-                  style={{ width: `${Math.min(container.metrics?.cpu ?? 0, 100)}%` }}
-                />
-              </div>
-              <p className="text-xs text-terminal-textMuted mt-1">{container.limits?.cpuCores ?? 0} {t.containerDetail.coresAllocated}</p>
-            </div>
+            <CpuMetricsCard
+              containerId={container.id}
+              cpuUsage={container.metrics?.cpu ?? 0}
+              cpuLimit={container.limits?.cpuCores ?? 1}
+              containerStatus={container.status}
+              perCore={container.metrics?.cpuPerCore}
+            />
 
             <div className="card p-6">
               <h3 className="text-sm font-medium text-terminal-textMuted mb-1">{t.containerDetail.memoryUsage}</h3>

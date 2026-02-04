@@ -8,10 +8,12 @@ export interface ContainerMetrics {
   timestamp: Date
   /** CPU metrics */
   cpu: {
-    /** Current CPU usage percentage */
+    /** Current CPU usage percentage (average across all cores) */
     usage: number
     /** CPU limit in cores */
     limit: number
+    /** Usage per core (optional, percentage 0-100 each) */
+    perCore?: number[]
   }
   /** Memory metrics */
   memory: {

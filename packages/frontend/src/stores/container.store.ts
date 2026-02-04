@@ -66,6 +66,7 @@ export const useContainerStore = create<ContainerState>((set) => ({
         cpu: metrics.cpu?.usage ?? 0,
         memory: metrics.memory?.percentage ?? 0,
         disk: metrics.disk?.percentage ?? 0,
+        cpuPerCore: metrics.cpu?.perCore,
       }
 
       return {
