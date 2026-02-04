@@ -46,6 +46,11 @@ const CONTAINER_WORKSPACE = '/workspace'
 const INACTIVITY_TIMEOUT = 30 * 60 * 1000
 
 /**
+ * Lock for preventing parallel starts of the same container
+ */
+const daemonStartLocks = new Map<string, Promise<void>>()
+
+/**
  * ClaudeDaemonService manages Claude Code sessions running inside Docker containers.
  *
  * New Architecture (v0.0.37):
@@ -72,28 +77,48 @@ class ClaudeDaemonService extends EventEmitter {
    * This doesn't spawn a persistent process, just initializes the session
    */
   async startDaemon(containerId: string, dockerId: string): Promise<DaemonState> {
-    // Check if session already exists
-    const existing = this.sessions.get(containerId)
-    if (existing) {
-      if (existing.state.status === 'running') {
-        logger.warn({ containerId }, 'Session already active')
+    // Verificar se já existe um start em andamento
+    const existingLock = daemonStartLocks.get(containerId)
+    if (existingLock) {
+      logger.debug({ containerId }, 'Daemon start already in progress, waiting...')
+      await existingLock
+      // Após o lock ser liberado, retornar o estado atual
+      const existing = this.sessions.get(containerId)
+      if (existing) {
         return existing.state
       }
-      // Clean up old session
-      this.sessions.delete(containerId)
+      throw new Error('Daemon start completed but session not found')
     }
 
-    logger.info({ containerId, dockerId }, 'Starting Claude session')
-
-    const state: DaemonState = {
-      containerId,
-      status: 'starting',
-      startedAt: new Date(),
-      lastActivity: new Date(),
-      instructionCount: 0,
-    }
+    // Criar promise de lock
+    let resolveLock: () => void
+    const lockPromise = new Promise<void>((resolve) => {
+      resolveLock = resolve
+    })
+    daemonStartLocks.set(containerId, lockPromise)
 
     try {
+      // Check if session already exists
+      const existing = this.sessions.get(containerId)
+      if (existing) {
+        if (existing.state.status === 'running') {
+          logger.warn({ containerId }, 'Session already active')
+          return existing.state
+        }
+        // Clean up old session
+        this.sessions.delete(containerId)
+      }
+
+      logger.info({ containerId, dockerId }, 'Starting Claude session')
+
+      const state: DaemonState = {
+        containerId,
+        status: 'starting',
+        startedAt: new Date(),
+        lastActivity: new Date(),
+        instructionCount: 0,
+      }
+
       // Resolve dockerId from internal containerId if not provided
       let resolvedDockerId = dockerId
       if (!resolvedDockerId) {
@@ -133,13 +158,14 @@ class ClaudeDaemonService extends EventEmitter {
       return state
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      state.status = 'error'
-      state.error = errorMessage
-
       logger.error({ containerId, error: errorMessage }, 'Failed to start Claude session')
       this.emit('daemon:error', { containerId, error: errorMessage })
 
       throw error
+    } finally {
+      // Liberar lock
+      daemonStartLocks.delete(containerId)
+      resolveLock!()
     }
   }
 

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { claudeDaemonService } from '../../services/claude-daemon.service';
 import { containerService } from '../../services/container.service';
+import { queueInstruction, getQueueStatus } from '../../services/claude-queue.service';
 import { apiLogger as logger } from '../../utils/logger';
 import { validateBody, validateParams } from '../../utils/validation';
 import { strictRateLimiter } from '../../middleware/rate-limit';
@@ -35,6 +36,7 @@ const ContainerIdParamsSchema = z.object({
  */
 const InstructionBodySchema = z.object({
   instruction: z.string().min(1, 'Instruction cannot be empty'),
+  mode: z.enum(['interactive', 'autonomous']).optional().default('interactive'),
 });
 
 /**
@@ -185,7 +187,7 @@ router.post(
 
 /**
  * POST /api/claude-daemon/:containerId/instruction
- * Send instruction to daemon
+ * Send instruction to daemon via queue
  */
 router.post(
   '/:containerId/instruction',
@@ -195,24 +197,77 @@ router.post(
   async (req: Request, res: Response): Promise<void> => {
     try {
       const containerId = req.params['containerId'] as string;
-      const { instruction } = req.body;
+      const { instruction, mode = 'interactive' } = req.body;
 
-      logger.info({ containerId, instructionLength: instruction.length }, 'Sending instruction to daemon');
+      logger.info({
+        containerId,
+        instructionLength: instruction.length,
+        mode
+      }, 'Queueing instruction');
 
-      await claudeDaemonService.sendInstruction(containerId, instruction);
+      // Adicionar instrução na fila (em vez de envio direto)
+      const jobInfo = await queueInstruction(
+        containerId,
+        instruction,
+        mode as 'interactive' | 'autonomous'
+      );
 
-      logger.info({ containerId }, 'Instruction sent successfully');
+      logger.info({
+        containerId,
+        jobId: jobInfo.id,
+        position: jobInfo.position,
+        mode
+      }, 'Instruction queued');
 
-      res.json(successResponse({ success: true, message: 'Instruction sent' }));
+      // Retornar 202 Accepted (processamento assíncrono)
+      res.status(202).json(
+        successResponse(
+          {
+            jobId: jobInfo.id,
+            position: jobInfo.position,
+            status: jobInfo.status
+          },
+          'Instruction queued successfully'
+        )
+      );
     } catch (error) {
-      logger.error({ error, containerId: req.params['containerId'] }, 'Failed to send instruction');
+      logger.error({ error, containerId: req.params['containerId'] }, 'Failed to queue instruction');
 
       const statusCode = error instanceof Error && error.message.includes('not running') ? 400 : 500;
 
       res.status(statusCode).json(
         errorResponse(
-          error instanceof Error ? error.message : 'Failed to send instruction',
+          error instanceof Error ? error.message : 'Failed to queue instruction',
           statusCode
+        )
+      );
+    }
+  }
+);
+
+/**
+ * GET /api/claude-daemon/:containerId/queue
+ * Get queue status for a container
+ */
+router.get(
+  '/:containerId/queue',
+  validateParams(ContainerIdParamsSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const containerId = req.params['containerId'] as string;
+
+      logger.debug({ containerId }, 'Getting queue status');
+
+      const status = await getQueueStatus(containerId);
+
+      res.json(successResponse(status));
+    } catch (error) {
+      logger.error({ error, containerId: req.params['containerId'] }, 'Failed to get queue status');
+
+      res.status(500).json(
+        errorResponse(
+          error instanceof Error ? error.message : 'Failed to get queue status',
+          500
         )
       );
     }
