@@ -115,27 +115,20 @@ export function getOrCreateWorker(containerId: string): Worker {
         })
         emitInstructionProgress({ ...baseEventData, progress: 40 })
 
-        // Send instruction to Claude daemon
-        // The daemon service will emit events via EventEmitter which are forwarded to WebSocket
-        await claudeDaemonService.sendInstruction(containerId, safeInstruction)
-
-        await job.updateProgress({
-          percentage: 60,
-          message: 'Instrução enviada, aguardando resposta...',
-          timestamp: new Date()
-        })
-        emitInstructionProgress({ ...baseEventData, progress: 60 })
+        // Send instruction to Claude daemon and wait for completion
+        // Now returns captured output when the instruction finishes
+        const result = await claudeDaemonService.sendInstruction(containerId, safeInstruction)
 
         await job.updateProgress({
           percentage: 80,
-          message: 'Processando resposta...',
+          message: 'Instrução concluída, processando resultado...',
           timestamp: new Date()
         })
         emitInstructionProgress({ ...baseEventData, progress: 80 })
 
         const duration = Date.now() - startTime
 
-        logger.info({ jobId: job.id, containerId, duration }, 'Instruction processed successfully')
+        logger.info({ jobId: job.id, containerId, duration, exitCode: result.exitCode }, 'Instruction processed successfully')
 
         await job.updateProgress({
           percentage: 100,
@@ -151,11 +144,11 @@ export function getOrCreateWorker(containerId: string): Worker {
           progress: 100,
         })
 
-        // Return success result
+        // Return captured output as job result
         return {
-          stdout: '', // Output is streamed via WebSocket, not returned here
-          stderr: '',
-          exitCode: 0,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          exitCode: result.exitCode,
           duration,
           completedAt: new Date()
         }

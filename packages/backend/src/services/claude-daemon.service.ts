@@ -200,10 +200,16 @@ class ClaudeDaemonService extends EventEmitter {
   }
 
   /**
+   * Result from sendInstruction
+   */
+
+
+  /**
    * Send an instruction to Claude Code
    * Spawns a new process for each instruction, using --resume for subsequent calls
+   * Returns a Promise that resolves when the instruction completes with captured output
    */
-  async sendInstruction(containerId: string, instruction: string): Promise<void> {
+  async sendInstruction(containerId: string, instruction: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     const session = this.sessions.get(containerId)
     if (!session) {
       throw new Error(`No session active for container ${containerId}`)
@@ -222,113 +228,128 @@ class ClaudeDaemonService extends EventEmitter {
 
     logger.info({ containerId, instructionLength: instruction.length, sessionId: session.sessionId }, 'Sending instruction to Claude')
 
-    try {
-      // Build command flags
-      const flags = [...CLAUDE_BASE_FLAGS]
+    return new Promise((resolve, reject) => {
+      try {
+        // Build command flags
+        const flags = [...CLAUDE_BASE_FLAGS]
 
-      // For autonomous mode, add --yes to auto-accept all prompts
-      if (session.mode === 'autonomous') {
-        flags.push('--yes')
-        logger.debug({ containerId }, 'Autonomous mode: adding --yes flag')
-      }
-
-      // First instruction uses --session-id, subsequent use --resume
-      if (session.state.instructionCount === 0) {
-        flags.push('--session-id', session.sessionId)
-      } else {
-        flags.push('--resume', session.sessionId)
-      }
-
-      // Format instruction as stream-json input
-      const streamInput: ClaudeStreamInput = {
-        type: 'user',
-        message: {
-          role: 'user',
-          content: instruction,
-        },
-      }
-
-      const jsonInput = JSON.stringify(streamInput)
-
-      // Spawn docker exec process
-      const process = spawn('docker', [
-        'exec',
-        '-i',
-        '-w', CONTAINER_WORKSPACE,
-        session.dockerId,
-        'claude',
-        ...flags,
-      ], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-      })
-
-      let outputBuffer = ''
-
-      // Handle stdout (JSON streaming)
-      process.stdout?.on('data', (chunk: Buffer) => {
-        const data = chunk.toString('utf-8')
-        outputBuffer += data
-        this.handleOutput(containerId, data)
-      })
-
-      // Handle stderr
-      process.stderr?.on('data', (chunk: Buffer) => {
-        const errorOutput = chunk.toString('utf-8')
-        logger.warn({ containerId, error: errorOutput }, 'Claude stderr')
-
-        // Emit as system event
-        const event: ClaudeEvent = {
-          type: 'system',
-          timestamp: new Date(),
-          data: { stderr: errorOutput },
+        // For autonomous mode, add --yes to auto-accept all prompts
+        if (session.mode === 'autonomous') {
+          flags.push('--yes')
+          logger.debug({ containerId }, 'Autonomous mode: adding --yes flag')
         }
-        this.emit('claude:event', { containerId, event })
-      })
 
-      // Write instruction to stdin and close
-      process.stdin?.write(jsonInput)
-      process.stdin?.end()
-
-      // Handle process exit
-      process.on('exit', (code, signal) => {
-        session.isProcessing = false
-        session.state.instructionCount++
-        session.state.lastActivity = new Date()
-
-        if (code === 0) {
-          logger.info({ containerId, code }, 'Instruction completed successfully')
+        // First instruction uses --session-id, subsequent use --resume
+        if (session.state.instructionCount === 0) {
+          flags.push('--session-id', session.sessionId)
         } else {
-          logger.warn({ containerId, code, signal }, 'Instruction process exited with non-zero code')
+          flags.push('--resume', session.sessionId)
+        }
 
-          // Check if there's an error in the output
-          if (outputBuffer.includes('"is_error":true')) {
-            const event: ClaudeEvent = {
-              type: 'error',
-              timestamp: new Date(),
-              data: { code, signal, message: 'Instruction failed' },
-            }
-            this.emit('claude:event', { containerId, event })
+        // Format instruction as stream-json input
+        const streamInput: ClaudeStreamInput = {
+          type: 'user',
+          message: {
+            role: 'user',
+            content: instruction,
+          },
+        }
+
+        const jsonInput = JSON.stringify(streamInput)
+
+        // Spawn docker exec process
+        const childProcess = spawn('docker', [
+          'exec',
+          '-i',
+          '-w', CONTAINER_WORKSPACE,
+          session.dockerId,
+          'claude',
+          ...flags,
+        ], {
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+
+        let stdoutBuffer = ''
+        let stderrBuffer = ''
+
+        // Handle stdout (JSON streaming)
+        childProcess.stdout?.on('data', (chunk: Buffer) => {
+          const data = chunk.toString('utf-8')
+          stdoutBuffer += data
+          this.handleOutput(containerId, data)
+        })
+
+        // Handle stderr
+        childProcess.stderr?.on('data', (chunk: Buffer) => {
+          const errorOutput = chunk.toString('utf-8')
+          stderrBuffer += errorOutput
+          logger.warn({ containerId, error: errorOutput }, 'Claude stderr')
+
+          // Emit as system event
+          const event: ClaudeEvent = {
+            type: 'system',
+            timestamp: new Date(),
+            data: { stderr: errorOutput },
           }
-        }
-      })
+          this.emit('claude:event', { containerId, event })
+        })
 
-      // Handle process error
-      process.on('error', (error) => {
+        // Write instruction to stdin and close
+        childProcess.stdin?.write(jsonInput)
+        childProcess.stdin?.end()
+
+        // Handle process exit
+        childProcess.on('exit', (code, signal) => {
+          session.isProcessing = false
+          session.state.instructionCount++
+          session.state.lastActivity = new Date()
+
+          const exitCode = code ?? -1
+
+          if (exitCode === 0) {
+            logger.info({ containerId, exitCode }, 'Instruction completed successfully')
+          } else {
+            logger.warn({ containerId, exitCode, signal }, 'Instruction process exited with non-zero code')
+
+            // Check if there's an error in the output
+            if (stdoutBuffer.includes('"is_error":true')) {
+              const event: ClaudeEvent = {
+                type: 'error',
+                timestamp: new Date(),
+                data: { code: exitCode, signal, message: 'Instruction failed' },
+              }
+              this.emit('claude:event', { containerId, event })
+            }
+          }
+
+          // Resolve with captured output
+          resolve({
+            stdout: stdoutBuffer,
+            stderr: stderrBuffer,
+            exitCode,
+          })
+        })
+
+        // Handle process error
+        childProcess.on('error', (error) => {
+          session.isProcessing = false
+          logger.error({ containerId, error }, 'Instruction process error')
+
+          const event: ClaudeEvent = {
+            type: 'error',
+            timestamp: new Date(),
+            data: { error: error.message },
+          }
+          this.emit('claude:event', { containerId, event })
+
+          reject(error)
+        })
+
+      } catch (error) {
         session.isProcessing = false
-        logger.error({ containerId, error }, 'Instruction process error')
-
-        const event: ClaudeEvent = {
-          type: 'error',
-          timestamp: new Date(),
-          data: { error: error.message },
-        }
-        this.emit('claude:event', { containerId, event })
-      })
-
-    } catch (error) {
-      session.isProcessing = false
-      throw error
-    }
+        reject(error)
+      }
+    })
   }
 
   /**
