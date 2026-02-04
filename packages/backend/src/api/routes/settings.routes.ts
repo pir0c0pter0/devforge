@@ -3,6 +3,9 @@ import type { Router as RouterType } from 'express';
 import { settingsService } from '../../services/settings.service';
 import { logger } from '../../utils/logger';
 import { authRateLimiter, strictRateLimiter } from '../../middleware/rate-limit';
+import { telegramService } from '../../telegram/telegram.service';
+import * as fs from 'fs';
+import * as path from 'path';
 
 const router: RouterType = Router();
 
@@ -113,6 +116,121 @@ router.post('/generate-ssh-key', strictRateLimiter, async (req: Request, res: Re
     logger.error({ error }, 'Failed to generate SSH key');
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Failed to generate SSH key',
+    });
+  }
+});
+
+/**
+ * GET /api/settings/telegram-config
+ * Get Telegram bot configuration (token masked)
+ */
+router.get('/telegram-config', async (_req: Request, res: Response) => {
+  try {
+    const token = process.env['TELEGRAM_BOT_TOKEN'] || '';
+    const allowedUsers = process.env['TELEGRAM_ALLOWED_USERS'] || '';
+
+    res.json({
+      success: true,
+      data: {
+        hasToken: !!token,
+        tokenMasked: token ? `${token.substring(0, 10)}...${token.substring(token.length - 5)}` : '',
+        allowedUsers: allowedUsers,
+      }
+    });
+  } catch (error) {
+    logger.error({ error }, 'Failed to get Telegram config');
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get Telegram config',
+    });
+  }
+});
+
+/**
+ * POST /api/settings/telegram-config
+ * Save Telegram bot configuration to .env file
+ */
+router.post('/telegram-config', strictRateLimiter, async (req: Request, res: Response) => {
+  try {
+    const { token, allowedUsers } = req.body as { token?: string; allowedUsers?: string };
+
+    // Validate token format (optional - only validate if provided)
+    if (token && !token.match(/^\d+:[A-Za-z0-9_-]+$/)) {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid token format. Expected format: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz',
+      });
+      return;
+    }
+
+    // Validate allowed users format (comma-separated numbers)
+    if (allowedUsers) {
+      const userIds = allowedUsers.split(',').map(id => id.trim()).filter(Boolean);
+      const invalidIds = userIds.filter(id => !/^\d+$/.test(id));
+      if (invalidIds.length > 0) {
+        res.status(400).json({
+          success: false,
+          error: `Invalid user IDs: ${invalidIds.join(', ')}. User IDs must be numeric.`,
+        });
+        return;
+      }
+    }
+
+    // Find .env file path
+    const envPath = path.resolve(__dirname, '../../../../.env');
+
+    let envContent = '';
+    if (fs.existsSync(envPath)) {
+      envContent = fs.readFileSync(envPath, 'utf-8');
+    }
+
+    // Update or add TELEGRAM_BOT_TOKEN
+    if (token !== undefined) {
+      if (envContent.includes('TELEGRAM_BOT_TOKEN=')) {
+        envContent = envContent.replace(/TELEGRAM_BOT_TOKEN=.*/g, `TELEGRAM_BOT_TOKEN=${token}`);
+      } else {
+        envContent += `\n# Telegram Bot Configuration\nTELEGRAM_BOT_TOKEN=${token}\n`;
+      }
+      // Update process.env for immediate effect
+      process.env['TELEGRAM_BOT_TOKEN'] = token;
+    }
+
+    // Update or add TELEGRAM_ALLOWED_USERS
+    if (allowedUsers !== undefined) {
+      if (envContent.includes('TELEGRAM_ALLOWED_USERS=')) {
+        envContent = envContent.replace(/TELEGRAM_ALLOWED_USERS=.*/g, `TELEGRAM_ALLOWED_USERS=${allowedUsers}`);
+      } else {
+        envContent += `TELEGRAM_ALLOWED_USERS=${allowedUsers}\n`;
+      }
+      // Update process.env for immediate effect
+      process.env['TELEGRAM_ALLOWED_USERS'] = allowedUsers;
+    }
+
+    // Write .env file
+    fs.writeFileSync(envPath, envContent, 'utf-8');
+
+    logger.info('Telegram configuration saved to .env file');
+
+    // Restart telegram service if token is set
+    if (process.env['TELEGRAM_BOT_TOKEN']) {
+      try {
+        await telegramService.stop();
+        await telegramService.start();
+        logger.info('Telegram bot restarted with new configuration');
+      } catch (restartError) {
+        logger.warn({ error: restartError }, 'Failed to restart Telegram bot, may need manual restart');
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Telegram configuration saved successfully',
+    });
+  } catch (error) {
+    logger.error({ error }, 'Failed to save Telegram config');
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to save Telegram config',
     });
   }
 });

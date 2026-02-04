@@ -89,6 +89,15 @@ export default function SettingsPage() {
   const [diagnosticsLoading, setDiagnosticsLoading] = useState(false)
   const [showDiagnosticsModal, setShowDiagnosticsModal] = useState(false)
   const [telegramStatus, setTelegramStatus] = useState<TelegramStatus | null>(null)
+  const [telegramConfig, setTelegramConfig] = useState<{
+    hasToken: boolean
+    tokenMasked: string
+    allowedUsers: string
+  } | null>(null)
+  const [telegramToken, setTelegramToken] = useState('')
+  const [telegramAllowedUsers, setTelegramAllowedUsers] = useState('')
+  const [telegramSaving, setTelegramSaving] = useState(false)
+  const [showTelegramForm, setShowTelegramForm] = useState(false)
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -111,6 +120,20 @@ export default function SettingsPage() {
       if (telegramRes.ok) {
         const telegramData = await telegramRes.json()
         setTelegramStatus(telegramData.data || telegramData)
+      }
+
+      // Fetch telegram config separately
+      try {
+        const telegramConfigRes = await fetch(`${API_URL}/api/settings/telegram-config`)
+        if (telegramConfigRes.ok) {
+          const configData = await telegramConfigRes.json()
+          setTelegramConfig(configData.data)
+          if (configData.data?.allowedUsers) {
+            setTelegramAllowedUsers(configData.data.allowedUsers)
+          }
+        }
+      } catch {
+        // Ignore telegram config errors
       }
     } catch (error) {
       console.error('Failed to fetch status:', error)
@@ -213,6 +236,43 @@ export default function SettingsPage() {
       console.error('Failed to run diagnostics:', error)
     } finally {
       setDiagnosticsLoading(false)
+    }
+  }
+
+  const handleSaveTelegramConfig = async () => {
+    setTelegramSaving(true)
+    try {
+      const payload: { token?: string; allowedUsers?: string } = {}
+
+      // Only send token if user entered a new one
+      if (telegramToken) {
+        payload.token = telegramToken
+      }
+
+      // Always send allowed users
+      payload.allowedUsers = telegramAllowedUsers
+
+      const res = await fetch(`${API_URL}/api/settings/telegram-config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      const data = await res.json()
+
+      if (res.ok && data.success) {
+        modal.showSuccess(t.settings.telegram.configSaved, t.settings.telegram.restartRequired)
+        setTelegramToken('')
+        setShowTelegramForm(false)
+        await fetchStatus()
+      } else {
+        modal.showError(t.settings.telegram.configSaveFailed, data.error || 'Unknown error')
+      }
+    } catch (error) {
+      console.error('Failed to save Telegram config:', error)
+      modal.showError(t.settings.telegram.configSaveFailed, 'Network error')
+    } finally {
+      setTelegramSaving(false)
     }
   }
 
@@ -628,10 +688,68 @@ export default function SettingsPage() {
                 <div className="text-terminal-cyan">{t.settings.telegram.commandExec}</div>
               </div>
             </div>
+
+            {/* Edit Configuration */}
+            <div className="pt-4 border-t border-terminal-border">
+              {showTelegramForm ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-terminal-text mb-2">
+                      {t.settings.telegram.botToken}
+                    </label>
+                    <input
+                      type="password"
+                      value={telegramToken}
+                      onChange={(e) => setTelegramToken(e.target.value)}
+                      placeholder={telegramConfig?.hasToken ? t.settings.telegram.keepCurrentToken : t.settings.telegram.botTokenPlaceholder}
+                      className="input"
+                    />
+                    <p className="text-xs text-terminal-textMuted mt-1">
+                      {telegramConfig?.hasToken && `${t.settings.telegram.currentToken}: ${telegramConfig.tokenMasked}`}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-terminal-text mb-2">
+                      {t.settings.telegram.allowedUsersLabel}
+                    </label>
+                    <input
+                      type="text"
+                      value={telegramAllowedUsers}
+                      onChange={(e) => setTelegramAllowedUsers(e.target.value)}
+                      placeholder={t.settings.telegram.allowedUsersPlaceholder}
+                      className="input"
+                    />
+                    <p className="text-xs text-terminal-textMuted mt-1">{t.settings.telegram.allowedUsersHelp}</p>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <button
+                      onClick={handleSaveTelegramConfig}
+                      disabled={telegramSaving}
+                      className="btn-primary disabled:opacity-50"
+                    >
+                      {telegramSaving ? <AnimatedDots text={t.settings.telegram.saving} /> : t.settings.telegram.saveConfig}
+                    </button>
+                    <button
+                      onClick={() => { setShowTelegramForm(false); setTelegramToken(''); }}
+                      className="btn-secondary"
+                    >
+                      {t.common.cancel}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowTelegramForm(true)}
+                  className="btn-secondary"
+                >
+                  {t.settings.telegram.changeToken}
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Not configured warning */}
+            {/* Not configured - show form */}
             <div className="bg-terminal-yellow/10 border border-terminal-yellow/30 rounded p-4">
               <p className="text-sm text-terminal-yellow">
                 {t.settings.telegram.tokenRequired}
@@ -663,26 +781,42 @@ export default function SettingsPage() {
               </ol>
             </div>
 
-            {/* Environment Variables */}
-            <div className="bg-terminal-bg rounded p-4">
-              <p className="font-medium text-terminal-text mb-3">
-                {t.settings.telegram.envVars}
-              </p>
-              <div className="space-y-2 font-mono text-xs">
-                <div className="flex items-center space-x-2">
-                  <code className="bg-terminal-bgLight px-2 py-1 rounded text-terminal-green">TELEGRAM_BOT_TOKEN</code>
-                  <span className="text-terminal-textMuted">= token do @BotFather</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <code className="bg-terminal-bgLight px-2 py-1 rounded text-terminal-green">TELEGRAM_ALLOWED_USERS</code>
-                  <span className="text-terminal-textMuted">= 123456,789012</span>
-                </div>
+            {/* Configuration Form */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-terminal-text mb-2">
+                  {t.settings.telegram.botToken}
+                </label>
+                <input
+                  type="password"
+                  value={telegramToken}
+                  onChange={(e) => setTelegramToken(e.target.value)}
+                  placeholder={t.settings.telegram.botTokenPlaceholder}
+                  className="input"
+                />
+                <p className="text-xs text-terminal-textMuted mt-1">{t.settings.telegram.botTokenHelp}</p>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-terminal-text mb-2">
+                  {t.settings.telegram.allowedUsersLabel}
+                </label>
+                <input
+                  type="text"
+                  value={telegramAllowedUsers}
+                  onChange={(e) => setTelegramAllowedUsers(e.target.value)}
+                  placeholder={t.settings.telegram.allowedUsersPlaceholder}
+                  className="input"
+                />
+                <p className="text-xs text-terminal-textMuted mt-1">{t.settings.telegram.allowedUsersHelp}</p>
+              </div>
+              <button
+                onClick={handleSaveTelegramConfig}
+                disabled={telegramSaving || !telegramToken}
+                className="btn-primary w-full disabled:opacity-50"
+              >
+                {telegramSaving ? <AnimatedDots text={t.settings.telegram.saving} /> : t.settings.telegram.saveConfig}
+              </button>
             </div>
-
-            <p className="text-sm text-terminal-textMuted">
-              {t.settings.config.editConfig} <code className="bg-terminal-bg px-2 py-1 rounded text-terminal-green">packages/backend/.env</code>
-            </p>
           </div>
         )}
       </div>
