@@ -45,7 +45,7 @@ interface JobProgressState {
 }
 
 export function InstructionQueue({ containerId }: InstructionQueueProps) {
-  const { t } = useI18n()
+  const { t, formatCurrency } = useI18n()
   const [queue, setQueue] = useState<QueueItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -323,14 +323,14 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
   // Parse Claude stream-json output to extract the complete response
   // Claude Code outputs multiple JSON events: assistant, tool_use, tool_result, result
   // We collect ALL content to ensure nothing is lost, especially for complex tasks like multi-perspective
-  const parseClaudeOutput = (stdout: string): { text: string; cost?: string; duration?: string; toolsUsed?: string[] } | null => {
+  const parseClaudeOutput = (stdout: string): { text: string; costUsd?: number; duration?: string; toolsUsed?: string[] } | null => {
     if (!stdout) return null
 
     try {
       const lines = stdout.split('\n').filter(l => l.trim())
       const allContent: string[] = []
       let finalResult = ''
-      let cost = ''
+      let costUsd: number | undefined
       let duration = ''
       const toolsUsed: string[] = []
 
@@ -364,9 +364,9 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
             finalResult = parsed.result
           }
 
-          // Extract cost info (usually in the last event)
+          // Extract cost info (usually in the last event) - keep as number for formatting
           if (parsed.total_cost_usd !== undefined) {
-            cost = `$${parsed.total_cost_usd.toFixed(4)}`
+            costUsd = parsed.total_cost_usd
           }
           if (parsed.duration_ms !== undefined) {
             duration = formatDuration(parsed.duration_ms)
@@ -409,7 +409,7 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
       if (completeText) {
         return {
           text: completeText,
-          cost,
+          costUsd,
           duration,
           toolsUsed: toolsUsed.length > 0 ? toolsUsed : undefined
         }
@@ -633,7 +633,7 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
                                   {/* Tools used indicator */}
                                   {parsed.toolsUsed && parsed.toolsUsed.length > 0 && (
                                     <div className="flex flex-wrap gap-1 mb-2">
-                                      <span className="text-xs text-terminal-textMuted">Ferramentas:</span>
+                                      <span className="text-xs text-terminal-textMuted">{t.instructionQueue.tools}:</span>
                                       {parsed.toolsUsed.map((tool, idx) => (
                                         <span key={idx} className="badge badge-gray text-xs">
                                           {tool}
@@ -645,10 +645,10 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
                                   <div className="text-sm text-terminal-text bg-terminal-bg p-3 rounded overflow-x-auto whitespace-pre-wrap max-h-[500px] overflow-y-auto">
                                     {parsed.text}
                                   </div>
-                                  {(parsed.cost || parsed.duration) && (
+                                  {(parsed.costUsd !== undefined || parsed.duration) && (
                                     <div className="flex gap-4 mt-2 text-xs text-terminal-textMuted">
-                                      {parsed.cost && <span>Custo: <span className="text-terminal-cyan">{parsed.cost}</span></span>}
-                                      {parsed.duration && <span>Duração API: <span className="text-terminal-cyan">{parsed.duration}</span></span>}
+                                      {parsed.costUsd !== undefined && <span>{t.instructionQueue.cost}: <span className="text-terminal-cyan">{formatCurrency(parsed.costUsd)}</span></span>}
+                                      {parsed.duration && <span>{t.instructionQueue.apiDuration}: <span className="text-terminal-cyan">{parsed.duration}</span></span>}
                                     </div>
                                   )}
                                 </div>
@@ -677,8 +677,8 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
                             </div>
                           )}
                           <div className="flex gap-4 mt-2 text-xs text-terminal-textMuted">
-                            <span>Exit code: <span className={selectedJob.result.exitCode === 0 ? 'text-terminal-green' : 'text-terminal-red'}>{selectedJob.result.exitCode}</span></span>
-                            <span>Duração: {formatDuration(selectedJob.result.duration)}</span>
+                            <span>{t.instructionQueue.exitCode}: <span className={selectedJob.result.exitCode === 0 ? 'text-terminal-green' : 'text-terminal-red'}>{selectedJob.result.exitCode}</span></span>
+                            <span>{t.instructionQueue.duration}: {formatDuration(selectedJob.result.duration)}</span>
                           </div>
                         </div>
                       )}
@@ -697,12 +697,12 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
 
                       {/* Metadata */}
                       <div className="flex flex-wrap gap-4 text-xs text-terminal-textMuted pt-2 border-t border-terminal-border">
-                        <span>Tentativas: {selectedJob.attemptsMade}/{selectedJob.maxAttempts}</span>
+                        <span>{t.instructionQueue.attempts}: {selectedJob.attemptsMade}/{selectedJob.maxAttempts}</span>
                         {selectedJob.processedAt && (
-                          <span>Processado: {new Date(selectedJob.processedAt).toLocaleString()}</span>
+                          <span>{t.instructionQueue.processed}: {new Date(selectedJob.processedAt).toLocaleString()}</span>
                         )}
                         {selectedJob.finishedAt && (
-                          <span>Finalizado: {new Date(selectedJob.finishedAt).toLocaleString()}</span>
+                          <span>{t.instructionQueue.finished2}: {new Date(selectedJob.finishedAt).toLocaleString()}</span>
                         )}
                       </div>
                     </div>

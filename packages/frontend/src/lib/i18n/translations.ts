@@ -563,6 +563,14 @@ export const translations = {
       noLogs: 'Sem logs ainda',
       showLogs: 'Mostrar logs',
       hideLogs: 'Ocultar logs',
+      cost: 'Custo',
+      apiDuration: 'Duração API',
+      tools: 'Ferramentas',
+      attempts: 'Tentativas',
+      processed: 'Processado',
+      finished2: 'Finalizado',
+      exitCode: 'Exit code',
+      duration: 'Duração',
     },
 
     // Common
@@ -1189,6 +1197,14 @@ export const translations = {
       noLogs: 'No logs yet',
       showLogs: 'Show logs',
       hideLogs: 'Hide logs',
+      cost: 'Cost',
+      apiDuration: 'API Duration',
+      tools: 'Tools',
+      attempts: 'Attempts',
+      processed: 'Processed',
+      finished2: 'Finished',
+      exitCode: 'Exit code',
+      duration: 'Duration',
     },
 
     // Common

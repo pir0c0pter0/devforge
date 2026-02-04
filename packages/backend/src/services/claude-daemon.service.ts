@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events'
 import Docker from 'dockerode'
-import { spawn } from 'child_process'
+import { spawn, ChildProcess } from 'child_process'
 import { randomUUID } from 'crypto'
 import { dockerLogger as logger } from '../utils/logger'
 import { containerRepository } from '../repositories'
@@ -24,6 +24,7 @@ interface ActiveSession {
   sessionId: string
   isProcessing: boolean
   mode: 'interactive' | 'autonomous'
+  currentProcess?: ChildProcess
 }
 
 /**
@@ -223,16 +224,69 @@ class ClaudeDaemonService extends EventEmitter {
   }
 
   /**
-   * Result from sendInstruction
+   * Cancel the current instruction being processed
+   * Kills the child process and resets the session state
    */
+  async cancelCurrentInstruction(containerId: string): Promise<boolean> {
+    const session = this.sessions.get(containerId)
+    if (!session) {
+      logger.debug({ containerId }, 'No session to cancel instruction')
+      return false
+    }
 
+    if (!session.isProcessing || !session.currentProcess) {
+      logger.debug({ containerId }, 'No instruction in progress to cancel')
+      return false
+    }
+
+    logger.info({ containerId }, 'Cancelling current instruction')
+
+    // Kill the process
+    try {
+      session.currentProcess.kill('SIGTERM')
+
+      // Wait a bit and force kill if still running
+      await new Promise<void>((resolve) => {
+        setTimeout(() => {
+          if (session.currentProcess && !session.currentProcess.killed) {
+            session.currentProcess.kill('SIGKILL')
+          }
+          resolve()
+        }, 1000)
+      })
+
+      session.isProcessing = false
+      session.currentProcess = undefined
+
+      // Log cancellation
+      claudeLogsService.addLog(containerId, 'system', 'Instrucao cancelada pelo usuario', {
+        sessionId: session.sessionId,
+      })
+
+      // Emit cancellation event
+      const event: ClaudeEvent = {
+        type: 'system',
+        timestamp: new Date(),
+        data: { message: 'Instrucao cancelada', cancelled: true },
+      }
+      this.emit('claude:event', { containerId, event })
+      this.emit('instruction:cancelled', { containerId })
+
+      return true
+    } catch (error) {
+      logger.error({ containerId, error }, 'Failed to cancel instruction')
+      session.isProcessing = false
+      session.currentProcess = undefined
+      return false
+    }
+  }
 
   /**
    * Send an instruction to Claude Code
    * Spawns a new process for each instruction, using --resume for subsequent calls
    * Returns a Promise that resolves when the instruction completes with captured output
    */
-  async sendInstruction(containerId: string, instruction: string, jobId?: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  async sendInstruction(containerId: string, instruction: string, jobId?: string, cancelIfBusy: boolean = false): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     const session = this.sessions.get(containerId)
     if (!session) {
       throw new Error(`No session active for container ${containerId}`)
@@ -242,8 +296,14 @@ class ClaudeDaemonService extends EventEmitter {
       throw new Error(`Session is not running (status: ${session.state.status})`)
     }
 
+    // If already processing and cancelIfBusy is true, cancel the current instruction
     if (session.isProcessing) {
-      throw new Error('Session is already processing an instruction')
+      if (cancelIfBusy) {
+        logger.info({ containerId }, 'Cancelling current instruction to process new one')
+        await this.cancelCurrentInstruction(containerId)
+      } else {
+        throw new Error('Session is already processing an instruction')
+      }
     }
 
     session.isProcessing = true
@@ -297,6 +357,9 @@ class ClaudeDaemonService extends EventEmitter {
         ], {
           stdio: ['pipe', 'pipe', 'pipe'],
         })
+
+        // Store reference to current process for cancellation
+        session.currentProcess = childProcess
 
         let stdoutBuffer = ''
         let stderrBuffer = ''
@@ -398,6 +461,7 @@ class ClaudeDaemonService extends EventEmitter {
 
           // Now mark as complete
           session.isProcessing = false
+          session.currentProcess = undefined
           session.state.instructionCount++
           session.state.lastActivity = new Date()
 
@@ -414,6 +478,7 @@ class ClaudeDaemonService extends EventEmitter {
         // Handle process error
         childProcess.on('error', (error) => {
           session.isProcessing = false
+          session.currentProcess = undefined
           const duration = Date.now() - startTime
           logger.error({ containerId, error, duration }, 'Instruction process error')
 

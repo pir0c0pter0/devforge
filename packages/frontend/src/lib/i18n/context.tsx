@@ -5,12 +5,40 @@ import { translations, Language } from './translations'
 
 const STORAGE_KEY = 'claude-docker-language'
 
+// Cotação aproximada USD -> BRL (atualizar conforme necessário)
+const USD_TO_BRL_RATE = 5.80
+
 type TranslationType = typeof translations['pt-BR'] | typeof translations['en']
+
+/**
+ * Formata valor monetário de acordo com o idioma
+ * - pt-BR: R$ (converte de USD para BRL usando cotação)
+ * - en: $ (mantém em USD)
+ */
+function formatCurrencyValue(usd: number, language: Language): string {
+  if (usd === 0) return language === 'pt-BR' ? 'R$ 0,00' : '$0.00'
+
+  if (language === 'pt-BR') {
+    const brl = usd * USD_TO_BRL_RATE
+    // Para valores pequenos, mostrar mais casas decimais
+    if (brl < 0.01) {
+      return `R$ ${brl.toFixed(4).replace('.', ',')}`
+    }
+    return `R$ ${brl.toFixed(2).replace('.', ',')}`
+  } else {
+    // Inglês: manter em USD
+    if (usd < 0.01) {
+      return `$${usd.toFixed(4)}`
+    }
+    return `$${usd.toFixed(2)}`
+  }
+}
 
 interface I18nContextType {
   language: Language
   setLanguage: (lang: Language) => void
   t: TranslationType
+  formatCurrency: (usd: number) => string
 }
 
 const I18nContext = createContext<I18nContextType | undefined>(undefined)
@@ -34,12 +62,14 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   const t = translations[language]
 
+  const formatCurrency = (usd: number) => formatCurrencyValue(usd, language)
+
   if (!mounted) {
     return null
   }
 
   return (
-    <I18nContext.Provider value={{ language, setLanguage, t }}>
+    <I18nContext.Provider value={{ language, setLanguage, t, formatCurrency }}>
       {children}
     </I18nContext.Provider>
   )

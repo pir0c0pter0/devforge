@@ -608,7 +608,8 @@ const setupClaudeDaemonNamespace = (): void => {
     })
 
     // Send instruction to daemon
-    socket.on('instruction:send', async ({ containerId, instruction }: { containerId: string; instruction: string }) => {
+    // If cancelIfBusy is true, cancels any current instruction before sending
+    socket.on('instruction:send', async ({ containerId, instruction, cancelIfBusy }: { containerId: string; instruction: string; cancelIfBusy?: boolean }) => {
       try {
         // Validate input
         if (!instruction || typeof instruction !== 'string') {
@@ -621,7 +622,7 @@ const setupClaudeDaemonNamespace = (): void => {
           return
         }
 
-        await claudeDaemonService.sendInstruction(containerId, instruction)
+        await claudeDaemonService.sendInstruction(containerId, instruction, undefined, cancelIfBusy ?? false)
 
         // Confirm receipt
         socket.emit('instruction:received' as any, {
@@ -631,6 +632,18 @@ const setupClaudeDaemonNamespace = (): void => {
       } catch (error) {
         socket.emit('error' as any, {
           message: error instanceof Error ? error.message : 'Falha ao enviar instrução',
+        })
+      }
+    })
+
+    // Cancel current instruction
+    socket.on('instruction:cancel', async ({ containerId }: { containerId: string }) => {
+      try {
+        const cancelled = await claudeDaemonService.cancelCurrentInstruction(containerId)
+        socket.emit('instruction:cancelled' as any, { containerId, cancelled })
+      } catch (error) {
+        socket.emit('error' as any, {
+          message: error instanceof Error ? error.message : 'Falha ao cancelar instrução',
         })
       }
     })

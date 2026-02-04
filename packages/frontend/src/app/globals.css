@@ -247,6 +247,131 @@ body {
     align-items: center;
     justify-content: flex-start;
   }
+
+  /* Thinking Indicator - Enhanced animation for Claude thinking state */
+  .thinking-container {
+    @apply flex items-start gap-3 p-4 rounded-lg;
+    @apply bg-gradient-to-r from-terminal-cyan/10 via-terminal-cyan/5 to-transparent;
+    @apply border border-terminal-cyan/30;
+    animation: thinking-pulse 2s ease-in-out infinite;
+  }
+
+  .thinking-icon-container {
+    @apply relative w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0;
+    @apply bg-terminal-cyan/20;
+  }
+
+  .thinking-icon-glow {
+    @apply absolute inset-0 rounded-full;
+    @apply bg-terminal-cyan/30;
+    animation: thinking-glow 1.5s ease-in-out infinite;
+  }
+
+  .thinking-icon {
+    @apply w-5 h-5 text-terminal-cyan relative z-10;
+    animation: thinking-bounce 1s ease-in-out infinite;
+  }
+
+  .thinking-brain-icon {
+    @apply text-terminal-cyan;
+    animation: thinking-pulse-small 1.5s ease-in-out infinite;
+  }
+
+  .thinking-content {
+    @apply flex-1 pt-1;
+  }
+
+  .thinking-text {
+    @apply text-sm text-terminal-cyan font-semibold;
+  }
+
+  .thinking-subtext {
+    @apply text-xs text-terminal-textMuted mt-1;
+  }
+
+  .thinking-wave {
+    @apply flex items-center gap-1 ml-1;
+  }
+
+  .thinking-wave-dot {
+    @apply w-1.5 h-1.5 rounded-full bg-terminal-cyan;
+    animation: thinking-wave-bounce 1s ease-in-out infinite;
+  }
+
+  .thinking-progress-bar {
+    @apply mt-2 h-1 w-full rounded-full overflow-hidden;
+    @apply bg-terminal-border;
+  }
+
+  .thinking-progress-fill {
+    @apply h-full rounded-full;
+    @apply bg-gradient-to-r from-terminal-cyan via-terminal-cyan/70 to-terminal-cyan;
+    animation: thinking-progress 2s ease-in-out infinite;
+  }
+
+  @keyframes thinking-pulse {
+    0%, 100% {
+      box-shadow: 0 0 0 0 rgba(0, 255, 255, 0.2);
+    }
+    50% {
+      box-shadow: 0 0 20px 5px rgba(0, 255, 255, 0.1);
+    }
+  }
+
+  @keyframes thinking-glow {
+    0%, 100% {
+      transform: scale(1);
+      opacity: 0.3;
+    }
+    50% {
+      transform: scale(1.2);
+      opacity: 0.6;
+    }
+  }
+
+  @keyframes thinking-bounce {
+    0%, 100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-2px);
+    }
+  }
+
+  @keyframes thinking-pulse-small {
+    0%, 100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    50% {
+      transform: scale(1.1);
+      opacity: 0.7;
+    }
+  }
+
+  @keyframes thinking-wave-bounce {
+    0%, 60%, 100% {
+      transform: translateY(0);
+    }
+    30% {
+      transform: translateY(-4px);
+    }
+  }
+
+  @keyframes thinking-progress {
+    0% {
+      width: 0%;
+      margin-left: 0%;
+    }
+    50% {
+      width: 50%;
+      margin-left: 25%;
+    }
+    100% {
+      width: 0%;
+      margin-left: 100%;
+    }
+  }
 }
 
 /* Modal animations */

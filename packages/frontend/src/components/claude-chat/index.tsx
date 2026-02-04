@@ -6,7 +6,7 @@ import { Bot, Play, Square, Send, Loader2, Trash2 } from 'lucide-react'
 import { useClaudeDaemon } from '@/hooks/use-claude-daemon'
 import { StatusBadge } from './status-badge'
 import { MessageItem } from './message-item'
-import { AnimatedDots } from '@/components/ui/animated-dots'
+import { ThinkingIndicator } from '@/components/ui/thinking-indicator'
 import { useI18n } from '@/lib/i18n'
 import { SKILL_CATEGORIES, filterSkills, type ClaudeSkill } from '@/lib/claude-skills'
 
@@ -220,22 +220,10 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
 
             {/* Loading indicator - Claude is thinking */}
             {isLoading && (
-              <div className="flex items-start gap-3 p-3 rounded-lg bg-terminal-cyan/5 border border-terminal-cyan/20 animate-pulse">
-                <div className="w-8 h-8 rounded-full bg-terminal-cyan/20 flex items-center justify-center flex-shrink-0">
-                  <Bot className="w-4 h-4 text-terminal-cyan animate-pulse" />
-                </div>
-                <div className="flex-1 pt-1">
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 text-terminal-cyan animate-spin" />
-                    <span className="text-sm text-terminal-cyan font-medium">
-                      <AnimatedDots text={t.claudeChat.thinking} />
-                    </span>
-                  </div>
-                  <p className="text-xs text-terminal-textMuted mt-1">
-                    {t.claudeChat.thinkingSubtext}
-                  </p>
-                </div>
-              </div>
+              <ThinkingIndicator
+                text={t.claudeChat.thinking}
+                subtext={t.claudeChat.thinkingSubtext}
+              />
             )}
 
             <div ref={messagesEndRef} />

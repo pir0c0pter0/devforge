@@ -89,8 +89,10 @@ export interface UseClaudeDaemonReturn {
   messages: ClaudeMessage[]
   /** Whether waiting for instruction response */
   isLoading: boolean
-  /** Send an instruction to Claude */
+  /** Send an instruction to Claude (auto-cancels if busy) */
   sendInstruction: (instruction: string) => void
+  /** Cancel the current instruction */
+  cancelInstruction: () => void
   /** Start the Claude daemon */
   startDaemon: () => void
   /** Stop the Claude daemon */
@@ -383,6 +385,23 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
       console.log('[ClaudeDaemon] Instruction received by daemon, waiting for response...')
     })
 
+    // Handle instruction cancelled
+    socket.on('instruction:cancelled', ({ cancelled }: { containerId: string; cancelled: boolean }) => {
+      console.log('[ClaudeDaemon] Instruction cancelled:', cancelled)
+      if (cancelled) {
+        setIsLoading(false)
+        // Add system message to inform user
+        const messageId = getNextMessageId(containerId)
+        const cancelMessage: ClaudeMessage = {
+          id: messageId,
+          type: 'system',
+          content: 'Instrução anterior cancelada.',
+          timestamp: new Date(),
+        }
+        addMessage(containerId, cancelMessage)
+      }
+    })
+
     // Handle errors with automatic retry for 400 errors
     socket.on('error', (data: { message: string; code?: number; status?: number }) => {
       console.error('[ClaudeDaemon] Error:', data.message, 'Code:', data.code || data.status)
@@ -502,13 +521,27 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
         timestamp: userMessage.timestamp.toISOString(),
       }).catch((err) => console.error('[ClaudeDaemon] Failed to save user message:', err))
 
+      // Send with cancelIfBusy=true to auto-cancel any current instruction
       socketRef.current.emit('instruction:send', {
         containerId,
         instruction,
+        cancelIfBusy: true,
       })
     },
     [containerId, addMessage, getNextMessageId]
   )
+
+  // Cancel current instruction
+  const cancelInstruction = useCallback(() => {
+    if (!socketRef.current?.connected) {
+      console.warn('[ClaudeDaemon] Cannot cancel instruction: not connected')
+      return
+    }
+
+    console.log('[ClaudeDaemon] Cancelling current instruction for container:', containerId)
+    socketRef.current.emit('instruction:cancel', { containerId })
+    setIsLoading(false)
+  }, [containerId])
 
   // Start the daemon
   const startDaemon = useCallback(() => {
@@ -549,6 +582,7 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
     messages,
     isLoading,
     sendInstruction,
+    cancelInstruction,
     startDaemon,
     stopDaemon,
     clearMessages,
