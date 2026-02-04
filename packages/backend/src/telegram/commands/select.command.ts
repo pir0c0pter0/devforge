@@ -1,5 +1,5 @@
 import { BaseCommand, CommandCategory } from './base.command';
-import { containerRepository, type ContainerEntity } from '../../repositories/container.repository';
+import { containerRepository, type ContainerEntity, type UpdateContainerDto } from '../../repositories/container.repository';
 import type { BotContext } from '../telegram.types';
 
 /**
@@ -68,6 +68,13 @@ export class SelectCommand extends BaseCommand {
 
       // Update session with selected container
       this.setSelectedContainer(ctx, container.id);
+
+      // Update container's owner Telegram ID for notifications
+      const userId = ctx.from?.id;
+      if (userId && container.ownerTelegramId !== userId) {
+        const updateData: UpdateContainerDto = { ownerTelegramId: userId };
+        containerRepository.update(container.id, updateData);
+      }
 
       // Show confirmation with container details
       await this.showSelectionConfirmation(ctx, container);
@@ -272,6 +279,13 @@ export async function handleSelectCallback(
   if (ctx.session) {
     ctx.session.selectedContainerId = containerId;
     ctx.session.lastActivity = new Date();
+  }
+
+  // Update container's owner Telegram ID for notifications
+  const userId = ctx.from?.id;
+  if (userId && container.ownerTelegramId !== userId) {
+    const updateData: UpdateContainerDto = { ownerTelegramId: userId };
+    containerRepository.update(containerId, updateData);
   }
 
   // Answer the callback to remove loading state

@@ -99,6 +99,15 @@ RUN mkdir -p /home/developer/.claude/agents \
     && touch /home/developer/.claude/.credentials.json \
     && echo '{"theme":"dark"}' > /home/developer/.claude/settings.json
 
+# Copy container rules for Claude (instructions about the environment)
+COPY --chown=developer:developer claude-container-rules.md /home/developer/.claude/rules/container-rules.md
+
+# Copy telegram-send script for notifications
+USER root
+COPY telegram-send.sh /usr/local/bin/telegram-send
+RUN chmod +x /usr/local/bin/telegram-send
+USER developer
+
 # Create workspace directory
 RUN mkdir -p /home/developer/workspace
 

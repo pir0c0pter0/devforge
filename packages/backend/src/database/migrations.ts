@@ -121,10 +121,34 @@ const claudeLogsMigration: Migration = {
 };
 
 /**
+ * Migration 004 - Add owner_telegram_id column to containers
+ * Allows containers to track which Telegram user owns them for notifications
+ */
+const ownerTelegramIdMigration: Migration = {
+  name: '004_owner_telegram_id',
+  up: (db: Database.Database) => {
+    // Check if column already exists
+    const columns = db.prepare("PRAGMA table_info(containers)").all() as Array<{ name: string }>;
+    const hasColumn = columns.some(c => c.name === 'owner_telegram_id');
+
+    if (!hasColumn) {
+      db.exec('ALTER TABLE containers ADD COLUMN owner_telegram_id INTEGER');
+      logger.debug('Added owner_telegram_id column to containers');
+    } else {
+      logger.debug('owner_telegram_id column already exists');
+    }
+  },
+  down: (_db: Database.Database) => {
+    // SQLite doesn't support DROP COLUMN easily, would need table recreation
+    logger.warn('Rollback not supported for owner_telegram_id migration');
+  },
+};
+
+/**
  * All migrations in order
  * Add new migrations here as the schema evolves
  */
-const migrations: readonly Migration[] = [initialMigration, usageTrackingMigration, claudeLogsMigration];
+const migrations: readonly Migration[] = [initialMigration, usageTrackingMigration, claudeLogsMigration, ownerTelegramIdMigration];
 
 /**
  * Check if a migration has been applied

@@ -17,7 +17,7 @@ function Header() {
   }
 
   return (
-    <header className="bg-terminal-bgLight border-b border-terminal-border">
+    <header className="fixed top-0 left-0 right-0 z-50 bg-terminal-bgLight border-b border-terminal-border">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
@@ -67,19 +67,21 @@ function Header() {
 
 function LayoutContent({ children }: { children: React.ReactNode }) {
   return (
-    <>
+    <div className="min-h-screen flex flex-col">
       <Header />
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Spacer for fixed header (h-16 = 4rem = header height) */}
+      <div className="h-16 flex-shrink-0" />
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {children}
       </main>
-      <footer className="border-t border-terminal-border mt-auto">
+      <footer className="border-t border-terminal-border flex-shrink-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <p className="text-xs text-terminal-textMuted text-center">
             <span className="text-terminal-green">$</span> {APP_INFO.fullName}
           </p>
         </div>
       </footer>
-    </>
+    </div>
   )
 }
 

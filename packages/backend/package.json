@@ -21,6 +21,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.30.0",
     "@claude-docker/shared": "workspace:*",
     "better-sqlite3": "^12.6.2",
     "bullmq": "^5.1.0",

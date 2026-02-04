@@ -1,8 +1,7 @@
 import type { BotContext } from './telegram.types';
 import { commandRegistry } from './commands/command.registry';
 import { conversationHandler } from './conversation.handler';
-import { containerRepository } from '../repositories/container.repository';
-import { queueInstruction } from '../services/claude-queue.service';
+import { anthropicService } from '../services/anthropic.service';
 import { createChildLogger } from '../utils/logger';
 
 const logger = createChildLogger({ service: 'telegram-router' });
@@ -11,9 +10,12 @@ const logger = createChildLogger({ service: 'telegram-router' });
  * MessageRouter - Routes messages to appropriate handlers
  *
  * Decision flow:
- * 1. If message starts with /, route to CommandRegistry
- * 2. If user has container selected and message looks like instruction, queue it
- * 3. Otherwise, route to ConversationHandler for NLU
+ * 1. If message starts with /, route to CommandRegistry (includes /exec for queue)
+ * 2. Try Claude API conversation for direct chat
+ * 3. Fall back to ConversationHandler for NLU suggestions
+ *
+ * Note: /exec command sends instructions to container queue
+ *       Regular messages go to Claude API for conversation
  */
 export class MessageRouter {
   /**
@@ -49,13 +51,87 @@ export class MessageRouter {
       return;
     }
 
-    // 2. Check if user wants to send instruction to Claude
-    if (await this.tryRouteToClaudeInstruction(ctx, text)) {
+    // 2. Try to have a conversation with Claude API (not container)
+    // This applies to ALL non-command messages, regardless of container selection
+    if (await this.tryRouteToClaudeConversation(ctx, text)) {
       return;
     }
 
-    // 3. Natural language processing
+    // 3. Fall back to natural language processing for help/suggestions
     await this.routeToConversation(ctx);
+  }
+
+  /**
+   * Route message to Claude API for direct conversation
+   * Returns true if message was handled
+   */
+  private async tryRouteToClaudeConversation(ctx: BotContext, text: string): Promise<boolean> {
+    // Check if Anthropic API is available
+    if (!anthropicService.isAvailable()) {
+      logger.debug('Anthropic API not available, falling back to NLU');
+      return false;
+    }
+
+    // Skip very short messages or obvious NLU patterns
+    if (text.length < 3) {
+      return false;
+    }
+
+    // Skip messages that look like they want a command
+    const commandPatterns = [
+      /^(listar?|list|status|fila|queue|help|ajuda)$/i,
+      /^(selecionar?|escolher?)\s/i,
+    ];
+
+    for (const pattern of commandPatterns) {
+      if (pattern.test(text)) {
+        return false; // Let NLU handle these
+      }
+    }
+
+    try {
+      logger.info(
+        {
+          userId: ctx.from?.id,
+          messageLength: text.length,
+          hasSelectedContainer: !!ctx.session?.selectedContainerId,
+        },
+        'Routing message to Claude API conversation'
+      );
+
+      // Show typing indicator
+      await ctx.sendChatAction('typing');
+
+      // Send to Claude API
+      const response = await anthropicService.chat(text);
+
+      // Send response back to user
+      await ctx.reply(response.text, { parse_mode: 'Markdown' });
+
+      logger.info(
+        {
+          userId: ctx.from?.id,
+          inputTokens: response.inputTokens,
+          outputTokens: response.outputTokens,
+        },
+        'Claude API conversation completed'
+      );
+
+      return true;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      logger.error({ error }, 'Failed to route to Claude API conversation');
+
+      // Don't show API errors to user, fall back to NLU
+      if (errorMessage.includes('ANTHROPIC_API_KEY')) {
+        return false;
+      }
+
+      await ctx.reply(
+        '\u{26A0}\u{FE0F} Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente.'
+      );
+      return true;
+    }
   }
 
   /**
@@ -105,145 +181,6 @@ export class MessageRouter {
   }
 
   /**
-   * Try to route message as Claude instruction
-   * Returns true if message was handled as instruction
-   */
-  private async tryRouteToClaudeInstruction(ctx: BotContext, text: string): Promise<boolean> {
-    const containerId = ctx.session?.selectedContainerId;
-
-    // No container selected
-    if (!containerId) {
-      return false;
-    }
-
-    // Get container details
-    const container = containerRepository.findById(containerId);
-
-    if (!container) {
-      // Container no longer exists - clear selection
-      if (ctx.session) {
-        ctx.session.selectedContainerId = undefined;
-      }
-      await ctx.reply(
-        '\u{26A0}\u{FE0F} O container selecionado não existe mais.\nUse /list para ver os containers disponíveis.'
-      );
-      return true;
-    }
-
-    // Container must be running
-    if (container.status !== 'running') {
-      await ctx.reply(
-        `\u{26A0}\u{FE0F} O container *${this.escapeMarkdown(container.name)}* não está rodando.\n\n` +
-          `Status atual: ${container.status}\n` +
-          `Acesse o painel web para iniciar o container.`,
-        { parse_mode: 'MarkdownV2' }
-      );
-      return true;
-    }
-
-    // Check if message looks like an instruction
-    // Simple heuristic: messages longer than 5 chars that don't match common NLU patterns
-    if (!this.looksLikeInstruction(text)) {
-      return false;
-    }
-
-    // Queue the instruction
-    await this.queueInstructionToClaudeWrapper(ctx, container.id, container.name, container.mode, text);
-    return true;
-  }
-
-  /**
-   * Check if text looks like a Claude instruction vs natural language query
-   */
-  private looksLikeInstruction(text: string): boolean {
-    // Too short to be an instruction
-    if (text.length < 5) {
-      return false;
-    }
-
-    // Common natural language queries that should go to NLU
-    const nluPatterns = [
-      /^(oi|ol[aá]|e\s+a[ií]|tudo\s+bem|como\s+vai)/i,
-      /^(ajuda|help)$/i,
-      /^(status|fila|queue)$/i,
-      /^(listar?|mostrar?|ver)\s*(containers?)?$/i,
-      /^(o\s+que|quais?|como)\s+/i,
-    ];
-
-    for (const pattern of nluPatterns) {
-      if (pattern.test(text)) {
-        return false;
-      }
-    }
-
-    // Looks like an instruction
-    return true;
-  }
-
-  /**
-   * Queue instruction to Claude and notify user
-   */
-  private async queueInstructionToClaudeWrapper(
-    ctx: BotContext,
-    containerId: string,
-    containerName: string,
-    mode: string,
-    instruction: string
-  ): Promise<void> {
-    try {
-      logger.info(
-        {
-          userId: ctx.from?.id,
-          containerId,
-          containerName,
-          mode,
-          instructionLength: instruction.length,
-        },
-        'Queueing instruction from Telegram'
-      );
-
-      // Queue the instruction
-      const jobInfo = await queueInstruction(
-        containerId,
-        instruction,
-        mode as 'interactive' | 'autonomous'
-      );
-
-      // Send confirmation
-      const modeEmoji = mode === 'autonomous' ? '\u{1F916}' : '\u{1F4AC}';
-      const truncatedInstruction = instruction.length > 100
-        ? instruction.slice(0, 100) + '...'
-        : instruction;
-
-      const confirmMessage = [
-        `\u{1F4E4} *Instrução enviada\\!* ${modeEmoji}`,
-        '',
-        `*Container:* ${this.escapeMarkdown(containerName)}`,
-        `*Modo:* ${mode === 'autonomous' ? 'Autônomo' : 'Interativo'}`,
-        `*Job ID:* \`${jobInfo.id}\``,
-        '',
-        `_"${this.escapeMarkdown(truncatedInstruction)}"_`,
-        '',
-        jobInfo.position > 0
-          ? `\u{1F4CB} Posição na fila: ${jobInfo.position + 1}`
-          : '\u{26A1} Executando agora\\.\\.\\.',
-        '',
-        '_Você receberá o resultado quando o Claude terminar\\._',
-      ].join('\n');
-
-      await ctx.reply(confirmMessage, { parse_mode: 'MarkdownV2' });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
-      logger.error({ error, containerId, instruction: instruction.slice(0, 50) }, 'Failed to queue instruction');
-
-      await ctx.reply(
-        `\u{26A0}\u{FE0F} Erro ao enviar instrução:\n${errorMessage}\n\n` +
-          'Tente novamente ou verifique se o container está funcionando.'
-      );
-    }
-  }
-
-  /**
    * Route to conversation handler for NLU
    */
   private async routeToConversation(ctx: BotContext): Promise<void> {
@@ -253,18 +190,6 @@ export class MessageRouter {
       logger.error({ error }, 'Conversation handler failed');
       await ctx.reply('\u{2753} Desculpe, não consegui processar sua mensagem. Use /help para ver os comandos disponíveis.');
     }
-  }
-
-  /**
-   * Escape special characters for MarkdownV2
-   */
-  private escapeMarkdown(text: string): string {
-    const specialChars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!'];
-    let escaped = text;
-    for (const char of specialChars) {
-      escaped = escaped.split(char).join(`\\${char}`);
-    }
-    return escaped;
   }
 }
 

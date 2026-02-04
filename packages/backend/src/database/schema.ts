@@ -24,12 +24,21 @@ export const CONTAINERS_TABLE = `
     volume_name TEXT,
     vscode_port INTEGER,
     vscode_token TEXT,
+    owner_telegram_id INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     started_at DATETIME,
     stopped_at DATETIME
   )
 `;
+
+/**
+ * Migration to add owner_telegram_id column to existing databases
+ */
+export const MIGRATIONS = [
+  // Add owner_telegram_id column if it doesn't exist
+  `ALTER TABLE containers ADD COLUMN owner_telegram_id INTEGER`,
+];
 
 /**
  * Instructions table - instruction queue for containers

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { z } from 'zod'
 import { telegramService } from '../../telegram/telegram.service'
+import { containerRepository } from '../../repositories/container.repository'
 import { apiLogger as logger } from '../../utils/logger'
 import { validateBody } from '../../utils/validation'
 import { strictRateLimiter } from '../../middleware/rate-limit'
@@ -27,6 +28,14 @@ const errorResponse = (error: string, statusCode: number = 500) => ({
  */
 const SendMessageBodySchema = z.object({
   userId: z.number().int().positive('User ID must be a positive integer'),
+  message: z.string().min(1, 'Message cannot be empty').max(4096, 'Message too long'),
+})
+
+/**
+ * Send message from container body schema
+ */
+const SendFromContainerBodySchema = z.object({
+  containerId: z.string().min(1, 'Container ID is required'),
   message: z.string().min(1, 'Message cannot be empty').max(4096, 'Message too long'),
 })
 
@@ -174,6 +183,68 @@ router.post(
           errorMessage,
           500
         )
+      )
+    }
+  }
+)
+
+/**
+ * POST /api/telegram/send-from-container
+ * Send a message to the container owner from inside a container
+ *
+ * This endpoint is called by the telegram-send script inside containers.
+ * It looks up the container's owner (ownerTelegramId) and sends the message.
+ */
+router.post(
+  '/send-from-container',
+  validateBody(SendFromContainerBodySchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { containerId, message } = req.body
+
+      logger.info({ containerId, messageLength: message.length }, 'Sending message from container')
+
+      // Find the container
+      const container = containerRepository.findById(containerId)
+
+      if (!container) {
+        logger.warn({ containerId }, 'Container not found')
+        res.status(404).json(
+          errorResponse('Container not found', 404)
+        )
+        return
+      }
+
+      // Check if container has an owner
+      const ownerTelegramId = container.ownerTelegramId
+
+      if (!ownerTelegramId) {
+        logger.warn({ containerId, containerName: container.name }, 'Container has no Telegram owner')
+        res.status(400).json(
+          errorResponse('Container has no Telegram owner. Use /select in Telegram to set ownership.', 400)
+        )
+        return
+      }
+
+      // Format the message with container context (escape for MarkdownV2)
+      const escapedName = container.name.replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&')
+      const escapedMessage = message.replace(/[_*[\]()~`>#+=|{}.!-]/g, '\\$&')
+      const formattedMessage = `📦 *${escapedName}*\n\n${escapedMessage}`
+
+      // Send the message to the owner
+      await telegramService.sendMessage(ownerTelegramId, formattedMessage, {
+        parseMode: 'MarkdownV2',
+      })
+
+      logger.info({ containerId, ownerTelegramId }, 'Message sent from container to owner')
+
+      res.json(successResponse({ sent: true, to: ownerTelegramId }, 'Message sent to container owner'))
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      logger.error({ error: errorMessage }, 'Failed to send message from container')
+
+      res.status(500).json(
+        errorResponse(errorMessage, 500)
       )
     }
   }

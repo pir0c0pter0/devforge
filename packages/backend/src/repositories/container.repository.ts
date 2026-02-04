@@ -28,6 +28,7 @@ interface ContainerRow {
   volume_name: string | null;
   vscode_port: number | null;
   vscode_token: string | null;
+  owner_telegram_id: number | null;
   created_at: string;
   updated_at: string;
   started_at: string | null;
@@ -55,6 +56,7 @@ export interface ContainerEntity {
   readonly volumeName?: string;
   readonly vscodePort?: number;
   readonly vscodeToken?: string;
+  readonly ownerTelegramId?: number;
   readonly createdAt: Date;
   readonly updatedAt: Date;
   readonly startedAt?: Date;
@@ -94,6 +96,7 @@ export interface UpdateContainerDto {
   readonly volumeName?: string;
   readonly vscodePort?: number;
   readonly vscodeToken?: string;
+  readonly ownerTelegramId?: number;
   readonly startedAt?: Date;
   readonly stoppedAt?: Date;
   readonly diskLimit?: number;
@@ -155,6 +158,7 @@ export class ContainerRepository extends BaseRepository<
       volumeName: row.volume_name || undefined,
       vscodePort: row.vscode_port || undefined,
       vscodeToken: row.vscode_token || undefined,
+      ownerTelegramId: row.owner_telegram_id || undefined,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
       startedAt: row.started_at ? new Date(row.started_at) : undefined,
@@ -345,6 +349,10 @@ export class ContainerRepository extends BaseRepository<
     if (data.memoryLimit !== undefined) {
       updates.push('memory_limit = ?');
       params.push(data.memoryLimit);
+    }
+    if (data.ownerTelegramId !== undefined) {
+      updates.push('owner_telegram_id = ?');
+      params.push(data.ownerTelegramId);
     }
 
     if (updates.length === 0) {

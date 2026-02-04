@@ -198,8 +198,8 @@ export class ContainerService {
       // Prepare Docker image based on template
       const image = this.getImageForTemplate(config.template);
 
-      // Prepare environment variables
-      const env = this.prepareEnvironmentVariables(config);
+      // Prepare environment variables (pass containerId for telegram-send)
+      const env = this.prepareEnvironmentVariables(config, containerId);
 
       // Prepare volume mounts
       const volumes = await this.prepareVolumes(config);
@@ -1400,12 +1400,22 @@ export class ContainerService {
   /**
    * Prepare environment variables
    */
-  private prepareEnvironmentVariables(config: ContainerConfig): string[] {
+  private prepareEnvironmentVariables(config: ContainerConfig, containerId?: string): string[] {
     const env: string[] = [
       'TERM=xterm-256color',
       `CONTAINER_NAME=${config.name}`,
       `CONTAINER_MODE=${config.mode}`,
+      // Linux environment info for Claude
+      'LINUX_DISTRIBUTION=debian',
+      'LINUX_VERSION=12',
+      'PACKAGE_MANAGER=apt-get',
+      'SUDO_NOPASSWD=true',
     ];
+
+    // Add container ID for telegram-send script
+    if (containerId) {
+      env.push(`CONTAINER_ID=${containerId}`);
+    }
 
     if (config.repoUrl) {
       env.push(`REPO_URL=${config.repoUrl}`);
@@ -1484,6 +1494,8 @@ export class ContainerService {
       StorageOpt: {
         size: `${config.diskLimit}m`,
       },
+      // Allow container to reach host services (for telegram-send)
+      ExtraHosts: ['host.docker.internal:host-gateway'],
     };
   }
 
