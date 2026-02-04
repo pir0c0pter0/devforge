@@ -3,6 +3,7 @@ import type {
   CreateContainerRequest,
   Metrics,
   QueueItem,
+  JobDetails,
   ApiResponse,
   Task,
 } from './types'
@@ -131,6 +132,10 @@ class ApiClient {
     return this.request<void>(`/api/claude-daemon/${id}/queue/jobs/${jobId}/cancel`, {
       method: 'POST',
     })
+  }
+
+  async getJobDetails(id: string, jobId: string): Promise<ApiResponse<JobDetails>> {
+    return this.request<JobDetails>(`/api/claude-daemon/${id}/queue/jobs/${jobId}`)
   }
 
   async retryJob(id: string, jobId: string): Promise<ApiResponse<void>> {

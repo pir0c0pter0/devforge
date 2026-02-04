@@ -76,6 +76,32 @@ export interface QueueItem {
   error?: string
 }
 
+export interface JobDetails {
+  id: string
+  instruction: string
+  mode: 'interactive' | 'autonomous'
+  status: QueueItemStatus
+  progress?: {
+    stage: string
+    percentage: number
+    message: string
+    timestamp: string
+  }
+  result?: {
+    stdout: string
+    stderr: string
+    exitCode: number
+    duration: number
+    completedAt: string
+  }
+  error?: string
+  attemptsMade: number
+  maxAttempts: number
+  createdAt: string
+  processedAt?: string
+  finishedAt?: string
+}
+
 export interface ApiResponse<T> {
   success: boolean
   data?: T

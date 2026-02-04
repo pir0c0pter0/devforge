@@ -391,6 +391,11 @@ export const translations = {
       finished: 'Finalizada em',
       failedFetch: 'Erro ao carregar fila',
       failedAdd: 'Erro ao adicionar instrução',
+      loadingDetails: 'Carregando detalhes',
+      fullInstruction: 'Instrução Completa',
+      result: 'Resultado',
+      errorDetails: 'Detalhes do Erro',
+      clickToExpand: 'Clique para ver detalhes',
       status: {
         waiting: 'aguardando',
         pending: 'pendente',
@@ -806,6 +811,11 @@ export const translations = {
       finished: 'Finished at',
       failedFetch: 'Failed to load queue',
       failedAdd: 'Failed to add instruction',
+      loadingDetails: 'Loading details',
+      fullInstruction: 'Full Instruction',
+      result: 'Result',
+      errorDetails: 'Error Details',
+      clickToExpand: 'Click to view details',
       status: {
         waiting: 'waiting',
         pending: 'pending',

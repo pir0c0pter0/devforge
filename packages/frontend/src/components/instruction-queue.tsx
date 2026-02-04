@@ -2,10 +2,11 @@
 
 import React, { useState, useEffect } from 'react'
 import { apiClient } from '@/lib/api-client'
-import type { QueueItem, QueueItemStatus } from '@/lib/types'
+import type { QueueItem, QueueItemStatus, JobDetails } from '@/lib/types'
 import { AnimatedDots } from '@/components/ui/animated-dots'
 import { useI18n } from '@/lib/i18n'
 import clsx from 'clsx'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 
 interface InstructionQueueProps {
   containerId: string
@@ -18,6 +19,8 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
   const [error, setError] = useState<string | null>(null)
   const [newInstruction, setNewInstruction] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [selectedJob, setSelectedJob] = useState<JobDetails | null>(null)
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false)
 
   const fetchQueue = async () => {
     setIsLoading(true)
@@ -56,6 +59,25 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
     }
 
     setIsSubmitting(false)
+  }
+
+  const handleJobClick = async (jobId: string) => {
+    // If clicking same job, close it
+    if (selectedJob?.id === jobId) {
+      setSelectedJob(null)
+      return
+    }
+
+    setIsLoadingDetails(true)
+    const response = await apiClient.getJobDetails(containerId, jobId)
+
+    if (response.success && response.data) {
+      setSelectedJob(response.data)
+    } else {
+      setError(response.error || t.instructionQueue.failedFetch)
+    }
+
+    setIsLoadingDetails(false)
   }
 
   const getStatusColor = (status: QueueItemStatus): string => {
@@ -220,37 +242,124 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
           </div>
         ) : (
           queue.map((item) => (
-            <div key={item.id} className="p-4 hover:bg-terminal-bg transition-colors">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className={clsx('badge', getStatusColor(item.status))}>
-                      <span className="mr-1">{getStatusIcon(item.status)}</span>
-                      {getStatusLabel(item.status)}
-                    </span>
-                    <span className="badge badge-gray text-xs">
-                      {t.modes[item.mode]}
-                    </span>
-                    <span className="text-xs text-terminal-textMuted">
-                      {t.instructionQueue.created} {new Date(item.createdAt).toLocaleTimeString()}
-                    </span>
-                  </div>
-                  <p className="text-sm text-terminal-text font-medium mb-1">
-                    {item.instruction}
-                  </p>
-                  {item.finishedAt && (
-                    <p className="text-xs text-terminal-textMuted">
-                      {t.instructionQueue.finished} {new Date(item.finishedAt).toLocaleTimeString()}
-                      {item.duration && ` (${formatDuration(item.duration)})`}
+            <div key={item.id}>
+              <div
+                className="p-4 hover:bg-terminal-bg transition-colors cursor-pointer"
+                onClick={() => handleJobClick(item.id)}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={clsx('badge', getStatusColor(item.status))}>
+                        <span className="mr-1">{getStatusIcon(item.status)}</span>
+                        {getStatusLabel(item.status)}
+                      </span>
+                      <span className="badge badge-gray text-xs">
+                        {t.modes[item.mode]}
+                      </span>
+                      <span className="text-xs text-terminal-textMuted">
+                        {t.instructionQueue.created} {new Date(item.createdAt).toLocaleTimeString()}
+                      </span>
+                    </div>
+                    <p className="text-sm text-terminal-text font-medium mb-1">
+                      {item.instruction}
                     </p>
-                  )}
-                  {item.error && (
-                    <div className="mt-2 p-2 bg-terminal-red/10 rounded text-xs text-terminal-red">
-                      {item.error}
+                    {item.finishedAt && (
+                      <p className="text-xs text-terminal-textMuted">
+                        {t.instructionQueue.finished} {new Date(item.finishedAt).toLocaleTimeString()}
+                        {item.duration && ` (${formatDuration(item.duration)})`}
+                      </p>
+                    )}
+                    {item.error && (
+                      <div className="mt-2 p-2 bg-terminal-red/10 rounded text-xs text-terminal-red">
+                        {item.error}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-shrink-0 text-terminal-textMuted">
+                    {selectedJob?.id === item.id ? (
+                      <ChevronUp className="w-5 h-5" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5" />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Expanded details */}
+              {selectedJob?.id === item.id && (
+                <div className="px-4 pb-4 bg-terminal-bgLight border-t border-terminal-border">
+                  {isLoadingDetails ? (
+                    <div className="py-4 text-center">
+                      <AnimatedDots text={t.instructionQueue.loadingDetails || 'Carregando detalhes'} />
+                    </div>
+                  ) : (
+                    <div className="py-3 space-y-3">
+                      {/* Full instruction */}
+                      <div>
+                        <h4 className="text-xs font-semibold text-terminal-textMuted uppercase mb-1">
+                          {t.instructionQueue.fullInstruction || 'Instrução Completa'}
+                        </h4>
+                        <pre className="text-sm text-terminal-text bg-terminal-bg p-2 rounded overflow-x-auto whitespace-pre-wrap">
+                          {selectedJob.instruction}
+                        </pre>
+                      </div>
+
+                      {/* Result */}
+                      {selectedJob.result && (
+                        <div>
+                          <h4 className="text-xs font-semibold text-terminal-textMuted uppercase mb-1">
+                            {t.instructionQueue.result || 'Resultado'}
+                          </h4>
+                          {selectedJob.result.stdout && (
+                            <div className="mb-2">
+                              <span className="text-xs text-terminal-green">stdout:</span>
+                              <pre className="text-sm text-terminal-text bg-terminal-bg p-2 rounded overflow-x-auto whitespace-pre-wrap max-h-60 overflow-y-auto">
+                                {selectedJob.result.stdout}
+                              </pre>
+                            </div>
+                          )}
+                          {selectedJob.result.stderr && (
+                            <div>
+                              <span className="text-xs text-terminal-yellow">stderr:</span>
+                              <pre className="text-sm text-terminal-yellow bg-terminal-bg p-2 rounded overflow-x-auto whitespace-pre-wrap max-h-40 overflow-y-auto">
+                                {selectedJob.result.stderr}
+                              </pre>
+                            </div>
+                          )}
+                          <div className="flex gap-4 mt-2 text-xs text-terminal-textMuted">
+                            <span>Exit code: <span className={selectedJob.result.exitCode === 0 ? 'text-terminal-green' : 'text-terminal-red'}>{selectedJob.result.exitCode}</span></span>
+                            <span>Duração: {formatDuration(selectedJob.result.duration)}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Error details */}
+                      {selectedJob.error && (
+                        <div>
+                          <h4 className="text-xs font-semibold text-terminal-red uppercase mb-1">
+                            {t.instructionQueue.errorDetails || 'Detalhes do Erro'}
+                          </h4>
+                          <pre className="text-sm text-terminal-red bg-terminal-red/10 p-2 rounded overflow-x-auto whitespace-pre-wrap">
+                            {selectedJob.error}
+                          </pre>
+                        </div>
+                      )}
+
+                      {/* Metadata */}
+                      <div className="flex flex-wrap gap-4 text-xs text-terminal-textMuted pt-2 border-t border-terminal-border">
+                        <span>Tentativas: {selectedJob.attemptsMade}/{selectedJob.maxAttempts}</span>
+                        {selectedJob.processedAt && (
+                          <span>Processado: {new Date(selectedJob.processedAt).toLocaleString()}</span>
+                        )}
+                        {selectedJob.finishedAt && (
+                          <span>Finalizado: {new Date(selectedJob.finishedAt).toLocaleString()}</span>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
-              </div>
+              )}
             </div>
           ))
         )}

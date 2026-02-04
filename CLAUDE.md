@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções
 
-## Versão Atual: 0.0.52-alpha
+## Versão Atual: 0.0.53-alpha
 
 ## Estrutura do Projeto
 
@@ -779,6 +779,14 @@ ALLOWED_ORIGINS=https://myapp.com,https://api.myapp.com
 ```
 
 ## Histórico de Versões
+
+### v0.0.53-alpha
+- Feat: **Modo autônomo real** com flag `--yes` para não pedir confirmação
+- Feat: **Visualização de resultados** na fila de instruções (clique para expandir)
+- Feat: Detalhes do job: instrução completa, stdout, stderr, exit code, duração
+- Feat: Modo do container agora é consultado do repositório
+- Feat: Tipo `JobDetails` e método `getJobDetails` no api-client
+- Feat: Novas traduções: loadingDetails, fullInstruction, result, errorDetails
 
 ### v0.0.52-alpha
 - Feat: **Indicador visual de "pensando"** no Claude Chat

@@ -21,6 +21,7 @@ interface ActiveSession {
   dockerId: string
   sessionId: string
   isProcessing: boolean
+  mode: 'interactive' | 'autonomous'
 }
 
 /**
@@ -119,14 +120,21 @@ class ClaudeDaemonService extends EventEmitter {
         instructionCount: 0,
       }
 
-      // Resolve dockerId from internal containerId if not provided
+      // Resolve dockerId and mode from container repository
       let resolvedDockerId = dockerId
-      if (!resolvedDockerId) {
-        const containerEntity = containerRepository.findById(containerId)
-        if (!containerEntity || !containerEntity.dockerId) {
-          throw new Error(`Container ${containerId} not found or has no Docker ID`)
+      let containerMode: 'interactive' | 'autonomous' = 'interactive'
+
+      const containerEntity = containerRepository.findById(containerId)
+      if (containerEntity) {
+        if (!resolvedDockerId) {
+          resolvedDockerId = containerEntity.dockerId
         }
-        resolvedDockerId = containerEntity.dockerId
+        containerMode = containerEntity.mode as 'interactive' | 'autonomous'
+        logger.info({ containerId, mode: containerMode }, 'Container mode detected')
+      }
+
+      if (!resolvedDockerId) {
+        throw new Error(`Container ${containerId} not found or has no Docker ID`)
       }
 
       // Verify container is running
@@ -145,6 +153,7 @@ class ClaudeDaemonService extends EventEmitter {
         dockerId: resolvedDockerId,
         sessionId,
         isProcessing: false,
+        mode: containerMode,
       }
 
       // Update state to running
@@ -216,6 +225,12 @@ class ClaudeDaemonService extends EventEmitter {
     try {
       // Build command flags
       const flags = [...CLAUDE_BASE_FLAGS]
+
+      // For autonomous mode, add --yes to auto-accept all prompts
+      if (session.mode === 'autonomous') {
+        flags.push('--yes')
+        logger.debug({ containerId }, 'Autonomous mode: adding --yes flag')
+      }
 
       // First instruction uses --session-id, subsequent use --resume
       if (session.state.instructionCount === 0) {
