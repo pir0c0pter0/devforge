@@ -12,7 +12,7 @@ import type {
 } from './telegram.types'
 import { messageRouter } from './message.router'
 import { callbackHandler } from './callback.handler'
-import { initializeCommands, getCommandMenuDefinitions } from './commands'
+import { initializeCommands, getCommandMenuDefinitions, commandRegistry } from './commands'
 
 /**
  * Telegram service logger
@@ -172,7 +172,8 @@ class TelegramService implements ITelegramService {
         await next()
       })
 
-      // Initialize command system
+      // Clear and re-initialize command system (for restart support)
+      commandRegistry.clear()
       initializeCommands()
 
       // Register stored commands
