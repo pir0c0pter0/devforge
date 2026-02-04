@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções
 
-## Versão Atual: 0.0.53-alpha
+## Versão Atual: 0.0.57-alpha
 
 ## Estrutura do Projeto
 
@@ -219,7 +219,7 @@ O backend usa Socket.io com namespaces separados para diferentes funcionalidades
 |-----------|-----------|---------|
 | `/metrics` | Métricas em tempo real | `subscribe:container`, `container:metrics` |
 | `/tasks` | Progresso de tarefas | `task:subscribe`, `task:event` |
-| `/queue` | Fila de instruções | `instruction:*` |
+| `/queue` | Fila de instruções em tempo real | `instruction:pending`, `instruction:started`, `instruction:completed`, `instruction:failed` |
 | `/logs` | Logs do container | `log` |
 | `/creation` | Progresso de criação | `container:creation:progress` |
 | `/terminal` | Terminal interativo | `terminal:*` |
@@ -251,6 +251,38 @@ useMetrics(containerId) // Inscreve automaticamente se container running
 // packages/frontend/src/lib/websocket.ts
 metricsWsClient.connect()  // Conecta ao namespace /metrics
 metricsWsClient.subscribeToContainer(containerId)
+```
+
+### Fila de Instruções em Tempo Real (v0.0.57+)
+
+O componente `InstructionQueue` se inscreve no namespace `/queue` para atualizações em tempo real:
+
+```typescript
+// packages/frontend/src/components/instruction-queue.tsx
+const socket = io(`${WS_URL}/queue`, { transports: ['websocket', 'polling'] })
+
+socket.on('connect', () => {
+  socket.emit('subscribe:container', containerId)
+})
+
+// Eventos que disparam refresh da fila
+socket.on('instruction:pending', () => fetchQueue())
+socket.on('instruction:started', () => fetchQueue())
+socket.on('instruction:completed', () => fetchQueue())
+socket.on('instruction:failed', () => fetchQueue())
+```
+
+**Parser de Resposta do Claude:**
+
+O componente parseia o JSON stream do Claude para exibir a resposta de forma limpa:
+
+```typescript
+// Extrai texto da resposta, custo e duração
+const parseClaudeOutput = (stdout: string) => {
+  // Procura por type: 'result' ou type: 'assistant'
+  // Extrai: result (texto), total_cost_usd, duration_ms
+  return { text, cost, duration }
+}
 ```
 
 ### Tipos Compartilhados
@@ -780,8 +812,34 @@ ALLOWED_ORIGINS=https://myapp.com,https://api.myapp.com
 
 ## Histórico de Versões
 
+### v0.0.57-alpha
+- Feat: **Fila de instruções com WebSocket em tempo real**
+- Feat: Subscription automática ao namespace `/queue` para atualizações live
+- Feat: Atualização automática quando jobs mudam de estado (pending→active→completed)
+- Feat: Parser inteligente para extrair resposta limpa do Claude stream-json
+- Feat: Exibe texto da resposta, custo ($) e duração da API de forma legível
+- Feat: Fallback para JSON bruto se parsing falhar
+- Fix: Não precisa mais dar F5 para ver resultado
+
+### v0.0.56-alpha
+- Fix: **Removido flag `--yes` inexistente** do Claude Code CLI
+- Fix: `--dangerously-skip-permissions` já cobre modo autônomo
+- Fix: Erro "unknown option '--yes'" corrigido
+
+### v0.0.55-alpha
+- Feat: **Captura de stdout/stderr do Claude para resultado do job**
+- Feat: `sendInstruction` agora retorna Promise com output capturado
+- Feat: Worker aguarda conclusão e salva output no resultado do job
+- Feat: Clique na fila de instruções agora mostra resultado real
+- Refactor: Arquitetura de `sendInstruction` alterada de fire-and-forget para Promise-based
+
+### v0.0.54-alpha
+- Fix: **Modo do container usado na fila** (não mais do frontend)
+- Fix: Backend busca mode do `containerRepository` ao criar job
+- Fix: Containers autônomos agora mostram "autônomo" na fila corretamente
+- Fix: Parâmetro `mode` do frontend é ignorado (fonte da verdade é o backend)
+
 ### v0.0.53-alpha
-- Feat: **Modo autônomo real** com flag `--yes` para não pedir confirmação
 - Feat: **Visualização de resultados** na fila de instruções (clique para expandir)
 - Feat: Detalhes do job: instrução completa, stdout, stderr, exit code, duração
 - Feat: Modo do container agora é consultado do repositório
