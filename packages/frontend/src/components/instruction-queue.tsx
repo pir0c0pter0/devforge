@@ -252,14 +252,13 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
 
   // Parse Claude stream-json output to extract the complete response
   // Claude Code outputs multiple JSON events: assistant, tool_use, tool_result, result
-  // We need to collect all relevant pieces for a complete picture
+  // We collect ALL content to ensure nothing is lost, especially for complex tasks like multi-perspective
   const parseClaudeOutput = (stdout: string): { text: string; cost?: string; duration?: string; toolsUsed?: string[] } | null => {
     if (!stdout) return null
 
     try {
       const lines = stdout.split('\n').filter(l => l.trim())
-      const assistantMessages: string[] = []
-      const toolResults: { name: string; result: string }[] = []
+      const allContent: string[] = []
       let finalResult = ''
       let cost = ''
       let duration = ''
@@ -269,17 +268,17 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
         try {
           const parsed = JSON.parse(line)
 
-          // Extract assistant messages (may have multiple)
+          // Extract assistant messages - capture ALL of them
           if (parsed.type === 'assistant' && parsed.message?.content) {
             const content = parsed.message.content
             if (Array.isArray(content)) {
               for (const item of content) {
                 if (item.type === 'text' && item.text?.trim()) {
-                  assistantMessages.push(item.text)
+                  allContent.push(item.text.trim())
                 }
               }
             } else if (typeof content === 'string' && content.trim()) {
-              assistantMessages.push(content)
+              allContent.push(content.trim())
             }
           }
 
@@ -287,24 +286,6 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
           if (parsed.type === 'tool_use' && parsed.name) {
             if (!toolsUsed.includes(parsed.name)) {
               toolsUsed.push(parsed.name)
-            }
-          }
-
-          // Extract tool results (useful for seeing what was read/analyzed)
-          if (parsed.type === 'tool_result' && parsed.content) {
-            const toolName = parsed.tool_use_id || 'tool'
-            let resultContent = ''
-            if (Array.isArray(parsed.content)) {
-              for (const item of parsed.content) {
-                if (item.type === 'text') {
-                  resultContent += item.text
-                }
-              }
-            } else if (typeof parsed.content === 'string') {
-              resultContent = parsed.content
-            }
-            if (resultContent.trim()) {
-              toolResults.push({ name: toolName, result: resultContent.substring(0, 500) })
             }
           }
 
@@ -325,38 +306,33 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
         }
       }
 
-      // Build complete response
-      // Priority: final result > assistant messages concatenated
+      // Build complete response - ALWAYS prefer assistant messages (actual conversation)
+      // The finalResult is often just a short summary
       let completeText = ''
 
-      // If there's a final result, use it as the main answer
-      if (finalResult) {
+      // Remove exact duplicates but keep order
+      const seen = new Set<string>()
+      const uniqueContent = allContent.filter(msg => {
+        if (seen.has(msg)) return false
+        seen.add(msg)
+        return true
+      })
+
+      // If we have assistant messages, use them as the main content
+      if (uniqueContent.length > 0) {
+        completeText = uniqueContent.join('\n\n')
+      }
+
+      // If no assistant messages but have a result, use that
+      if (!completeText && finalResult) {
         completeText = finalResult
       }
 
-      // If assistant messages provide more context, include them
-      // Filter out very short or duplicate messages
-      const uniqueMessages = assistantMessages.filter((msg, index, arr) => {
-        const trimmed = msg.trim()
-        // Skip very short messages that are likely just acknowledgments
-        if (trimmed.length < 20) return false
-        // Skip if it's a substring of another message
-        return !arr.some((other, otherIndex) =>
-          otherIndex !== index && other.includes(trimmed)
-        )
-      })
-
-      // If no final result but we have assistant messages, use them
-      if (!completeText && uniqueMessages.length > 0) {
-        completeText = uniqueMessages.join('\n\n---\n\n')
-      }
-
-      // If final result is short but we have substantial assistant content, combine them
-      if (finalResult && uniqueMessages.length > 0 && finalResult.length < 200) {
-        // Check if assistant messages add value
-        const combinedAssistant = uniqueMessages.join('\n\n')
-        if (combinedAssistant.length > finalResult.length * 2) {
-          completeText = combinedAssistant + '\n\n---\n\n**Resumo:** ' + finalResult
+      // If both exist and result adds value (not just repeating), append it
+      if (completeText && finalResult && !completeText.includes(finalResult)) {
+        // Only add if result provides additional info
+        if (finalResult.length > 50) {
+          completeText = completeText + '\n\n---\n\n' + finalResult
         }
       }
 
