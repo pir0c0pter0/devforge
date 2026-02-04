@@ -20,6 +20,7 @@ import { containerRepository } from '../repositories'
 import { terminalService } from './terminal.service'
 import { claudeDaemonService } from './claude-daemon.service'
 import { containerService } from './container.service'
+import { healthMonitorService } from './health-monitor.service'
 
 /**
  * Socket.io server instance
@@ -78,6 +79,9 @@ export const initializeWebSocket = (
   setupTasksNamespace()
   setupTerminalNamespace()
   setupClaudeDaemonNamespace()
+
+  // Initialize health monitor event emitter
+  healthMonitorService.setEventEmitter(emitClaudeEvent)
 
   console.info('[WebSocket] Server initialized successfully')
 
@@ -796,6 +800,18 @@ export const emitContainerCreationProgress = (
 export const emitTaskEvent = (taskId: string, payload: TaskEventPayload): void => {
   if (!io) return
   io.of('/tasks').to(`task:${taskId}`).emit('task:event', payload)
+}
+
+/**
+ * Emit Claude daemon health event to subscribers
+ * Used by health-monitor.service.ts to notify frontend of health status
+ */
+export const emitClaudeEvent = (
+  containerId: string,
+  event: { type: string; containerId: string; status?: string; message: string; timestamp: string; attempts?: number; lastError?: string }
+): void => {
+  if (!io) return
+  io.of('/claude-daemon').to(`claude:${containerId}`).emit('health:event' as any, event)
 }
 
 /**
