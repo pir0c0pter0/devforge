@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções
 
-## Versão Atual: 0.0.34-alpha
+## Versão Atual: 0.0.36-alpha
 
 ## Estrutura do Projeto
 
@@ -698,6 +698,23 @@ ALLOWED_ORIGINS=https://myapp.com,https://api.myapp.com
 ```
 
 ## Histórico de Versões
+
+### v0.0.36-alpha
+- Feat: **Indicadores visuais de status melhorados** com ícones animados
+- Feat: Novo componente `StatusIndicator` com animações por status
+- Feat: Running: engrenagem girando com pulse verde
+- Feat: Stopped/Exited: ícone pause (amarelo para exited = precisa atenção)
+- Feat: Creating/Restarting: spinner amarelo
+- Feat: Error: exclamação vermelha com pulse
+- Feat: Paused: triângulo de atenção amarelo
+- Feat: Suporte a novos status: `exited`, `paused`, `restarting`
+- Feat: Traduções atualizadas PT-BR e EN para novos status
+
+### v0.0.35-alpha
+- Fix: Claude Chat movido de aba principal para sub-aba dentro de Terminal
+- Feat: Sub-tabs Shell/Claude Code na aba Terminal
+- Fix: Navegação do botão Shell não atualizava activeTab quando já na página
+- Fix: useEffect para sincronizar activeTab com searchParams da URL
 
 ### v0.0.34-alpha
 - Feat: **Claude Code Daemon** - Interface web para Claude Code autônomo (Issue #5)
