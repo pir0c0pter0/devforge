@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { io, Socket } from 'socket.io-client'
+import { useClaudeChatStore } from '@/stores/claude-chat.store'
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
 
@@ -224,17 +225,30 @@ function parseClaudeEventToMessage(event: ClaudeEvent, messageId: string): Claud
 /**
  * Hook for managing WebSocket connection to the /claude-daemon namespace
  * for real-time Claude Code communication.
+ *
+ * Messages are persisted in Zustand store to survive tab switches.
  */
 export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemonReturn {
   const { containerId, onMessage, onStatusChange, onError } = options
 
   const [isConnected, setIsConnected] = useState(false)
-  const [daemonStatus, setDaemonStatus] = useState<DaemonState | null>(null)
-  const [messages, setMessages] = useState<ClaudeMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
+  // Use Zustand store for persistent state
+  const {
+    messagesByContainer,
+    daemonStatusByContainer,
+    addMessage,
+    clearMessages: storeClearMessages,
+    setDaemonStatus,
+    getNextMessageId,
+  } = useClaudeChatStore()
+
+  // Get messages and daemon status for this container from store
+  const messages = messagesByContainer[containerId] || []
+  const daemonStatus = daemonStatusByContainer[containerId] || null
+
   const socketRef = useRef<Socket | null>(null)
-  const messageIdCounterRef = useRef(0)
 
   // Store callbacks in refs to avoid recreating socket handlers
   const onMessageRef = useRef(onMessage)
@@ -246,12 +260,6 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
     onStatusChangeRef.current = onStatusChange
     onErrorRef.current = onError
   }, [onMessage, onStatusChange, onError])
-
-  // Generate unique message ID
-  const generateMessageId = useCallback(() => {
-    messageIdCounterRef.current += 1
-    return `msg-${Date.now()}-${messageIdCounterRef.current}`
-  }, [])
 
   // Initialize WebSocket connection
   useEffect(() => {
@@ -295,18 +303,18 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
     // Handle daemon status updates
     socket.on('daemon:status', (state: DaemonState) => {
       console.log('[ClaudeDaemon] Daemon status:', state)
-      setDaemonStatus(state)
+      setDaemonStatus(containerId, state)
       onStatusChangeRef.current?.(state)
     })
 
     // Handle Claude output events
     socket.on('claude:output', (event: ClaudeEvent) => {
       console.log('[ClaudeDaemon] Claude output:', event)
-      const messageId = generateMessageId()
+      const messageId = getNextMessageId(containerId)
       const message = parseClaudeEventToMessage(event, messageId)
 
       if (message) {
-        setMessages((prev) => [...prev, message])
+        addMessage(containerId, message)
         onMessageRef.current?.(message)
       }
 
@@ -345,7 +353,7 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
         socketRef.current = null
       }
     }
-  }, [containerId, generateMessageId])
+  }, [containerId, addMessage, setDaemonStatus, getNextMessageId])
 
   // Send instruction to Claude
   const sendInstruction = useCallback(
@@ -364,15 +372,15 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
       console.log('[ClaudeDaemon] Sending instruction:', instruction)
       setIsLoading(true)
 
-      // Add user message to local state immediately
-      const messageId = generateMessageId()
+      // Add user message to store immediately
+      const messageId = getNextMessageId(containerId)
       const userMessage: ClaudeMessage = {
         id: messageId,
         type: 'user',
         content: instruction,
         timestamp: new Date(),
       }
-      setMessages((prev) => [...prev, userMessage])
+      addMessage(containerId, userMessage)
       onMessageRef.current?.(userMessage)
 
       socketRef.current.emit('instruction:send', {
@@ -380,7 +388,7 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
         instruction,
       })
     },
-    [containerId, generateMessageId]
+    [containerId, addMessage, getNextMessageId]
   )
 
   // Start the daemon
@@ -407,11 +415,10 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
     socketRef.current.emit('daemon:stop', { containerId })
   }, [containerId])
 
-  // Clear all messages
+  // Clear all messages (from store)
   const clearMessages = useCallback(() => {
-    setMessages([])
-    messageIdCounterRef.current = 0
-  }, [])
+    storeClearMessages(containerId)
+  }, [containerId, storeClearMessages])
 
   return {
     isConnected,

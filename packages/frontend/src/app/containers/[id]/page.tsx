@@ -499,63 +499,62 @@ export default function ContainerDetailPage() {
         </div>
       )}
 
-      {activeTab === 'terminal' && (
-        <div className="card overflow-hidden">
-          {container.status === 'running' ? (
-            <>
-              {/* Sub-tabs for Terminal */}
-              <div className="flex border-b border-terminal-border bg-terminal-bg">
-                <button
-                  onClick={() => setTerminalSubTab('shell')}
-                  className={clsx(
-                    'flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors border-b-2',
-                    terminalSubTab === 'shell'
-                      ? 'border-terminal-cyan text-terminal-cyan bg-terminal-bgLight'
-                      : 'border-transparent text-terminal-textMuted hover:text-terminal-text hover:bg-terminal-bgLight/50'
-                  )}
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                  {t.containerDetail.subTabs.shell}
-                </button>
-                <button
-                  onClick={() => setTerminalSubTab('claude')}
-                  className={clsx(
-                    'flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors border-b-2',
-                    terminalSubTab === 'claude'
-                      ? 'border-terminal-cyan text-terminal-cyan bg-terminal-bgLight'
-                      : 'border-transparent text-terminal-textMuted hover:text-terminal-text hover:bg-terminal-bgLight/50'
-                  )}
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                  </svg>
-                  {t.containerDetail.subTabs.claudeCode}
-                </button>
-              </div>
-
-              {terminalSubTab === 'shell' && (
-                <InteractiveTerminal containerId={container.id} onClose={() => setActiveTab('overview')} className="h-[500px]" />
-              )}
-
-              {terminalSubTab === 'claude' && (
-                <div className="h-[500px]">
-                  <ClaudeChat containerId={container.id} />
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="p-6 text-center">
-              <svg className="mx-auto h-12 w-12 text-terminal-textMuted mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              <h3 className="text-lg font-semibold text-terminal-text mb-2">{t.containerDetail.terminalUnavailable}</h3>
-              <p className="text-sm text-terminal-textMuted">{t.containerDetail.startContainerForTerminal}</p>
+      {/* Terminal Tab - Use CSS hidden to preserve state */}
+      <div className={clsx('card overflow-hidden', activeTab !== 'terminal' && 'hidden')}>
+        {container.status === 'running' ? (
+          <>
+            {/* Sub-tabs for Terminal */}
+            <div className="flex border-b border-terminal-border bg-terminal-bg">
+              <button
+                onClick={() => setTerminalSubTab('shell')}
+                className={clsx(
+                  'flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors border-b-2',
+                  terminalSubTab === 'shell'
+                    ? 'border-terminal-cyan text-terminal-cyan bg-terminal-bgLight'
+                    : 'border-transparent text-terminal-textMuted hover:text-terminal-text hover:bg-terminal-bgLight/50'
+                )}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                {t.containerDetail.subTabs.shell}
+              </button>
+              <button
+                onClick={() => setTerminalSubTab('claude')}
+                className={clsx(
+                  'flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors border-b-2',
+                  terminalSubTab === 'claude'
+                    ? 'border-terminal-cyan text-terminal-cyan bg-terminal-bgLight'
+                    : 'border-transparent text-terminal-textMuted hover:text-terminal-text hover:bg-terminal-bgLight/50'
+                )}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                {t.containerDetail.subTabs.claudeCode}
+              </button>
             </div>
-          )}
-        </div>
-      )}
+
+            {/* Shell - Use CSS hidden to preserve terminal state */}
+            <div className={clsx(terminalSubTab !== 'shell' && 'hidden')}>
+              <InteractiveTerminal containerId={container.id} onClose={() => setActiveTab('overview')} className="h-[500px]" />
+            </div>
+
+            {/* Claude Chat - Use CSS hidden to preserve messages */}
+            <div className={clsx('h-[500px]', terminalSubTab !== 'claude' && 'hidden')}>
+              <ClaudeChat containerId={container.id} />
+            </div>
+          </>
+        ) : (
+          <div className="p-6 text-center">
+            <svg className="mx-auto h-12 w-12 text-terminal-textMuted mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <h3 className="text-lg font-semibold text-terminal-text mb-2">{t.containerDetail.terminalUnavailable}</h3>
+            <p className="text-sm text-terminal-textMuted">{t.containerDetail.startContainerForTerminal}</p>
+          </div>
+        )}
+      </div>
 
       {activeTab === 'settings' && (
         <div className="space-y-6">
