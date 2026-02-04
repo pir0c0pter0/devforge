@@ -63,14 +63,16 @@ export interface Instruction {
   error?: string
 }
 
+export type QueueItemStatus = 'waiting' | 'active' | 'completed' | 'failed' | 'delayed' | 'dead-letter' | 'pending' | 'running'
+
 export interface QueueItem {
   id: string
   instruction: string
-  status: 'pending' | 'running' | 'completed' | 'failed'
-  addedAt: string
-  startedAt?: string
-  completedAt?: string
-  result?: string
+  mode: 'interactive' | 'autonomous'
+  status: QueueItemStatus
+  createdAt: string
+  finishedAt?: string
+  duration?: number
   error?: string
 }
 

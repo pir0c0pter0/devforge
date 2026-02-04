@@ -252,6 +252,30 @@ export const translations = {
       },
     },
 
+    // Instruction Queue
+    instructionQueue: {
+      title: 'Fila de Instruções',
+      loading: 'Carregando fila',
+      empty: 'Nenhuma instrução na fila',
+      placeholder: 'Digite uma instrução...',
+      add: 'Adicionar',
+      adding: 'Adicionando',
+      created: 'Criada em',
+      finished: 'Finalizada em',
+      failedFetch: 'Erro ao carregar fila',
+      failedAdd: 'Erro ao adicionar instrução',
+      status: {
+        waiting: 'aguardando',
+        pending: 'pendente',
+        active: 'ativo',
+        running: 'executando',
+        completed: 'concluído',
+        failed: 'falhou',
+        delayed: 'atrasado',
+        deadLetter: 'falha permanente',
+      },
+    },
+
     // Common
     common: {
       loading: 'Carregando',
@@ -513,6 +537,30 @@ export const translations = {
         subtitle: 'Select interface language',
         portuguese: 'Português (Brasil)',
         english: 'English',
+      },
+    },
+
+    // Instruction Queue
+    instructionQueue: {
+      title: 'Instruction Queue',
+      loading: 'Loading queue',
+      empty: 'No instructions in queue',
+      placeholder: 'Enter an instruction...',
+      add: 'Add',
+      adding: 'Adding',
+      created: 'Created at',
+      finished: 'Finished at',
+      failedFetch: 'Failed to load queue',
+      failedAdd: 'Failed to add instruction',
+      status: {
+        waiting: 'waiting',
+        pending: 'pending',
+        active: 'active',
+        running: 'running',
+        completed: 'completed',
+        failed: 'failed',
+        delayed: 'delayed',
+        deadLetter: 'permanent failure',
       },
     },
 

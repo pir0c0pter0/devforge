@@ -102,16 +102,40 @@ class ApiClient {
   }
 
   async getQueue(id: string): Promise<ApiResponse<QueueItem[]>> {
-    return this.request<QueueItem[]>(`/api/containers/${id}/queue`)
+    return this.request<QueueItem[]>(`/api/claude-daemon/${id}/queue/history`)
   }
 
   async addToQueue(
     id: string,
-    instruction: string
+    instruction: string,
+    mode: 'interactive' | 'autonomous' = 'interactive'
   ): Promise<ApiResponse<QueueItem>> {
-    return this.request<QueueItem>(`/api/containers/${id}/queue`, {
+    return this.request<QueueItem>(`/api/claude-daemon/${id}/instruction`, {
       method: 'POST',
-      body: JSON.stringify({ instruction }),
+      body: JSON.stringify({ instruction, mode }),
+    })
+  }
+
+  async getQueueStatus(id: string): Promise<ApiResponse<{
+    waiting: number
+    active: number
+    completed: number
+    failed: number
+    delayed: number
+    isPaused: boolean
+  }>> {
+    return this.request(`/api/claude-daemon/${id}/queue`)
+  }
+
+  async cancelJob(id: string, jobId: string): Promise<ApiResponse<void>> {
+    return this.request<void>(`/api/claude-daemon/${id}/queue/jobs/${jobId}/cancel`, {
+      method: 'POST',
+    })
+  }
+
+  async retryJob(id: string, jobId: string): Promise<ApiResponse<void>> {
+    return this.request<void>(`/api/claude-daemon/${id}/queue/jobs/${jobId}/retry`, {
+      method: 'POST',
     })
   }
 
