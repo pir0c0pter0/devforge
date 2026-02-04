@@ -23,7 +23,8 @@ const ClaudeChat = dynamic(
   { ssr: false, loading: () => <div className="card p-6 text-center">Loading Claude Chat...</div> }
 )
 
-type TabType = 'overview' | 'metrics' | 'instructions' | 'logs' | 'terminal' | 'claude' | 'settings'
+type TabType = 'overview' | 'metrics' | 'instructions' | 'logs' | 'terminal' | 'settings'
+type TerminalSubTab = 'shell' | 'claude'
 
 interface TabConfig {
   id: TabType
@@ -103,20 +104,6 @@ const tabs: TabConfig[] = [
     ),
   },
   {
-    id: 'claude',
-    name: 'Claude',
-    icon: (
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-        />
-      </svg>
-    ),
-  },
-  {
     id: 'settings',
     name: 'Settings',
     icon: (
@@ -147,8 +134,17 @@ export default function ContainerDetailPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<TabType>(initialTab)
+  const [terminalSubTab, setTerminalSubTab] = useState<TerminalSubTab>('shell')
   const [vscodeUrl, setVscodeUrl] = useState<string | null>(null)
   const { updateContainer } = useContainerStore()
+
+  // Sync activeTab with searchParams when URL changes
+  useEffect(() => {
+    const tabFromUrl = searchParams.get('tab') as TabType | null
+    if (tabFromUrl && tabs.some(t => t.id === tabFromUrl)) {
+      setActiveTab(tabFromUrl)
+    }
+  }, [searchParams])
 
   useMetrics(containerId)
 
@@ -658,11 +654,54 @@ export default function ContainerDetailPage() {
       {activeTab === 'terminal' && (
         <div className="card overflow-hidden">
           {container.status === 'running' ? (
-            <InteractiveTerminal
-              containerId={container.id}
-              onClose={() => setActiveTab('overview')}
-              className="h-[500px]"
-            />
+            <>
+              {/* Sub-tabs for Terminal */}
+              <div className="flex border-b border-gray-200 dark:border-terminal-border bg-gray-50 dark:bg-terminal-bg">
+                <button
+                  onClick={() => setTerminalSubTab('shell')}
+                  className={clsx(
+                    'flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors border-b-2',
+                    terminalSubTab === 'shell'
+                      ? 'border-terminal-cyan text-terminal-cyan bg-terminal-surface'
+                      : 'border-transparent text-terminal-textMuted hover:text-terminal-text hover:bg-terminal-surface/50'
+                  )}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  Shell
+                </button>
+                <button
+                  onClick={() => setTerminalSubTab('claude')}
+                  className={clsx(
+                    'flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors border-b-2',
+                    terminalSubTab === 'claude'
+                      ? 'border-terminal-cyan text-terminal-cyan bg-terminal-surface'
+                      : 'border-transparent text-terminal-textMuted hover:text-terminal-text hover:bg-terminal-surface/50'
+                  )}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  Claude Code
+                </button>
+              </div>
+
+              {/* Sub-tab content */}
+              {terminalSubTab === 'shell' && (
+                <InteractiveTerminal
+                  containerId={container.id}
+                  onClose={() => setActiveTab('overview')}
+                  className="h-[500px]"
+                />
+              )}
+
+              {terminalSubTab === 'claude' && (
+                <div className="h-[500px]">
+                  <ClaudeChat containerId={container.id} />
+                </div>
+              )}
+            </>
           ) : (
             <div className="p-6 text-center">
               <svg
@@ -683,36 +722,6 @@ export default function ContainerDetailPage() {
               </h3>
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 Start the container to access the terminal.
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {activeTab === 'claude' && (
-        <div className="card overflow-hidden h-[600px]">
-          {container.status === 'running' ? (
-            <ClaudeChat containerId={container.id} />
-          ) : (
-            <div className="p-6 text-center h-full flex flex-col items-center justify-center">
-              <svg
-                className="mx-auto h-12 w-12 text-gray-400 mb-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                />
-              </svg>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                Claude Code Indisponível
-              </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Inicie o container para acessar o Claude Code.
               </p>
             </div>
           )}
