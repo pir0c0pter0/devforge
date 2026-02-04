@@ -79,3 +79,11 @@ export interface ContainerWithMetrics extends Container {
   /** Number of pending instructions in queue */
   queueLength: number
 }
+
+/**
+ * VS Code (code-server) URL response
+ */
+export interface VSCodeResponse {
+  /** URL to access VS Code in the browser */
+  url: string
+}

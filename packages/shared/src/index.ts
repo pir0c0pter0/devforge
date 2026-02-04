@@ -12,6 +12,7 @@ export type {
   ContainerConfig,
   Container,
   ContainerWithMetrics,
+  VSCodeResponse,
 } from './types/container.types'
 
 // Export all instruction types

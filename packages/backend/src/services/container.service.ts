@@ -1315,6 +1315,48 @@ export class ContainerService {
   }
 
   /**
+   * Get VS Code URL for a running container
+   * Returns the URL to access code-server running on port 8080
+   */
+  async getVSCodeUrl(containerId: string): Promise<{ url: string }> {
+    try {
+      const container = await this.getById(containerId);
+
+      if (!container) {
+        throw new Error(`Container not found: ${containerId}`);
+      }
+
+      if (container.status !== 'running') {
+        throw new Error(`Container is not running: ${containerId}`);
+      }
+
+      // Get the mapped host port for code-server (8080)
+      const portInfo = await dockerService.getContainerPort(container.dockerId, 8080);
+
+      if (!portInfo) {
+        throw new Error('VS Code port (8080) is not mapped for this container');
+      }
+
+      // Build the URL - use localhost for local access
+      const hostname = process.env['VSCODE_HOST'] || 'localhost';
+      const protocol = process.env['VSCODE_SECURE'] === 'true' ? 'https' : 'http';
+      const url = `${protocol}://${hostname}:${portInfo.hostPort}`;
+
+      logger.info(
+        { containerId, hostPort: portInfo.hostPort },
+        'VS Code URL resolved'
+      );
+
+      return { url };
+    } catch (error) {
+      logger.error({ error, containerId }, 'Failed to get VS Code URL');
+      throw new Error(
+        `Failed to get VS Code URL: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
    * Get container logs
    */
   async getLogs(containerId: string, tail?: number): Promise<string> {
@@ -1496,6 +1538,10 @@ export class ContainerService {
       },
       // Allow container to reach host services (for telegram-send)
       ExtraHosts: ['host.docker.internal:host-gateway'],
+      // Default port bindings for code-server (VS Code)
+      PortBindings: {
+        '8080/tcp': [{ HostPort: '0' }], // code-server - dynamic port allocation
+      },
     };
   }
 

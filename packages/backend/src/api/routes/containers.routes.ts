@@ -791,4 +791,37 @@ router.get(
   }
 );
 
+/**
+ * POST /api/containers/:id/vscode
+ * Get VS Code (code-server) URL for a running container
+ */
+router.post(
+  '/:id/vscode',
+  strictRateLimiter,
+  validateParams(ContainerIdParamsSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const id = req.params['id'] as string;
+
+      logger.info({ containerId: id }, 'Getting VS Code URL');
+
+      const result = await containerService.getVSCodeUrl(id);
+
+      logger.info({ containerId: id }, 'VS Code URL retrieved');
+      res.json(successResponse(result));
+    } catch (error) {
+      logger.error({ error, containerId: req.params['id'] }, 'Failed to get VS Code URL');
+
+      const errorMessage = error instanceof Error ? error.message : 'Failed to get VS Code URL';
+      const statusCode = errorMessage.includes('not found')
+        ? 404
+        : errorMessage.includes('not running')
+          ? 400
+          : 500;
+
+      res.status(statusCode).json(errorResponse(errorMessage, statusCode));
+    }
+  }
+);
+
 export default router;

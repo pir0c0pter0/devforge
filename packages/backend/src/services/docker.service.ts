@@ -263,6 +263,46 @@ export class DockerService {
   }
 
   /**
+   * Get a specific container port mapping
+   * @param containerId - Docker container ID
+   * @param containerPort - Port number inside container
+   * @param protocol - Protocol (default: 'tcp')
+   * @returns Host port and IP, or null if not mapped/container not running
+   */
+  async getContainerPort(
+    containerId: string,
+    containerPort: number,
+    protocol: 'tcp' | 'udp' = 'tcp'
+  ): Promise<{ hostIp: string; hostPort: string } | null> {
+    try {
+      const info = await this.inspectContainer(containerId);
+
+      const portKey = `${containerPort}/${protocol}`;
+      const portBindings = info.NetworkSettings?.Ports?.[portKey];
+
+      if (!portBindings || portBindings.length === 0) {
+        logger.debug({ containerId, containerPort, protocol }, 'Port not exposed');
+        return null;
+      }
+
+      const firstBinding = portBindings[0];
+      if (!firstBinding || !firstBinding.HostPort) {
+        return null;
+      }
+
+      return {
+        hostIp: firstBinding.HostIp || '0.0.0.0',
+        hostPort: firstBinding.HostPort,
+      };
+    } catch (error) {
+      logger.error({ error, containerId, containerPort }, 'Failed to get container port');
+      throw new Error(
+        `Failed to get container port: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
    * Get container status
    */
   async getContainerStatus(containerId: string): Promise<ContainerStatus> {
