@@ -451,6 +451,98 @@ export class DockerService {
       throw new Error(`Failed to delete volume: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
+
+  /**
+   * Stream container logs in real-time
+   * Returns a cleanup function to stop streaming
+   */
+  streamContainerLogs(
+    containerId: string,
+    onData: (line: string, stream: 'stdout' | 'stderr', timestamp: string) => void,
+    options?: { tail?: number }
+  ): () => void {
+    const container = this.docker.getContainer(containerId);
+    let stream: NodeJS.ReadableStream | null = null;
+    let stopped = false;
+
+    container.logs({
+      follow: true,
+      stdout: true,
+      stderr: true,
+      timestamps: true,
+      tail: options?.tail || 100,
+    }, (err, logStream) => {
+      if (err || stopped || !logStream) {
+        if (err) logger.error({ error: err, containerId }, 'Failed to start log stream');
+        return;
+      }
+
+      stream = logStream;
+
+      // Docker multiplexed stream format:
+      // Header (8 bytes): [stream type (1), 0, 0, 0, size (4 bytes big-endian)]
+      // stream type: 0 = stdin, 1 = stdout, 2 = stderr
+      let buffer = Buffer.alloc(0);
+
+      logStream.on('data', (chunk: Buffer) => {
+        buffer = Buffer.concat([buffer, chunk]);
+
+        // Process complete frames
+        while (buffer.length >= 8) {
+          const header = buffer.slice(0, 8);
+          const streamType = header[0]; // 1 = stdout, 2 = stderr
+          const size = header.readUInt32BE(4);
+
+          if (buffer.length < 8 + size) {
+            // Not enough data yet, wait for more
+            break;
+          }
+
+          const payload = buffer.slice(8, 8 + size).toString('utf8');
+          buffer = buffer.slice(8 + size);
+
+          // Parse timestamp and message
+          // Format: "2024-02-04T10:30:45.123456789Z message content\n"
+          const timestampMatch = payload.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)\s?/);
+          let timestamp: string;
+          let message: string;
+
+          if (timestampMatch && timestampMatch[1]) {
+            timestamp = timestampMatch[1];
+            message = payload.slice(timestampMatch[0].length);
+          } else {
+            timestamp = new Date().toISOString();
+            message = payload;
+          }
+
+          // Remove trailing newline
+          message = message.replace(/\n$/, '');
+
+          if (message.trim()) {
+            const streamName = streamType === 2 ? 'stderr' : 'stdout';
+            onData(message, streamName, timestamp);
+          }
+        }
+      });
+
+      logStream.on('error', (error) => {
+        logger.error({ error, containerId }, 'Log stream error');
+      });
+
+      logStream.on('end', () => {
+        logger.debug({ containerId }, 'Log stream ended');
+      });
+    });
+
+    // Return cleanup function
+    return () => {
+      stopped = true;
+      if (stream) {
+        (stream as any).destroy?.();
+        stream = null;
+      }
+    };
+  }
 }
 
 // Export singleton instance

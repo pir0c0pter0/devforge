@@ -33,8 +33,8 @@ const ClaudeChat = dynamic(
   { ssr: false, loading: () => <LoadingPlaceholder textKey="claude" /> }
 )
 
-const ClaudeCodeLogs = dynamic(
-  () => import('@/components/claude-code-logs').then(mod => mod.ClaudeCodeLogs),
+const ContainerLogs = dynamic(
+  () => import('@/components/container-logs').then(mod => mod.ContainerLogs),
   { ssr: false, loading: () => <LoadingPlaceholder textKey="terminal" /> }
 )
 
@@ -326,6 +326,19 @@ export default function ContainerDetailPage() {
         if (!startResponse.success) {
           // Don't throw - limits were saved, just couldn't restart
           setLimitsError(t.container.failedStart)
+        } else {
+          // Wait for container to be fully running and refresh data
+          await new Promise(resolve => setTimeout(resolve, 2000))
+
+          // Reload complete container data from API
+          const refreshResponse = await apiClient.getContainer(container.id)
+          if (refreshResponse.success && refreshResponse.data) {
+            setContainerBase(refreshResponse.data)
+            updateContainer(container.id, {
+              status: refreshResponse.data.status,
+              dockerId: refreshResponse.data.dockerId,
+            })
+          }
         }
       }
 
@@ -648,14 +661,14 @@ export default function ContainerDetailPage() {
       {activeTab === 'logs' && (
         <div className="card overflow-hidden" style={{ height: 'calc(100vh - 340px)', minHeight: '400px' }}>
           {container.status === 'running' ? (
-            <ClaudeCodeLogs containerId={container.id} className="h-full" />
+            <ContainerLogs containerId={container.id} className="h-full" />
           ) : (
             <div className="p-6 text-center">
               <svg className="mx-auto h-12 w-12 text-terminal-textMuted mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
-              <h3 className="text-lg font-semibold text-terminal-text mb-2">{t.containerDetail.logsUnavailable || 'Logs indisponíveis'}</h3>
-              <p className="text-sm text-terminal-textMuted">{t.containerDetail.startContainerForLogs || 'Inicie o container para ver os logs do Claude Code'}</p>
+              <h3 className="text-lg font-semibold text-terminal-text mb-2">{t.containerDetail.logsUnavailable}</h3>
+              <p className="text-sm text-terminal-textMuted">{t.containerDetail.startContainerForLogs}</p>
             </div>
           )}
         </div>

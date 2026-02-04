@@ -269,9 +269,17 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
     onErrorRef.current = onError
   }, [onMessage, onStatusChange, onError])
 
-  // Load chat history from backend on mount
+  // Track which containerId we loaded history for
+  const lastLoadedContainerIdRef = useRef<string | null>(null)
+
+  // Load chat history from backend on mount or containerId change
   useEffect(() => {
-    if (!containerId || historyLoadedRef.current) return
+    if (!containerId) return
+
+    // Skip if already loaded for this specific container
+    if (lastLoadedContainerIdRef.current === containerId && historyLoadedRef.current) {
+      return
+    }
 
     const loadHistory = async () => {
       try {
@@ -288,15 +296,15 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
             toolInput: msg.toolInput,
           }))
 
-          if (loadedMessages.length > 0) {
-            console.log('[ClaudeDaemon] Loaded', loadedMessages.length, 'messages from history')
-            setMessages(containerId, loadedMessages)
-          }
+          // Always set messages (replace store state), even if empty
+          console.log('[ClaudeDaemon] Loaded', loadedMessages.length, 'messages from history')
+          setMessages(containerId, loadedMessages)
         }
       } catch (error) {
         console.error('[ClaudeDaemon] Failed to load chat history:', error)
       } finally {
         historyLoadedRef.current = true
+        lastLoadedContainerIdRef.current = containerId
       }
     }
 
