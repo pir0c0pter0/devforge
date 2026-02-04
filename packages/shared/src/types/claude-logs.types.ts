@@ -37,6 +37,8 @@ export interface ClaudeLogMetadata {
   jobId?: string
   /** Instrucao que gerou o log */
   instruction?: string
+  /** Timeout configurado em ms (para logs de timeout) */
+  timeout?: number
 }
 
 /**

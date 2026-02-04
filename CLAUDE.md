@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções
 
-## Versão Atual: 0.1.0-alpha
+## Versão Atual: 0.1.1-alpha
 
 ## Links Úteis
 
@@ -904,6 +904,15 @@ ALLOWED_ORIGINS=https://myapp.com,https://api.myapp.com
 ```
 
 ## Histórico de Versões
+
+### v0.1.1-alpha
+- Fix: **Isolamento completo de sessões Claude entre Telegram e Containers**
+- Fix: Session IDs com namespace (`telegram-{userId}-` e `container-{containerId}-`) evitam colisão
+- Fix: Hard timeout de 2min para Telegram e 5min para containers
+- Fix: Processos Claude pendurados são automaticamente mortos (SIGTERM → SIGKILL)
+- Fix: Limpeza de referência de processo em todos os caminhos de código
+- Security: Prevenção de session hijacking entre contextos diferentes (CWE-384)
+- Security: Correção de process reference leak no catch block
 
 ### v0.1.0-alpha
 - Feat: **Sistema Avancado de Conversacao Claude no Telegram** (Issue #8)

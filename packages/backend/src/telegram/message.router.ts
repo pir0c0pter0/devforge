@@ -167,8 +167,8 @@ export class MessageRouter {
       return false;
     }
 
-    // Skip very short messages or obvious NLU patterns
-    if (text.length < 3) {
+    // Skip single character messages only
+    if (text.length < 2) {
       return false;
     }
 

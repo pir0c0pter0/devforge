@@ -60,6 +60,12 @@ const AGENT_POLL_INTERVAL = 2000
 const MAX_AGENT_WAIT_TIME = 10 * 60 * 1000
 
 /**
+ * Hard timeout for Claude CLI process (5 minutes)
+ * If a process runs longer than this, it will be killed
+ */
+const PROCESS_HARD_TIMEOUT = 5 * 60 * 1000
+
+/**
  * Lock for preventing parallel starts of the same container
  */
 const daemonStartLocks = new Map<string, Promise<void>>()
@@ -159,7 +165,8 @@ class ClaudeDaemonService extends EventEmitter {
       }
 
       // Generate a unique session ID for this container
-      const sessionId = randomUUID()
+      // Prefix with 'container-{containerId}' to isolate from Telegram and other services
+      const sessionId = `container-${containerId}-${randomUUID()}`
 
       const activeSession: ActiveSession = {
         state,
@@ -364,6 +371,21 @@ class ClaudeDaemonService extends EventEmitter {
         let stdoutBuffer = ''
         let stderrBuffer = ''
 
+        // Hard timeout watchdog - kill process if it runs too long
+        const timeoutId = setTimeout(() => {
+          if (childProcess && !childProcess.killed) {
+            logger.warn({ containerId, timeout: PROCESS_HARD_TIMEOUT }, 'Process exceeded hard timeout, killing...')
+            childProcess.kill('SIGKILL')
+
+            // Log timeout
+            claudeLogsService.addLog(containerId, 'system', `Processo excedeu timeout de ${PROCESS_HARD_TIMEOUT / 1000}s e foi encerrado`, {
+              sessionId: session.sessionId,
+              jobId,
+              timeout: PROCESS_HARD_TIMEOUT,
+            })
+          }
+        }, PROCESS_HARD_TIMEOUT)
+
         // Handle stdout (JSON streaming)
         childProcess.stdout?.on('data', (chunk: Buffer) => {
           const data = chunk.toString('utf-8')
@@ -405,6 +427,9 @@ class ClaudeDaemonService extends EventEmitter {
 
         // Handle process exit
         childProcess.on('exit', async (code, signal) => {
+          // Clear the hard timeout
+          clearTimeout(timeoutId)
+
           const exitCode = code ?? -1
           const duration = Date.now() - startTime
 
@@ -477,6 +502,9 @@ class ClaudeDaemonService extends EventEmitter {
 
         // Handle process error
         childProcess.on('error', (error) => {
+          // Clear the hard timeout
+          clearTimeout(timeoutId)
+
           session.isProcessing = false
           session.currentProcess = undefined
           const duration = Date.now() - startTime
@@ -501,6 +529,7 @@ class ClaudeDaemonService extends EventEmitter {
 
       } catch (error) {
         session.isProcessing = false
+        session.currentProcess = undefined
         reject(error)
       }
     })

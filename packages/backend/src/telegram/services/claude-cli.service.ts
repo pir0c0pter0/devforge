@@ -26,6 +26,8 @@ interface ClaudeResponse {
 
 /**
  * Claude CLI flags for Telegram conversations
+ * Note: prompt is passed as positional argument, not as --prompt
+ * Note: --verbose is required when using --output-format stream-json
  */
 const CLAUDE_FLAGS = [
   '--print',
@@ -35,22 +37,15 @@ const CLAUDE_FLAGS = [
 ]
 
 /**
- * System prompt for Telegram assistant
+ * Hard timeout for Claude CLI process in Telegram (2 minutes)
+ * Telegram responses should be fast
  */
-const TELEGRAM_SYSTEM_PROMPT = `Voce eh um assistente pessoal no Telegram chamado Claude Docker Bot.
+const TELEGRAM_PROCESS_TIMEOUT = 2 * 60 * 1000
 
-Suas responsabilidades:
-- Responder perguntas de forma concisa e util
-- Ajudar com duvidas sobre programacao e tecnologia
-- Ser amigavel e prestativo
-
-Regras:
-- Respostas devem ser curtas (max 500 caracteres quando possivel)
-- Use emojis ocasionalmente para tornar a conversa mais agradavel
-- Sempre responda em portugues brasileiro
-- Nao mencione que voce eh Claude ou da Anthropic, apenas responda naturalmente
-
-Importante: Voce NAO tem acesso aos containers do usuario. Para operacoes em containers, instrua o usuario a usar comandos como /list, /select, e /exec.`
+/**
+ * System prompt for Telegram assistant (single line to avoid shell escaping issues)
+ */
+const TELEGRAM_SYSTEM_PROMPT = 'Voce eh um assistente pessoal amigavel no Telegram. Responda em portugues brasileiro de forma concisa (max 500 chars). Use emojis ocasionalmente. Nao mencione que eh Claude ou Anthropic.'
 
 /**
  * TelegramClaudeService - Uses local Claude Code CLI for Telegram conversations
@@ -84,8 +79,9 @@ class TelegramClaudeService {
     let session = this.sessions.get(key)
 
     if (!session) {
+      // Prefix with 'telegram-{userId}-' to isolate from Container and other services
       session = {
-        sessionId: randomUUID(),
+        sessionId: `telegram-${userId}-${randomUUID()}`,
         userId,
         chatId,
         lastActivity: new Date(),
@@ -144,18 +140,40 @@ class TelegramClaudeService {
         args.push('--resume', session.sessionId)
       }
 
-      // Add the message
-      args.push('--prompt', message)
+      // Add the message as positional argument (must be last)
+      args.push(message)
 
       logger.debug({ args: args.join(' ') }, 'Spawning Claude CLI')
 
       const proc = spawn('claude', args, {
-        timeout: 120000, // 2 minute timeout
+        cwd: process.env['HOME'] || '/tmp', // Use HOME to avoid scanning large codebases
         env: { ...process.env, HOME: process.env['HOME'] },
       })
 
       let stdout = ''
       let stderr = ''
+
+      // Hard timeout watchdog - kill process if it runs too long
+      // Two-stage: SIGTERM first (graceful), then SIGKILL after 5s (force)
+      const timeoutId = setTimeout(() => {
+        if (proc && !proc.killed) {
+          logger.warn(
+            { userId, chatId, sessionId: session.sessionId, timeout: TELEGRAM_PROCESS_TIMEOUT },
+            'Claude process timeout - sending SIGTERM'
+          )
+          proc.kill('SIGTERM')
+          // If still alive after 5 seconds, force kill
+          setTimeout(() => {
+            if (proc && !proc.killed) {
+              logger.warn(
+                { userId, chatId, sessionId: session.sessionId },
+                'Claude process still alive after SIGTERM - sending SIGKILL'
+              )
+              proc.kill('SIGKILL')
+            }
+          }, 5000)
+        }
+      }, TELEGRAM_PROCESS_TIMEOUT)
 
       proc.stdout?.on('data', (data) => {
         stdout += data.toString()
@@ -166,6 +184,9 @@ class TelegramClaudeService {
       })
 
       proc.on('close', (code) => {
+        // Clear the hard timeout
+        clearTimeout(timeoutId)
+
         if (code !== 0) {
           logger.error({ code, stderr, userId }, 'Claude CLI exited with error')
           reject(new Error(stderr || `Claude CLI exited with code ${code}`))
@@ -184,6 +205,14 @@ class TelegramClaudeService {
       })
 
       proc.on('error', (error) => {
+        // Clear the hard timeout
+        clearTimeout(timeoutId)
+
+        // Kill process if not already killed
+        if (proc && !proc.killed) {
+          proc.kill('SIGKILL')
+        }
+
         logger.error({ error, userId }, 'Failed to spawn Claude CLI')
         reject(error)
       })
