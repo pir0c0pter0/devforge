@@ -138,6 +138,8 @@ export const translations = {
       // Logs section
       containerLogs: 'Logs do Container',
       logsPlaceholder: '[Streaming de logs será implementado com conexão WebSocket]',
+      logsUnavailable: 'Logs Indisponíveis',
+      startContainerForLogs: 'Inicie o container para ver os logs do Claude Code.',
       // Terminal section
       terminalUnavailable: 'Terminal Indisponível',
       startContainerForTerminal: 'Inicie o container para acessar o terminal.',
@@ -605,6 +607,8 @@ export const translations = {
       // Logs section
       containerLogs: 'Container Logs',
       logsPlaceholder: '[Log streaming will be implemented with WebSocket connection]',
+      logsUnavailable: 'Logs Unavailable',
+      startContainerForLogs: 'Start the container to view Claude Code logs.',
       // Terminal section
       terminalUnavailable: 'Terminal Unavailable',
       startContainerForTerminal: 'Start the container to access the terminal.',

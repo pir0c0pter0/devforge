@@ -24,6 +24,11 @@ const ClaudeChat = dynamic(
   { ssr: false, loading: () => <LoadingPlaceholder textKey="claude" /> }
 )
 
+const ClaudeCodeLogs = dynamic(
+  () => import('@/components/claude-code-logs').then(mod => mod.ClaudeCodeLogs),
+  { ssr: false, loading: () => <LoadingPlaceholder textKey="terminal" /> }
+)
+
 function LoadingPlaceholder({ textKey }: { textKey: 'terminal' | 'claude' }) {
   const { t } = useI18n()
   const text = textKey === 'terminal' ? t.containerDetail.loadingTerminal : t.containerDetail.loadingClaudeChat
@@ -479,17 +484,18 @@ export default function ContainerDetailPage() {
       )}
 
       {activeTab === 'logs' && (
-        <div className="card p-6">
-          <h3 className="text-lg font-semibold text-terminal-text mb-4">{t.containerDetail.containerLogs}</h3>
-          <div className="bg-terminal-bg rounded-lg p-4 font-mono text-sm text-terminal-text h-96 overflow-y-auto">
-            <p className="text-terminal-textMuted">{t.containerDetail.logsPlaceholder}</p>
-            <p className="text-terminal-textMuted mt-2">
-              {new Date().toISOString()} - Container {container.name} is {t.status[container.status as keyof typeof t.status] || container.status}
-            </p>
-            <p className="text-terminal-textMuted">
-              {new Date().toISOString()} - CPU: {(container.metrics?.cpu ?? 0).toFixed(1)}% | Memory: {(container.metrics?.memory ?? 0).toFixed(0)} MB
-            </p>
-          </div>
+        <div className="card overflow-hidden">
+          {container.status === 'running' ? (
+            <ClaudeCodeLogs containerId={container.id} className="h-[600px]" />
+          ) : (
+            <div className="p-6 text-center">
+              <svg className="mx-auto h-12 w-12 text-terminal-textMuted mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              <h3 className="text-lg font-semibold text-terminal-text mb-2">{t.containerDetail.logsUnavailable || 'Logs indisponíveis'}</h3>
+              <p className="text-sm text-terminal-textMuted">{t.containerDetail.startContainerForLogs || 'Inicie o container para ver os logs do Claude Code'}</p>
+            </div>
+          )}
         </div>
       )}
 
