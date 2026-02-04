@@ -8,6 +8,7 @@ export type RepositoryType = 'empty' | 'github'
 
 export interface Container {
   id: string
+  dockerId?: string
   name: string
   status: ContainerStatus
   template: TemplateType

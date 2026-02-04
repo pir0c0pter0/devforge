@@ -96,6 +96,7 @@ export interface UpdateContainerDto {
   readonly vscodeToken?: string;
   readonly startedAt?: Date;
   readonly stoppedAt?: Date;
+  readonly diskLimit?: number;
 }
 
 /**
@@ -321,6 +322,10 @@ export class ContainerRepository extends BaseRepository<
     if (data.stoppedAt !== undefined) {
       updates.push('stopped_at = ?');
       params.push(data.stoppedAt.toISOString());
+    }
+    if (data.diskLimit !== undefined) {
+      updates.push('disk_limit = ?');
+      params.push(data.diskLimit);
     }
 
     if (updates.length === 0) {

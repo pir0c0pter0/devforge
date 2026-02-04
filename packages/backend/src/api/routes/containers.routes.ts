@@ -7,6 +7,7 @@ import { validateBody, validateParams, validateQuery } from '../../utils/validat
 import { CreateContainerRequestSchema } from '../../models/container.model';
 import { apiLogger as logger } from '../../utils/logger';
 import { strictRateLimiter } from '../../middleware/rate-limit';
+import { diskMetricsService } from '../../services/disk-metrics.service';
 
 const router: Router = Router();
 
@@ -424,5 +425,205 @@ router.get(
     }
   }
 );
+
+/**
+ * Get detailed disk metrics with breakdown
+ * GET /api/containers/:id/disk-metrics
+ */
+router.get('/:id/disk-metrics', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const container = await containerService.getById(id);
+    if (!container) {
+      return res.status(404).json({
+        success: false,
+        error: 'Container not found',
+      });
+    }
+
+    if (container.status !== 'running') {
+      return res.status(400).json({
+        success: false,
+        error: 'Container must be running to get disk metrics',
+      });
+    }
+
+    const diskLimitMB = (container.limits?.diskGB || 20) * 1024;
+    const metrics = await diskMetricsService.getDetailedMetrics(container.dockerId!, diskLimitMB);
+
+    return res.json({
+      success: true,
+      data: metrics,
+    });
+  } catch (error) {
+    logger.error({ error, containerId: req.params.id }, 'Failed to get disk metrics');
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get disk metrics',
+    });
+  }
+});
+
+/**
+ * Get disk cleanup suggestions
+ * GET /api/containers/:id/disk-cleanup-suggestions
+ */
+router.get('/:id/disk-cleanup-suggestions', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const container = await containerService.getById(id);
+    if (!container) {
+      return res.status(404).json({
+        success: false,
+        error: 'Container not found',
+      });
+    }
+
+    if (container.status !== 'running') {
+      return res.status(400).json({
+        success: false,
+        error: 'Container must be running to get cleanup suggestions',
+      });
+    }
+
+    const suggestions = await diskMetricsService.getCleanupSuggestions(container.dockerId!);
+
+    return res.json({
+      success: true,
+      data: suggestions,
+    });
+  } catch (error) {
+    logger.error({ error, containerId: req.params.id }, 'Failed to get cleanup suggestions');
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get cleanup suggestions',
+    });
+  }
+});
+
+// Rate limit tracking for disk expansion (in-memory, per container)
+const diskExpansionRateLimits = new Map<string, number[]>();
+const EXPANSION_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const EXPANSION_LIMIT_COUNT = 3;
+
+/**
+ * Expand disk limit
+ * POST /api/containers/:id/expand-disk
+ */
+router.post('/:id/expand-disk', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { newLimitMB } = req.body as { newLimitMB: number };
+
+    // Validate input
+    if (!newLimitMB || typeof newLimitMB !== 'number') {
+      return res.status(400).json({
+        success: false,
+        error: 'newLimitMB is required and must be a number',
+      });
+    }
+
+    // Validate limits (1GB to 100GB)
+    const MIN_LIMIT_MB = 1024; // 1GB
+    const MAX_LIMIT_MB = 102400; // 100GB
+
+    if (newLimitMB < MIN_LIMIT_MB || newLimitMB > MAX_LIMIT_MB) {
+      return res.status(400).json({
+        success: false,
+        error: `Disk limit must be between ${MIN_LIMIT_MB}MB (1GB) and ${MAX_LIMIT_MB}MB (100GB)`,
+      });
+    }
+
+    // Rate limiting check
+    const now = Date.now();
+    const containerExpansions = diskExpansionRateLimits.get(id) || [];
+    const recentExpansions = containerExpansions.filter(t => now - t < EXPANSION_LIMIT_WINDOW_MS);
+
+    if (recentExpansions.length >= EXPANSION_LIMIT_COUNT) {
+      return res.status(429).json({
+        success: false,
+        error: `Rate limit exceeded. Maximum ${EXPANSION_LIMIT_COUNT} expansions per hour.`,
+      });
+    }
+
+    const container = await containerService.getById(id);
+    if (!container) {
+      return res.status(404).json({
+        success: false,
+        error: 'Container not found',
+      });
+    }
+
+    const previousLimit = (container.limits?.diskGB || 20) * 1024;
+
+    // Only allow increasing the limit
+    if (newLimitMB <= previousLimit) {
+      return res.status(400).json({
+        success: false,
+        error: 'New limit must be greater than current limit',
+      });
+    }
+
+    // Check host disk space (require 50GB buffer)
+    const { execSync } = require('child_process');
+    const dfOutput = execSync('df -m / | tail -1').toString();
+    const dfParts = dfOutput.trim().split(/\s+/);
+    const availableMB = parseInt(dfParts[3] || '0', 10);
+    const requiredBuffer = 51200; // 50GB in MB
+
+    if (availableMB < requiredBuffer) {
+      return res.status(400).json({
+        success: false,
+        error: `Insufficient host disk space. Available: ${Math.round(availableMB / 1024)}GB, Required buffer: 50GB`,
+      });
+    }
+
+    // Update container configuration
+    containerRepository.update(id, { diskLimit: newLimitMB });
+
+    // Clear metrics cache
+    diskMetricsService.clearCache(container.dockerId!);
+
+    // Get current usage for response
+    let currentUsage = 0;
+    if (container.status === 'running') {
+      try {
+        const metrics = await diskMetricsService.getDetailedMetrics(container.dockerId!, newLimitMB);
+        currentUsage = metrics.usage;
+      } catch {
+        // Ignore metrics error
+      }
+    }
+
+    // Record expansion for rate limiting
+    recentExpansions.push(now);
+    diskExpansionRateLimits.set(id, recentExpansions);
+
+    logger.info({
+      containerId: id,
+      previousLimit,
+      newLimit: newLimitMB,
+      currentUsage,
+    }, 'Disk limit expanded');
+
+    return res.json({
+      success: true,
+      data: {
+        previousLimit,
+        newLimit: newLimitMB,
+        currentUsage,
+        newPercentage: newLimitMB > 0 ? Number(((currentUsage / newLimitMB) * 100).toFixed(2)) : 0,
+      },
+    });
+  } catch (error) {
+    logger.error({ error, containerId: req.params.id }, 'Failed to expand disk');
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to expand disk',
+    });
+  }
+});
 
 export default router;

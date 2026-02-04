@@ -175,6 +175,48 @@ class ApiClient {
       method: 'DELETE',
     })
   }
+
+  // Disk metrics
+  async getDiskMetrics(id: string): Promise<ApiResponse<{
+    usage: number
+    limit: number
+    percentage: number
+    alertLevel: 'normal' | 'warning' | 'critical'
+    breakdown: {
+      workspace: number
+      nodeModules: number
+      cache: number
+      other: number
+      total: number
+    }
+    projectPath: string | null
+    hasGitRepo: boolean
+    collectedAt: string
+  }>> {
+    return this.request(`/api/containers/${id}/disk-metrics`)
+  }
+
+  async getDiskCleanupSuggestions(id: string): Promise<ApiResponse<Array<{
+    type: string
+    description: string
+    estimatedSavings: number
+    command: string
+    risk: 'low' | 'medium' | 'high'
+  }>>> {
+    return this.request(`/api/containers/${id}/disk-cleanup-suggestions`)
+  }
+
+  async expandDisk(id: string, newLimitMB: number): Promise<ApiResponse<{
+    previousLimit: number
+    newLimit: number
+    currentUsage: number
+    newPercentage: number
+  }>> {
+    return this.request(`/api/containers/${id}/expand-disk`, {
+      method: 'POST',
+      body: JSON.stringify({ newLimitMB }),
+    })
+  }
 }
 
 export const apiClient = new ApiClient()

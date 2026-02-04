@@ -11,6 +11,7 @@ import { useModal } from '@/components/ui/modal'
 import { AnimatedDots } from '@/components/ui/animated-dots'
 import { StatusIndicator } from '@/components/ui/status-indicator'
 import type { ContainerStatusType } from '@/components/ui/status-indicator'
+import { IncreaseDiskModal } from '@/components/increase-disk-modal'
 import { useTaskWebSocket } from '@/hooks/use-task-websocket'
 import { useMetrics } from '@/hooks/use-metrics'
 import clsx from 'clsx'
@@ -30,6 +31,7 @@ export function ContainerCard({ container }: ContainerCardProps) {
   const [isStarting, setIsStarting] = useState(false)
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
   const [queueStats, setQueueStats] = useState({ queueLength: container.queueLength, activeAgents: container.activeAgents, isExecuting: false })
+  const [showDiskModal, setShowDiskModal] = useState(false)
   const queueSocketRef = useRef<Socket | null>(null)
   const { updateContainer, removeContainer, setError } = useContainerStore()
 
@@ -500,17 +502,37 @@ export function ContainerCard({ container }: ContainerCardProps) {
               style={{ width: `${Math.min(diskPercent, 100)}%` }}
             />
           </div>
-          {/* Disk usage alerts */}
+          {/* Disk usage alerts with expand button */}
           {diskPercent > 95 && (
-            <div className="mt-1 text-xs text-terminal-red flex items-center gap-1">
-              <span className="inline-block w-2 h-2 bg-terminal-red rounded-full animate-pulse"></span>
-              {t.container.diskCritical}
+            <div className="mt-1 flex items-center justify-between">
+              <div className="text-xs text-terminal-red flex items-center gap-1">
+                <span className="inline-block w-2 h-2 bg-terminal-red rounded-full animate-pulse"></span>
+                {t.container.diskCritical}
+              </div>
+              {container.status === 'running' && (
+                <button
+                  onClick={() => setShowDiskModal(true)}
+                  className="text-xs text-terminal-cyan hover:text-terminal-green underline"
+                >
+                  {t.disk?.askExpand || 'Expandir?'}
+                </button>
+              )}
             </div>
           )}
           {diskPercent > 80 && diskPercent <= 95 && (
-            <div className="mt-1 text-xs text-terminal-yellow flex items-center gap-1">
-              <span className="inline-block w-2 h-2 bg-terminal-yellow rounded-full"></span>
-              {t.container.diskWarning}
+            <div className="mt-1 flex items-center justify-between">
+              <div className="text-xs text-terminal-yellow flex items-center gap-1">
+                <span className="inline-block w-2 h-2 bg-terminal-yellow rounded-full"></span>
+                {t.container.diskWarning}
+              </div>
+              {container.status === 'running' && (
+                <button
+                  onClick={() => setShowDiskModal(true)}
+                  className="text-xs text-terminal-cyan hover:text-terminal-green underline"
+                >
+                  {t.disk?.askExpand || 'Expandir?'}
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -614,6 +636,23 @@ export function ContainerCard({ container }: ContainerCardProps) {
           </button>
         </div>
       </div>
+
+      {/* Disk expansion modal */}
+      {showDiskModal && (
+        <IncreaseDiskModal
+          containerId={container.id}
+          containerName={container.name}
+          currentUsageMB={(container.metrics?.disk ?? 0) * 1024}
+          currentLimitGB={container.limits?.diskGB ?? 20}
+          isOpen={showDiskModal}
+          onClose={() => setShowDiskModal(false)}
+          onSuccess={(newLimitGB) => {
+            updateContainer(container.id, {
+              limits: { ...container.limits, diskGB: newLimitGB }
+            })
+          }}
+        />
+      )}
     </div>
   )
 }

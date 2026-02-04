@@ -30,6 +30,16 @@ export type {
   AgentInfo,
 } from './types/metrics.types'
 
+// Export all disk metrics types
+export type {
+  DiskBreakdown,
+  DiskAlertLevel,
+  DetailedDiskMetrics,
+  CleanupSuggestion,
+  ExpandDiskRequest,
+  ExpandDiskResponse,
+} from './types/disk-metrics.types'
+
 // Export all event types
 export type {
   MetricsEventData,
