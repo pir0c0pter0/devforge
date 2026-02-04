@@ -36,6 +36,10 @@ export interface QueueStatsEventData {
   queueLength: number
   /** Number of active agents (optional) */
   activeAgents?: number
+  /** Number of active jobs currently processing */
+  activeJobs?: number
+  /** Timestamp of last activity in the queue */
+  lastActivity?: Date
 }
 
 /**

@@ -4,6 +4,34 @@
 export type InstructionStatus = 'pending' | 'running' | 'completed' | 'failed'
 
 /**
+ * Current stage of instruction execution
+ */
+export type InstructionStage =
+  | 'validating'
+  | 'checking_daemon'
+  | 'starting_daemon'
+  | 'daemon_ready'
+  | 'sending_instruction'
+  | 'processing'
+  | 'finalizing'
+  | 'completed'
+  | 'failed'
+
+/**
+ * Progress details for instruction execution
+ */
+export interface InstructionProgress {
+  /** Progress percentage (0-100) */
+  percentage: number
+  /** Current execution stage */
+  stage: InstructionStage
+  /** Human-readable message describing current status */
+  message: string
+  /** Timestamp of this progress update */
+  timestamp: Date
+}
+
+/**
  * Instruction sent to a container for execution
  */
 export interface Instruction {
@@ -27,6 +55,8 @@ export interface Instruction {
   error?: string
   /** Execution progress percentage (0-100) */
   progress?: number
+  /** Detailed progress information */
+  progressDetail?: InstructionProgress
 }
 
 /**

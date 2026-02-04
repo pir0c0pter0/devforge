@@ -778,10 +778,16 @@ export const emitInstructionFailed = (data: InstructionEventData): void => {
 export const emitQueueStatsUpdate = (containerId: string, stats: {
   queueLength: number
   activeAgents?: number
+  activeJobs?: number
+  lastActivity?: Date
 }): void => {
   if (!io) return
   // Emit to queue namespace so container cards and instruction queue get updates
-  const data = { containerId, ...stats }
+  const data = {
+    containerId,
+    ...stats,
+    lastActivity: stats.lastActivity || new Date(),
+  }
   io.of('/queue')
     .to(`container:${containerId}`)
     .emit('queue:stats', data)

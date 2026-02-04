@@ -29,7 +29,7 @@ export function ContainerCard({ container }: ContainerCardProps) {
   const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null)
   const [isStarting, setIsStarting] = useState(false)
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
-  const [queueStats, setQueueStats] = useState({ queueLength: container.queueLength, activeAgents: container.activeAgents })
+  const [queueStats, setQueueStats] = useState({ queueLength: container.queueLength, activeAgents: container.activeAgents, isExecuting: false })
   const queueSocketRef = useRef<Socket | null>(null)
   const { updateContainer, removeContainer, setError } = useContainerStore()
 
@@ -52,19 +52,21 @@ export function ContainerCard({ container }: ContainerCardProps) {
       socket.emit('subscribe:container', container.id)
     })
 
-    socket.on('queue:stats', (data: { containerId: string; queueLength: number; activeAgents?: number }) => {
+    socket.on('queue:stats', (data: { containerId: string; queueLength: number; activeAgents?: number; isExecuting?: boolean }) => {
       if (data.containerId === container.id) {
         setQueueStats(prev => ({
           queueLength: data.queueLength,
           activeAgents: data.activeAgents ?? prev.activeAgents,
+          isExecuting: data.isExecuting ?? prev.isExecuting,
         }))
       }
     })
 
     // Also update on instruction events
     socket.on('instruction:pending', () => setQueueStats(prev => ({ ...prev, queueLength: prev.queueLength + 1 })))
-    socket.on('instruction:completed', () => setQueueStats(prev => ({ ...prev, queueLength: Math.max(0, prev.queueLength - 1) })))
-    socket.on('instruction:failed', () => setQueueStats(prev => ({ ...prev, queueLength: Math.max(0, prev.queueLength - 1) })))
+    socket.on('instruction:started', () => setQueueStats(prev => ({ ...prev, isExecuting: true })))
+    socket.on('instruction:completed', () => setQueueStats(prev => ({ ...prev, queueLength: Math.max(0, prev.queueLength - 1), isExecuting: false })))
+    socket.on('instruction:failed', () => setQueueStats(prev => ({ ...prev, queueLength: Math.max(0, prev.queueLength - 1), isExecuting: false })))
 
     return () => {
       socket.emit('unsubscribe:container', container.id)
@@ -75,7 +77,7 @@ export function ContainerCard({ container }: ContainerCardProps) {
 
   // Sync queueStats when container props change
   useEffect(() => {
-    setQueueStats({ queueLength: container.queueLength, activeAgents: container.activeAgents })
+    setQueueStats(prev => ({ queueLength: container.queueLength, activeAgents: container.activeAgents, isExecuting: prev.isExecuting }))
   }, [container.queueLength, container.activeAgents])
 
   // Handle task completion - refresh container data or remove if deleted
@@ -529,6 +531,30 @@ export function ContainerCard({ container }: ContainerCardProps) {
             </div>
           </div>
         </div>
+
+        {/* Status line */}
+        {container.status === 'running' && (
+          <div className="flex items-center gap-2 text-xs mb-4 px-1">
+            {queueStats.isExecuting ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-terminal-cyan animate-pulse" />
+                <span className="text-terminal-cyan">{t.containerStatus.executing}</span>
+              </>
+            ) : queueStats.queueLength > 0 ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-terminal-yellow" />
+                <span className="text-terminal-yellow">
+                  {t.containerStatus.queued.replace('{n}', String(queueStats.queueLength))}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="w-2 h-2 rounded-full bg-terminal-textMuted" />
+                <span className="text-terminal-textMuted">{t.containerStatus.idle}</span>
+              </>
+            )}
+          </div>
+        )}
 
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {container.status === 'running' ? (

@@ -144,6 +144,12 @@ class ApiClient {
     })
   }
 
+  async deleteJob(id: string, jobId: string): Promise<ApiResponse<void>> {
+    return this.request<void>(`/api/claude-daemon/${id}/queue/jobs/${jobId}`, {
+      method: 'DELETE',
+    })
+  }
+
   async openShell(id: string): Promise<ApiResponse<{ url: string }>> {
     return this.request<{ url: string }>(`/api/containers/${id}/shell`, {
       method: 'POST',

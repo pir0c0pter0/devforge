@@ -200,7 +200,11 @@ export async function queueInstruction(
 
   // Emitir stats atualizados para o container card
   const active = await queue.getActiveCount()
-  emitQueueStatsUpdate(validated, { queueLength: waiting + active })
+  emitQueueStatsUpdate(validated, {
+    queueLength: waiting + active,
+    activeJobs: active,
+    lastActivity: new Date(),
+  })
 
   return {
     id: job.id!,
@@ -498,6 +502,44 @@ export async function retryJob(containerId: string, jobId: string): Promise<bool
   // Retentar o job
   await job.retry()
   logger.info({ containerId: validated, jobId }, 'Job retry initiated')
+
+  return true
+}
+
+/**
+ * Deleta um job concluído ou falho do histórico
+ * Só permite deletar jobs com status 'completed' ou 'failed'
+ *
+ * @param containerId - ID do container
+ * @param jobId - ID do job
+ * @returns true se deletado com sucesso, false se não encontrado ou não pode ser deletado
+ */
+export async function deleteJob(containerId: string, jobId: string): Promise<boolean> {
+  const validated = validateContainerId(containerId)
+  const queue = getQueue(validated)
+
+  const job = await queue.getJob(jobId)
+  if (!job) {
+    logger.warn({ containerId: validated, jobId }, 'Job não encontrado para deleção')
+    return false
+  }
+
+  const state = await job.getState()
+  if (state !== 'completed' && state !== 'failed') {
+    logger.warn({ containerId: validated, jobId, state }, 'Não é possível deletar job neste estado. Apenas completed ou failed podem ser deletados.')
+    return false
+  }
+
+  await job.remove()
+  logger.info({ containerId: validated, jobId, state }, 'Job deletado do histórico')
+
+  // Emitir stats atualizados
+  const stats = await getQueueStatus(validated)
+  emitQueueStatsUpdate(validated, {
+    queueLength: stats.waiting + stats.active,
+    activeJobs: stats.active,
+    lastActivity: new Date(),
+  })
 
   return true
 }

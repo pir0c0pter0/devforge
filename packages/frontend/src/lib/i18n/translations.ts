@@ -231,6 +231,13 @@ export const translations = {
       autonomous: 'autônomo',
     },
 
+    // Container Status Line
+    containerStatus: {
+      idle: 'Ocioso',
+      executing: 'Executando instrução...',
+      queued: '{n} na fila',
+    },
+
     // Create Container
     createContainer: {
       title: 'Criar Novo Container',
@@ -405,6 +412,14 @@ export const translations = {
       result: 'Resultado',
       errorDetails: 'Detalhes do Erro',
       clickToExpand: 'Clique para ver detalhes',
+      cancel: 'Cancelar',
+      delete: 'Excluir',
+      confirmCancel: 'Tem certeza que deseja cancelar este job?',
+      confirmDelete: 'Tem certeza que deseja excluir este job?',
+      jobCancelled: 'Job cancelado com sucesso',
+      jobDeleted: 'Job excluído com sucesso',
+      cancelFailed: 'Falha ao cancelar job',
+      deleteFailed: 'Falha ao excluir job',
       status: {
         waiting: 'aguardando',
         pending: 'pendente',
@@ -415,6 +430,11 @@ export const translations = {
         delayed: 'atrasado',
         deadLetter: 'falha permanente',
       },
+      progress: 'Progresso',
+      logs: 'Logs de execução',
+      noLogs: 'Sem logs ainda',
+      showLogs: 'Mostrar logs',
+      hideLogs: 'Ocultar logs',
     },
 
     // Common
@@ -678,6 +698,13 @@ export const translations = {
       autonomous: 'autonomous',
     },
 
+    // Container Status Line
+    containerStatus: {
+      idle: 'Idle',
+      executing: 'Executing instruction...',
+      queued: '{n} in queue',
+    },
+
     // Create Container
     createContainer: {
       title: 'Create New Container',
@@ -852,6 +879,14 @@ export const translations = {
       result: 'Result',
       errorDetails: 'Error Details',
       clickToExpand: 'Click to view details',
+      cancel: 'Cancel',
+      delete: 'Delete',
+      confirmCancel: 'Are you sure you want to cancel this job?',
+      confirmDelete: 'Are you sure you want to delete this job?',
+      jobCancelled: 'Job cancelled successfully',
+      jobDeleted: 'Job deleted successfully',
+      cancelFailed: 'Failed to cancel job',
+      deleteFailed: 'Failed to delete job',
       status: {
         waiting: 'waiting',
         pending: 'pending',
@@ -862,6 +897,11 @@ export const translations = {
         delayed: 'delayed',
         deadLetter: 'permanent failure',
       },
+      progress: 'Progress',
+      logs: 'Execution logs',
+      noLogs: 'No logs yet',
+      showLogs: 'Show logs',
+      hideLogs: 'Hide logs',
     },
 
     // Common

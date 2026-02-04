@@ -11,7 +11,23 @@ import {
   emitQueueStatsUpdate,
 } from '../services/websocket.service'
 import { moveToDeadLetterQueue, getQueueStatus } from '../services/claude-queue.service'
-import type { InstructionJobData, InstructionEventData } from '@claude-docker/shared'
+import type { InstructionJobData, InstructionEventData, InstructionStage, InstructionProgress } from '@claude-docker/shared'
+
+/**
+ * Helper to create progress data with stage information
+ */
+function createProgressData(
+  percentage: number,
+  stage: InstructionStage,
+  message: string
+): InstructionProgress {
+  return {
+    percentage,
+    stage,
+    message,
+    timestamp: new Date(),
+  }
+}
 
 /**
  * Map of active workers (containerId -> Worker)
@@ -65,17 +81,22 @@ export function getOrCreateWorker(containerId: string): Worker {
       emitInstructionStarted(baseEventData)
 
       try {
-        // Validate inputs
+        // Stage 1: Validating inputs
+        const progressValidating = createProgressData(5, 'validating', 'Validando instrução...')
+        await job.updateProgress(progressValidating)
+        emitInstructionProgress({ ...baseEventData, progress: 5, progressDetail: progressValidating })
+
         validateContainerId(containerId)
         const safeInstruction = validateInstruction(instruction)
 
-        // Update job progress: Starting
-        await job.updateProgress({
-          percentage: 10,
-          message: 'Verificando daemon...',
-          timestamp: new Date()
-        })
-        emitInstructionProgress({ ...baseEventData, progress: 10 })
+        const progressValidated = createProgressData(10, 'validating', 'Instrução validada com sucesso')
+        await job.updateProgress(progressValidated)
+        emitInstructionProgress({ ...baseEventData, progress: 10, progressDetail: progressValidated })
+
+        // Stage 2: Check daemon status
+        const progressCheckDaemon = createProgressData(15, 'checking_daemon', 'Verificando status do daemon...')
+        await job.updateProgress(progressCheckDaemon)
+        emitInstructionProgress({ ...baseEventData, progress: 15, progressDetail: progressCheckDaemon })
 
         // Verify daemon is running, start if needed
         const status = claudeDaemonService.getStatus(containerId)
@@ -89,53 +110,60 @@ export function getOrCreateWorker(containerId: string): Worker {
             throw new Error(`Container ${containerId} not found or has no Docker ID`)
           }
 
-          await job.updateProgress({
-            percentage: 20,
-            message: 'Iniciando daemon Claude...',
-            timestamp: new Date()
-          })
-          emitInstructionProgress({ ...baseEventData, progress: 20 })
+          // Stage 3: Starting daemon
+          const progressStartDaemon = createProgressData(20, 'starting_daemon', 'Iniciando daemon Claude Code...')
+          await job.updateProgress(progressStartDaemon)
+          emitInstructionProgress({ ...baseEventData, progress: 20, progressDetail: progressStartDaemon })
 
           await claudeDaemonService.startDaemon(containerId, container.dockerId)
+
+          const progressWaitDaemon = createProgressData(25, 'starting_daemon', 'Aguardando daemon ficar pronto...')
+          await job.updateProgress(progressWaitDaemon)
+          emitInstructionProgress({ ...baseEventData, progress: 25, progressDetail: progressWaitDaemon })
 
           // Wait for daemon to be ready
           await new Promise(resolve => setTimeout(resolve, 2000))
         }
 
-        await job.updateProgress({
-          percentage: 30,
-          message: 'Daemon pronto',
-          timestamp: new Date()
-        })
-        emitInstructionProgress({ ...baseEventData, progress: 30 })
+        // Stage 4: Daemon ready
+        const progressDaemonReady = createProgressData(30, 'daemon_ready', 'Daemon Claude Code pronto')
+        await job.updateProgress(progressDaemonReady)
+        emitInstructionProgress({ ...baseEventData, progress: 30, progressDetail: progressDaemonReady })
 
-        await job.updateProgress({
-          percentage: 40,
-          message: 'Enviando instrução...',
-          timestamp: new Date()
-        })
-        emitInstructionProgress({ ...baseEventData, progress: 40 })
+        // Stage 5: Sending instruction
+        const progressSending = createProgressData(35, 'sending_instruction', 'Preparando envio da instrução...')
+        await job.updateProgress(progressSending)
+        emitInstructionProgress({ ...baseEventData, progress: 35, progressDetail: progressSending })
+
+        const progressSent = createProgressData(40, 'sending_instruction', 'Enviando instrução para Claude Code...')
+        await job.updateProgress(progressSent)
+        emitInstructionProgress({ ...baseEventData, progress: 40, progressDetail: progressSent })
+
+        // Stage 6: Processing
+        const progressProcessing = createProgressData(45, 'processing', 'Claude Code processando instrução...')
+        await job.updateProgress(progressProcessing)
+        emitInstructionProgress({ ...baseEventData, progress: 45, progressDetail: progressProcessing })
 
         // Send instruction to Claude daemon and wait for completion
         // Now returns captured output when the instruction finishes
         const result = await claudeDaemonService.sendInstruction(containerId, safeInstruction)
 
-        await job.updateProgress({
-          percentage: 80,
-          message: 'Instrução concluída, processando resultado...',
-          timestamp: new Date()
-        })
-        emitInstructionProgress({ ...baseEventData, progress: 80 })
+        // Stage 7: Finalizing
+        const progressFinalizing = createProgressData(80, 'finalizing', 'Instrução concluída, processando resultado...')
+        await job.updateProgress(progressFinalizing)
+        emitInstructionProgress({ ...baseEventData, progress: 80, progressDetail: progressFinalizing })
 
         const duration = Date.now() - startTime
 
         logger.info({ jobId: job.id, containerId, duration, exitCode: result.exitCode }, 'Instruction processed successfully')
 
-        await job.updateProgress({
-          percentage: 100,
-          message: 'Concluído',
-          timestamp: new Date()
-        })
+        const progressValidatingResult = createProgressData(90, 'finalizing', 'Validando resultado...')
+        await job.updateProgress(progressValidatingResult)
+        emitInstructionProgress({ ...baseEventData, progress: 90, progressDetail: progressValidatingResult })
+
+        // Stage 8: Completed
+        const progressCompleted = createProgressData(100, 'completed', 'Instrução executada com sucesso')
+        await job.updateProgress(progressCompleted)
 
         // Emit completed event via WebSocket
         emitInstructionCompleted({
@@ -143,6 +171,7 @@ export function getOrCreateWorker(containerId: string): Worker {
           status: 'completed',
           completedAt: new Date(),
           progress: 100,
+          progressDetail: progressCompleted,
         })
 
         // Return captured output as job result
@@ -194,7 +223,11 @@ export function getOrCreateWorker(containerId: string): Worker {
     // Emit updated queue stats
     try {
       const stats = await getQueueStatus(job.data.containerId)
-      emitQueueStatsUpdate(job.data.containerId, { queueLength: stats.waiting + stats.active })
+      emitQueueStatsUpdate(job.data.containerId, {
+        queueLength: stats.waiting + stats.active,
+        activeJobs: stats.active,
+        lastActivity: new Date(),
+      })
     } catch (error) {
       logger.warn({ error, containerId: job.data.containerId }, 'Failed to emit queue stats after completion')
     }
@@ -226,7 +259,11 @@ export function getOrCreateWorker(containerId: string): Worker {
       // Emit updated queue stats
       try {
         const stats = await getQueueStatus(job.data.containerId)
-        emitQueueStatsUpdate(job.data.containerId, { queueLength: stats.waiting + stats.active })
+        emitQueueStatsUpdate(job.data.containerId, {
+          queueLength: stats.waiting + stats.active,
+          activeJobs: stats.active,
+          lastActivity: new Date(),
+        })
       } catch (err) {
         logger.warn({ err, containerId: job.data.containerId }, 'Failed to emit queue stats after failure')
       }

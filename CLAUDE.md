@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções
 
-## Versão Atual: 0.0.58-alpha
+## Versão Atual: 0.0.66-alpha
 
 ## Estrutura do Projeto
 
@@ -878,6 +878,24 @@ ALLOWED_ORIGINS=https://myapp.com,https://api.myapp.com
 ```
 
 ## Histórico de Versões
+
+### v0.0.66-alpha
+- Feat: **Logs incrementais e botões de ação na fila de instruções**
+- Feat: Progress bar em tempo real para jobs ativos com estágio e mensagem
+- Feat: Exibe mensagem de progresso atual durante execução (via WebSocket)
+- Feat: Logs expandíveis mostram histórico de estágios com timestamps
+- Feat: Botão de cancelar (X) para jobs pendentes/aguardando
+- Feat: Botão de excluir (lixeira) para jobs concluídos/falhos com confirmação
+- Feat: Modal de confirmação antes de cancelar/excluir jobs
+- Feat: Toast notifications para sucesso/erro nas ações
+
+### v0.0.65-alpha
+- Feat: **Status line em tempo real no ContainerCard**
+- Feat: Linha de status mostra: "Ocioso", "Executando instrução...", ou "{n} na fila"
+- Feat: Indicador visual com bolinha colorida (cinza=ocioso, ciano=executando, amarelo=fila)
+- Feat: WebSocket `/queue` atualiza status automaticamente via `instruction:started`
+- Feat: Traduções pt-BR e en para `containerStatus` (idle, executing, queued)
+- Feat: Animação pulsante quando executando instrução
 
 ### v0.0.58-alpha
 - Feat: **Scripts de instalação com serviços systemd**

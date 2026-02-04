@@ -11,6 +11,7 @@ import {
   getDeadLetterJobs,
   cancelJob,
   retryJob,
+  deleteJob,
   clearQueue,
   pauseQueue,
   resumeQueue,
@@ -460,6 +461,45 @@ router.post(
       res.status(500).json(
         errorResponse(
           error instanceof Error ? error.message : 'Failed to retry job',
+          500
+        )
+      );
+    }
+  }
+);
+
+/**
+ * DELETE /api/claude-daemon/:containerId/queue/jobs/:jobId
+ * Delete a completed or failed job from history
+ */
+router.delete(
+  '/:containerId/queue/jobs/:jobId',
+  strictRateLimiter,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const containerId = req.params['containerId'] as string;
+      const jobId = req.params['jobId'] as string;
+
+      logger.info({ containerId, jobId }, 'Deleting job from history');
+
+      const deleted = await deleteJob(containerId, jobId);
+
+      if (!deleted) {
+        res.status(400).json(
+          errorResponse('Não foi possível deletar o job. Ele pode não existir ou estar em execução.', 400)
+        );
+        return;
+      }
+
+      logger.info({ containerId, jobId }, 'Job deleted successfully');
+
+      res.json(successResponse({ jobId, deleted: true }, 'Job deletado com sucesso'));
+    } catch (error) {
+      logger.error({ error, containerId: req.params['containerId'], jobId: req.params['jobId'] }, 'Failed to delete job');
+
+      res.status(500).json(
+        errorResponse(
+          error instanceof Error ? error.message : 'Falha ao deletar job',
           500
         )
       );

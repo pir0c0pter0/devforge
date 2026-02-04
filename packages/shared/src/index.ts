@@ -17,6 +17,8 @@ export type {
 // Export all instruction types
 export type {
   InstructionStatus,
+  InstructionStage,
+  InstructionProgress,
   Instruction,
   QueueStatus,
   AddInstructionRequest,

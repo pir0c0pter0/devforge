@@ -8,12 +8,40 @@ import { AnimatedDots } from '@/components/ui/animated-dots'
 import { SkillAutocomplete } from '@/components/skill-autocomplete'
 import { useI18n } from '@/lib/i18n'
 import clsx from 'clsx'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown, ChevronUp, Clock, CheckCircle, XCircle, AlertTriangle, Loader2, Terminal, X, Trash2 } from 'lucide-react'
+import { useModal } from '@/components/ui/modal'
+import { useToast } from '@/components/ui/toast'
 
 const WS_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 interface InstructionQueueProps {
   containerId: string
+}
+
+// Progress data received from WebSocket
+interface ProgressData {
+  id: string
+  containerId: string
+  progress?: number
+  stage?: string
+  message?: string
+  result?: string
+  error?: string
+  status?: string
+}
+
+// Execution log entry
+interface LogEntry {
+  timestamp: Date
+  message: string
+  stage?: string
+}
+
+// Job progress state with message
+interface JobProgressState {
+  progress: number
+  stage?: string
+  message?: string
 }
 
 export function InstructionQueue({ containerId }: InstructionQueueProps) {
@@ -26,6 +54,14 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
   const [selectedJob, setSelectedJob] = useState<JobDetails | null>(null)
   const [isLoadingDetails, setIsLoadingDetails] = useState(false)
   const socketRef = useRef<Socket | null>(null)
+  const modal = useModal()
+  const toast = useToast()
+
+  // Real-time progress tracking per job with stage and message
+  const [jobProgress, setJobProgress] = useState<Record<string, JobProgressState>>({})
+  const [jobLogs, setJobLogs] = useState<Record<string, LogEntry[]>>({})
+  const [expandedLogs, setExpandedLogs] = useState<Record<string, boolean>>({})
+  const logsEndRef = useRef<Record<string, HTMLDivElement | null>>({})
 
   const fetchQueue = useCallback(async () => {
     setError(null)
@@ -77,9 +113,39 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
       fetchQueue()
     })
 
-    socket.on('instruction:progress', () => {
-      // Progress updates - could update UI but for now just log
-      console.log('[InstructionQueue] Instruction progress...')
+    socket.on('instruction:progress', (data: ProgressData) => {
+      console.log('[InstructionQueue] Instruction progress:', data)
+      // Update progress for this specific job with stage and message
+      if (data.id) {
+        setJobProgress(prev => ({
+          ...prev,
+          [data.id]: {
+            progress: data.progress ?? prev[data.id]?.progress ?? 0,
+            stage: data.stage ?? prev[data.id]?.stage,
+            message: data.message ?? prev[data.id]?.message,
+          }
+        }))
+      }
+      // Add log entry if there's a message (from stage updates or result)
+      const logMessage = data.message || data.result
+      if (data.id && logMessage) {
+        setJobLogs(prev => {
+          const existingLogs = prev[data.id] || []
+          // Avoid duplicate messages
+          const lastLog = existingLogs[existingLogs.length - 1]
+          if (lastLog?.message === logMessage) {
+            return prev
+          }
+          return {
+            ...prev,
+            [data.id]: [...existingLogs, {
+              timestamp: new Date(),
+              message: logMessage,
+              stage: data.stage
+            }]
+          }
+        })
+      }
     })
 
     return () => {
@@ -136,98 +202,102 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
 
   const getStatusColor = (status: QueueItemStatus): string => {
     const colors: Record<string, string> = {
-      waiting: 'badge-gray',
-      pending: 'badge-gray',
-      active: 'badge-warning',
-      running: 'badge-warning',
-      completed: 'badge-success',
-      failed: 'badge-danger',
-      delayed: 'badge-gray',
-      'dead-letter': 'badge-danger',
+      waiting: 'bg-terminal-bg text-terminal-textMuted border border-terminal-border',
+      pending: 'bg-terminal-bg text-terminal-textMuted border border-terminal-border',
+      active: 'bg-blue-500/20 text-blue-400 border border-blue-500/50',
+      running: 'bg-blue-500/20 text-blue-400 border border-blue-500/50',
+      completed: 'bg-terminal-green/20 text-terminal-green border border-terminal-green/50',
+      failed: 'bg-terminal-red/20 text-terminal-red border border-terminal-red/50',
+      delayed: 'bg-terminal-yellow/20 text-terminal-yellow border border-terminal-yellow/50',
+      'dead-letter': 'bg-terminal-red/20 text-terminal-red border border-terminal-red/50',
     }
-    return colors[status] || 'badge-gray'
+    return colors[status] || colors.waiting
   }
 
   const getStatusIcon = (status: QueueItemStatus): React.ReactNode => {
+    const iconClass = 'w-3.5 h-3.5'
     const icons: Record<string, React.ReactNode> = {
-      waiting: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-          />
-        </svg>
-      ),
-      pending: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-          />
-        </svg>
-      ),
-      active: (
-        <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-          />
-        </svg>
-      ),
-      running: (
-        <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-          />
-        </svg>
-      ),
-      completed: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-        </svg>
-      ),
-      failed: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M6 18L18 6M6 6l12 12"
-          />
-        </svg>
-      ),
-      delayed: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-          />
-        </svg>
-      ),
-      'dead-letter': (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-          />
-        </svg>
-      ),
+      waiting: <Clock className={iconClass} />,
+      pending: <Clock className={iconClass} />,
+      active: <Loader2 className={clsx(iconClass, 'animate-spin')} />,
+      running: <Loader2 className={clsx(iconClass, 'animate-spin')} />,
+      completed: <CheckCircle className={iconClass} />,
+      failed: <XCircle className={iconClass} />,
+      delayed: <Clock className={iconClass} />,
+      'dead-letter': <AlertTriangle className={iconClass} />,
     }
     return icons[status] || icons.waiting
   }
+
+  // Toggle logs visibility for a job
+  const toggleLogs = (jobId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setExpandedLogs(prev => ({
+      ...prev,
+      [jobId]: !prev[jobId]
+    }))
+  }
+
+  // Handle cancel job (for waiting jobs)
+  const handleCancelJob = async (jobId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+
+    const confirmed = await modal.confirm({
+      title: t.instructionQueue.cancel,
+      message: t.instructionQueue.confirmCancel,
+      type: 'warning',
+      confirmLabel: t.instructionQueue.cancel,
+      cancelLabel: t.common.cancel,
+    })
+
+    if (!confirmed) return
+
+    const response = await apiClient.cancelJob(containerId, jobId)
+
+    if (response.success) {
+      toast.success(t.instructionQueue.jobCancelled)
+      await fetchQueue()
+    } else {
+      toast.error(response.error || t.instructionQueue.cancelFailed)
+    }
+  }
+
+  // Handle delete job (for completed/failed jobs)
+  const handleDeleteJob = async (jobId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+
+    const confirmed = await modal.confirm({
+      title: t.instructionQueue.delete,
+      message: t.instructionQueue.confirmDelete,
+      type: 'delete',
+      confirmLabel: t.instructionQueue.delete,
+      cancelLabel: t.common.cancel,
+    })
+
+    if (!confirmed) return
+
+    const response = await apiClient.deleteJob(containerId, jobId)
+
+    if (response.success) {
+      toast.success(t.instructionQueue.jobDeleted)
+      // Close details if this job was selected
+      if (selectedJob?.id === jobId) {
+        setSelectedJob(null)
+      }
+      await fetchQueue()
+    } else {
+      toast.error(response.error || t.instructionQueue.deleteFailed)
+    }
+  }
+
+  // Auto-scroll logs to bottom when new logs arrive
+  useEffect(() => {
+    Object.keys(expandedLogs).forEach(jobId => {
+      if (expandedLogs[jobId] && logsEndRef.current[jobId]) {
+        logsEndRef.current[jobId]?.scrollIntoView({ behavior: 'smooth' })
+      }
+    })
+  }, [jobLogs, expandedLogs])
 
   const getStatusLabel = (status: QueueItemStatus): string => {
     const labels = t.instructionQueue.status
@@ -419,8 +489,72 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
                     <p className="text-sm text-terminal-text font-medium mb-1">
                       {item.instruction}
                     </p>
+
+                    {/* Progress bar for active/running jobs */}
+                    {(item.status === 'active' || item.status === 'running') && (
+                      <div className="mt-2 space-y-2">
+                        {/* Current stage message */}
+                        {jobProgress[item.id]?.message && (
+                          <div className="flex items-center gap-2 text-xs text-blue-400">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            <span>{jobProgress[item.id].message}</span>
+                          </div>
+                        )}
+
+                        {/* Progress bar */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-terminal-textMuted w-16">
+                            {t.instructionQueue.progress}:
+                          </span>
+                          <div className="flex-1 bg-terminal-bg rounded-full h-2 overflow-hidden">
+                            <div
+                              className="h-full bg-blue-500 rounded-full transition-all duration-300 ease-out"
+                              style={{ width: `${jobProgress[item.id]?.progress || 0}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-blue-400 font-medium w-10 text-right">
+                            {jobProgress[item.id]?.progress || 0}%
+                          </span>
+                        </div>
+
+                        {/* Execution logs toggle */}
+                        <button
+                          onClick={(e) => toggleLogs(item.id, e)}
+                          className="flex items-center gap-1 text-xs text-terminal-textMuted hover:text-terminal-text transition-colors"
+                        >
+                          <Terminal className="w-3 h-3" />
+                          {expandedLogs[item.id] ? t.instructionQueue.hideLogs : t.instructionQueue.showLogs}
+                          {jobLogs[item.id]?.length ? ` (${jobLogs[item.id].length})` : ''}
+                        </button>
+
+                        {/* Expandable logs section */}
+                        {expandedLogs[item.id] && (
+                          <div className="mt-2 bg-terminal-bg rounded p-2 max-h-40 overflow-y-auto font-mono text-xs">
+                            {(!jobLogs[item.id] || jobLogs[item.id].length === 0) ? (
+                              <p className="text-terminal-textMuted italic">{t.instructionQueue.noLogs}</p>
+                            ) : (
+                              jobLogs[item.id].map((log, idx) => (
+                                <div key={idx} className="flex gap-2 py-0.5">
+                                  <span className="text-terminal-textMuted flex-shrink-0">
+                                    {log.timestamp.toLocaleTimeString()}
+                                  </span>
+                                  {log.stage && (
+                                    <span className="text-blue-400 flex-shrink-0">[{log.stage}]</span>
+                                  )}
+                                  <span className="text-terminal-text whitespace-pre-wrap break-all">
+                                    {log.message}
+                                  </span>
+                                </div>
+                              ))
+                            )}
+                            <div ref={(el) => { logsEndRef.current[item.id] = el }} />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {item.finishedAt && (
-                      <p className="text-xs text-terminal-textMuted">
+                      <p className="text-xs text-terminal-textMuted mt-1">
                         {t.instructionQueue.finished} {new Date(item.finishedAt).toLocaleTimeString()}
                         {item.duration && ` (${formatDuration(item.duration)})`}
                       </p>
@@ -431,12 +565,37 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
                       </div>
                     )}
                   </div>
-                  <div className="flex-shrink-0 text-terminal-textMuted">
-                    {selectedJob?.id === item.id ? (
-                      <ChevronUp className="w-5 h-5" />
-                    ) : (
-                      <ChevronDown className="w-5 h-5" />
+                  <div className="flex-shrink-0 flex items-center gap-2">
+                    {/* Cancel button for waiting jobs */}
+                    {(item.status === 'waiting' || item.status === 'pending') && (
+                      <button
+                        onClick={(e) => handleCancelJob(item.id, e)}
+                        className="p-1.5 text-terminal-textMuted hover:text-terminal-yellow hover:bg-terminal-yellow/10 rounded transition-colors"
+                        title={t.instructionQueue.cancel}
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
                     )}
+
+                    {/* Delete button for completed/failed jobs */}
+                    {(item.status === 'completed' || item.status === 'failed' || item.status === 'dead-letter') && (
+                      <button
+                        onClick={(e) => handleDeleteJob(item.id, e)}
+                        className="p-1.5 text-terminal-textMuted hover:text-terminal-red hover:bg-terminal-red/10 rounded transition-colors"
+                        title={t.instructionQueue.delete}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+
+                    {/* Expand/collapse chevron */}
+                    <div className="text-terminal-textMuted">
+                      {selectedJob?.id === item.id ? (
+                        <ChevronUp className="w-5 h-5" />
+                      ) : (
+                        <ChevronDown className="w-5 h-5" />
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
