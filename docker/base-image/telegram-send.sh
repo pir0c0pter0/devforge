@@ -21,7 +21,7 @@ MESSAGE="$*"
 # Verificar se CONTAINER_ID esta definido
 if [ -z "$CONTAINER_ID" ]; then
     echo "Erro: CONTAINER_ID nao esta definido no ambiente."
-    echo "Este script deve ser executado dentro de um container Claude Docker."
+    echo "Este script deve ser executado dentro de um container DevForge."
     exit 1
 fi
 
@@ -45,7 +45,7 @@ if [ "$HTTP_CODE" = "200" ]; then
     exit 0
 elif [ "$HTTP_CODE" = "000" ]; then
     echo "Erro: Nao foi possivel conectar ao backend."
-    echo "Verifique se o servico claude-docker-backend esta rodando."
+    echo "Verifique se o servico devforge-backend esta rodando."
     exit 1
 else
     echo "Erro ao enviar mensagem (HTTP $HTTP_CODE)"

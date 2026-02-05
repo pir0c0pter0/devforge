@@ -1,12 +1,12 @@
 #!/bin/bash
 #
-# Claude Docker Web - Gerenciador de Containers com Claude Code + VS Code
+# DevForge - Gerenciador de Containers com Claude Code + VS Code
 #
 set -e
 
 VERSION="1.1.0"
-INSTALL_DIR="$HOME/.local/share/claude-docker-web"
-CONFIG_DIR="$HOME/.config/claude-docker-web"
+INSTALL_DIR="$HOME/.local/share/devforge"
+CONFIG_DIR="$HOME/.config/devforge"
 BIN_DIR="$HOME/.local/bin"
 
 # Cores
@@ -31,13 +31,12 @@ log_step() { echo -e "${CYAN}>>>${NC} ${BOLD}$1${NC}"; }
 show_banner() {
     echo -e "${CYAN}"
     cat << 'EOF'
-   _____ _                 _        _____             _
-  / ____| |               | |      |  __ \           | |
- | |    | | __ _ _   _  __| | ___  | |  | | ___   ___| | _____ _ __
- | |    | |/ _` | | | |/ _` |/ _ \ | |  | |/ _ \ / __| |/ / _ \ '__|
- | |____| | (_| | |_| | (_| |  __/ | |__| | (_) | (__|   <  __/ |
-  \_____|_|\__,_|\__,_|\__,_|\___| |_____/ \___/ \___|_|\_\___|_|
-                                                            Web v1.1
+  ____             _____
+ |  _ \  _____   _|  ___|__  _ __ __ _  ___
+ | | | |/ _ \ \ / / |_ / _ \| '__/ _` |/ _ \
+ | |_| |  __/\ V /|  _| (_) | | | (_| |  __/
+ |____/ \___| \_/ |_|  \___/|_|  \__, |\___|
+                                 |___/  v1.1
 EOF
     echo -e "${NC}"
 }
@@ -261,10 +260,10 @@ cmd_init() {
     echo ""
 
     local has_images=false
-    if run_with_docker_group docker images 2>/dev/null | grep -q "claude-docker"; then
+    if run_with_docker_group docker images 2>/dev/null | grep -q "devforge"; then
         has_images=true
-        log_success "Imagens claude-docker encontradas"
-        run_with_docker_group docker images --format "  {{.Repository}}:{{.Tag}}\t{{.Size}}" 2>/dev/null | grep "claude-docker" || true
+        log_success "Imagens devforge encontradas"
+        run_with_docker_group docker images --format "  {{.Repository}}:{{.Tag}}\t{{.Size}}" 2>/dev/null | grep "devforge" || true
     fi
 
     if [ "$has_images" = false ]; then
@@ -280,25 +279,25 @@ cmd_init() {
                 # Build imagem Claude (principal)
                 if [ -f "Dockerfile.claude" ]; then
                     echo ""
-                    log_info "Construindo claude-docker/claude..."
-                    run_with_docker_group docker build -t claude-docker/claude:latest -f Dockerfile.claude . 2>&1 | tail -3
-                    log_success "Imagem claude-docker/claude construída"
+                    log_info "Construindo devforge/claude..."
+                    run_with_docker_group docker build -t devforge/claude:latest -f Dockerfile.claude . 2>&1 | tail -3
+                    log_success "Imagem devforge/claude construída"
                 fi
 
                 # Build imagem VS Code
                 if [ -f "Dockerfile.vscode" ]; then
                     echo ""
-                    log_info "Construindo claude-docker/vscode..."
-                    run_with_docker_group docker build -t claude-docker/vscode:latest -f Dockerfile.vscode . 2>&1 | tail -3
-                    log_success "Imagem claude-docker/vscode construída"
+                    log_info "Construindo devforge/vscode..."
+                    run_with_docker_group docker build -t devforge/vscode:latest -f Dockerfile.vscode . 2>&1 | tail -3
+                    log_success "Imagem devforge/vscode construída"
                 fi
 
                 # Build imagem completa (both)
                 if [ -f "Dockerfile.both" ]; then
                     echo ""
-                    log_info "Construindo claude-docker/both..."
-                    run_with_docker_group docker build -t claude-docker/both:latest -f Dockerfile.both . 2>&1 | tail -3
-                    log_success "Imagem claude-docker/both construída"
+                    log_info "Construindo devforge/both..."
+                    run_with_docker_group docker build -t devforge/both:latest -f Dockerfile.both . 2>&1 | tail -3
+                    log_success "Imagem devforge/both construída"
                 fi
             else
                 log_error "Diretório de imagens não encontrado: $INSTALL_DIR/docker/base-image"
@@ -330,7 +329,7 @@ cmd_init() {
             echo ""
             if [[ ! $REPLY =~ ^[Nn]$ ]]; then
                 echo '' >> "$shell_rc"
-                echo '# Claude Docker Web' >> "$shell_rc"
+                echo '# DevForge' >> "$shell_rc"
                 echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$shell_rc"
                 log_success "PATH adicionado ao $shell_rc"
                 log_warn "Execute: source $shell_rc"
@@ -378,7 +377,7 @@ cmd_init() {
     [ -f "$HOME/.ssh/id_rsa" -o -f "$HOME/.ssh/id_ed25519" ] && echo -e "${GREEN}OK${NC}" || echo -e "${YELLOW}OPCIONAL${NC}"
 
     printf "  %-30s" "Imagens Docker:"
-    run_with_docker_group docker images 2>/dev/null | grep -q "claude-docker" && echo -e "${GREEN}OK${NC}" || echo -e "${YELLOW}NÃO CONSTRUÍDAS${NC}"
+    run_with_docker_group docker images 2>/dev/null | grep -q "devforge" && echo -e "${GREEN}OK${NC}" || echo -e "${YELLOW}NÃO CONSTRUÍDAS${NC}"
 
     echo ""
     echo -e "${CYAN}════════════════════════════════════════════════════════════${NC}"
@@ -394,14 +393,14 @@ cmd_init() {
         echo ""
         echo "  Depois execute novamente:"
         echo ""
-        echo -e "    ${CYAN}claude-docker-web init${NC}"
+        echo -e "    ${CYAN}devforge init${NC}"
         echo ""
     elif [ "$all_ok" = true ]; then
         echo -e "${GREEN}${BOLD}CONFIGURAÇÃO COMPLETA!${NC}"
         echo ""
         echo "  Para iniciar o dashboard:"
         echo ""
-        echo -e "    ${CYAN}claude-docker-web start${NC}"
+        echo -e "    ${CYAN}devforge start${NC}"
         echo ""
         echo "  Depois acesse: ${BLUE}http://localhost:3000${NC}"
         echo ""
@@ -410,7 +409,7 @@ cmd_init() {
         echo ""
         echo "  Resolva os itens pendentes e execute novamente:"
         echo ""
-        echo -e "    ${CYAN}claude-docker-web init${NC}"
+        echo -e "    ${CYAN}devforge init${NC}"
         echo ""
     fi
 }
@@ -419,7 +418,7 @@ cmd_init() {
 # COMANDO: start
 # ============================================
 cmd_start() {
-    echo -e "${CYAN}Iniciando Claude Docker Web...${NC}"
+    echo -e "${CYAN}Iniciando DevForge...${NC}"
     echo ""
 
     # Verificar pré-requisitos
@@ -430,7 +429,7 @@ cmd_start() {
         echo "  1. Iniciar Docker: sudo systemctl start docker"
         echo "  2. Adicionar ao grupo: sudo usermod -aG docker \$USER"
         echo "  3. Ativar grupo: newgrp docker"
-        echo "  4. Executar diagnóstico: claude-docker-web init"
+        echo "  4. Executar diagnóstico: devforge init"
         exit 1
     fi
 
@@ -536,15 +535,15 @@ cmd_start() {
 
     echo ""
     echo -e "${GREEN}════════════════════════════════════════${NC}"
-    echo -e "${GREEN}       Claude Docker Web Iniciado!${NC}"
+    echo -e "${GREEN}       DevForge Iniciado!${NC}"
     echo -e "${GREEN}════════════════════════════════════════${NC}"
     echo ""
     echo -e "  Dashboard: ${BLUE}http://localhost:3000${NC}"
     echo -e "  API:       ${DIM}http://localhost:8000${NC}"
     echo ""
-    echo -e "  Parar:     ${CYAN}claude-docker-web stop${NC}"
-    echo -e "  Status:    ${CYAN}claude-docker-web status${NC}"
-    echo -e "  Logs:      ${CYAN}claude-docker-web logs${NC}"
+    echo -e "  Parar:     ${CYAN}devforge stop${NC}"
+    echo -e "  Status:    ${CYAN}devforge status${NC}"
+    echo -e "  Logs:      ${CYAN}devforge logs${NC}"
     echo ""
 }
 
@@ -552,7 +551,7 @@ cmd_start() {
 # COMANDO: stop
 # ============================================
 cmd_stop() {
-    echo -e "${CYAN}Parando Claude Docker Web...${NC}"
+    echo -e "${CYAN}Parando DevForge...${NC}"
 
     local stopped=false
 
@@ -587,7 +586,7 @@ cmd_stop() {
 
     echo ""
     if [ "$stopped" = true ]; then
-        log_success "Claude Docker Web parado"
+        log_success "DevForge parado"
     else
         log_info "Nenhum serviço estava rodando"
     fi
@@ -607,7 +606,7 @@ cmd_restart() {
 # ============================================
 cmd_status() {
     echo ""
-    echo -e "${BOLD}Claude Docker Web - Status${NC}"
+    echo -e "${BOLD}DevForge - Status${NC}"
     echo ""
 
     # Backend
@@ -655,12 +654,12 @@ cmd_status() {
     # Containers ativos
     echo ""
     printf "  %-15s" "Containers:"
-    local count=$(run_with_docker_group docker ps --filter "name=claude-docker" --format "{{.ID}}" 2>/dev/null | wc -l)
+    local count=$(run_with_docker_group docker ps --filter "name=devforge" --format "{{.ID}}" 2>/dev/null | wc -l)
     echo "$count ativos"
 
     if [ "$count" -gt 0 ]; then
         echo ""
-        run_with_docker_group docker ps --filter "name=claude-docker" --format "    {{.Names}}\t{{.Status}}" 2>/dev/null
+        run_with_docker_group docker ps --filter "name=devforge" --format "    {{.Names}}\t{{.Status}}" 2>/dev/null
     fi
 
     echo ""
@@ -672,7 +671,7 @@ cmd_status() {
 cmd_logs() {
     local target="${2:-all}"
 
-    echo -e "${CYAN}Logs do Claude Docker Web (Ctrl+C para sair)${NC}"
+    echo -e "${CYAN}Logs do DevForge (Ctrl+C para sair)${NC}"
     echo ""
 
     case "$target" in
@@ -708,7 +707,7 @@ cmd_config() {
 
     if [ ! -f "$CONFIG_DIR/config.env" ]; then
         cat > "$CONFIG_DIR/config.env" << 'ENVEOF'
-# Claude Docker Web Configuration
+# DevForge Configuration
 PORT=8000
 ENABLE_AUTH=false
 # REDIS_URL=redis://localhost:6379
@@ -718,14 +717,14 @@ ENVEOF
     fi
 
     ${EDITOR:-nano} "$CONFIG_DIR/config.env"
-    log_info "Reinicie o serviço para aplicar: claude-docker-web restart"
+    log_info "Reinicie o serviço para aplicar: devforge restart"
 }
 
 # ============================================
 # COMANDO: update
 # ============================================
 cmd_update() {
-    log_info "Atualizando Claude Docker Web..."
+    log_info "Atualizando DevForge..."
 
     # Parar serviços primeiro
     cmd_stop 2>/dev/null || true
@@ -744,7 +743,7 @@ cmd_update() {
     pnpm build
 
     log_success "Atualizado!"
-    log_info "Inicie o serviço: claude-docker-web start"
+    log_info "Inicie o serviço: devforge start"
 }
 
 # ============================================
@@ -765,31 +764,31 @@ cmd_build_images() {
     # Build imagem Claude
     if [ -f "Dockerfile.claude" ]; then
         echo ""
-        log_info "Construindo claude-docker/claude..."
-        run_with_docker_group docker build -t claude-docker/claude:latest -f Dockerfile.claude .
-        log_success "Imagem claude-docker/claude construída"
+        log_info "Construindo devforge/claude..."
+        run_with_docker_group docker build -t devforge/claude:latest -f Dockerfile.claude .
+        log_success "Imagem devforge/claude construída"
     fi
 
     # Build imagem VS Code
     if [ -f "Dockerfile.vscode" ]; then
         echo ""
-        log_info "Construindo claude-docker/vscode..."
-        run_with_docker_group docker build -t claude-docker/vscode:latest -f Dockerfile.vscode .
-        log_success "Imagem claude-docker/vscode construída"
+        log_info "Construindo devforge/vscode..."
+        run_with_docker_group docker build -t devforge/vscode:latest -f Dockerfile.vscode .
+        log_success "Imagem devforge/vscode construída"
     fi
 
     # Build imagem Both
     if [ -f "Dockerfile.both" ]; then
         echo ""
-        log_info "Construindo claude-docker/both..."
-        run_with_docker_group docker build -t claude-docker/both:latest -f Dockerfile.both .
-        log_success "Imagem claude-docker/both construída"
+        log_info "Construindo devforge/both..."
+        run_with_docker_group docker build -t devforge/both:latest -f Dockerfile.both .
+        log_success "Imagem devforge/both construída"
     fi
 
     echo ""
     log_success "Todas as imagens foram construídas!"
     echo ""
-    run_with_docker_group docker images --format "  {{.Repository}}:{{.Tag}}\t{{.Size}}" | grep "claude-docker"
+    run_with_docker_group docker images --format "  {{.Repository}}:{{.Tag}}\t{{.Size}}" | grep "devforge"
 }
 
 # ============================================
@@ -879,7 +878,7 @@ cmd_doctor() {
     echo ""
 
     echo -e "${CYAN}Imagens Docker:${NC}"
-    run_with_docker_group docker images --format "  {{.Repository}}:{{.Tag}}\t{{.Size}}" 2>/dev/null | grep "claude-docker" || echo "  Nenhuma imagem construída"
+    run_with_docker_group docker images --format "  {{.Repository}}:{{.Tag}}\t{{.Size}}" 2>/dev/null | grep "devforge" || echo "  Nenhuma imagem construída"
 
     echo ""
 
@@ -921,7 +920,7 @@ cmd_doctor() {
 # ============================================
 cmd_help() {
     show_banner
-    echo -e "${BOLD}Uso:${NC} claude-docker-web [comando]"
+    echo -e "${BOLD}Uso:${NC} devforge [comando]"
     echo ""
     echo -e "${BOLD}Comandos:${NC}"
     echo ""
@@ -947,10 +946,10 @@ cmd_help() {
     echo -e "${BOLD}Exemplos:${NC}"
     echo ""
     echo "  # Primeira vez? Execute:"
-    echo -e "  ${DIM}claude-docker-web init${NC}"
+    echo -e "  ${DIM}devforge init${NC}"
     echo ""
     echo "  # Iniciar o dashboard:"
-    echo -e "  ${DIM}claude-docker-web start${NC}"
+    echo -e "  ${DIM}devforge start${NC}"
     echo ""
     echo "  # Acessar:"
     echo -e "  ${DIM}http://localhost:3000${NC}"
@@ -996,7 +995,7 @@ main() {
             cmd_help
             ;;
         version|--version|-v)
-            echo "claude-docker-web v$VERSION"
+            echo "devforge v$VERSION"
             ;;
         *)
             log_error "Comando desconhecido: $1"

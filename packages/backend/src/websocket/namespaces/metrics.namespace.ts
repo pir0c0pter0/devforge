@@ -7,7 +7,7 @@ import type {
   ContainerMetrics,
   ServerToClientEvents,
   ClientToServerEvents,
-} from '@claude-docker/shared'
+} from '@devforge/shared'
 
 /**
  * Subscription manager for metrics namespace

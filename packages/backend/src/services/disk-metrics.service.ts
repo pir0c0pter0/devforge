@@ -5,7 +5,7 @@ import type {
   DiskAlertLevel,
   DetailedDiskMetrics,
   CleanupSuggestion,
-} from '@claude-docker/shared';
+} from '@devforge/shared';
 
 interface CacheEntry {
   metrics: DetailedDiskMetrics;

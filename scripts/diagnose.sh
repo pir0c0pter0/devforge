@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# claude-docker-web - Sistema de Diagnósticos
+# DevForge - Sistema de Diagnósticos
 # =============================================================================
 # Script principal para diagnóstico do sistema
 # Uso: ./diagnose.sh [--check <componente>] [--json]

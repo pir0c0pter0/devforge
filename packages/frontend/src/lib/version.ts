@@ -1,5 +1,5 @@
 /**
- * Sistema de versionamento do claude-docker-web
+ * Sistema de versionamento do DevForge
  *
  * Formato: MAJOR.MINOR.PATCH[-STAGE]
  * - MAJOR: Mudanças incompatíveis com versões anteriores
@@ -14,7 +14,7 @@
 export const VERSION = {
   major: 0,
   minor: 1,
-  patch: 35,
+  patch: 36,
   stage: 'alpha', // 'alpha' | 'beta' | 'rc' | ''
 } as const
 
@@ -23,8 +23,8 @@ export const VERSION_STRING = `${VERSION.major}.${VERSION.minor}.${VERSION.patch
 export const APP_AUTHOR = 'MJr'
 
 export const APP_INFO = {
-  name: 'claude-docker-web',
+  name: 'devforge',
   version: VERSION_STRING,
   author: APP_AUTHOR,
-  fullName: `claude-docker-web v${VERSION_STRING} by ${APP_AUTHOR}`,
+  fullName: `devforge v${VERSION_STRING} by ${APP_AUTHOR}`,
 }

@@ -11,7 +11,7 @@ import type {
   DaemonState,
   ClaudeEvent,
   ClaudeLogEntry,
-} from '@claude-docker/shared'
+} from '@devforge/shared'
 
 /**
  * Subscription manager for claude daemon namespace

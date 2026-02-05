@@ -12,7 +12,7 @@ export const nodejsTemplate: ContainerTemplate = {
   category: 'language',
   tags: ['nodejs', 'typescript', 'javascript', 'npm', 'pnpm', 'web'],
   defaultConfig: {
-    image: 'claude-docker/both:latest',
+    image: 'devforge/both:latest',
     environment: {
       NODE_ENV: 'development',
       NPM_CONFIG_PREFIX: '/home/developer/.npm-global',

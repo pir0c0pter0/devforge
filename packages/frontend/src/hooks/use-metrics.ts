@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { metricsWsClient } from '@/lib/websocket'
 import { useContainerStore } from '@/stores/container.store'
-import type { ContainerMetrics } from '@claude-docker/shared'
+import type { ContainerMetrics } from '@devforge/shared'
 
 export function useMetrics(containerId?: string) {
   const { updateMetrics } = useContainerStore()

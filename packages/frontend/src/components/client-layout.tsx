@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { I18nProvider, useI18n } from '@/lib/i18n'
 import { ModalProvider } from '@/components/ui/modal'
@@ -21,9 +22,13 @@ function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-terminal-green/20 border border-terminal-green/50 rounded-lg flex items-center justify-center">
-              <span className="text-terminal-green text-lg font-bold">&gt;_</span>
-            </div>
+            <Image
+              src="/logo-icon.png"
+              alt="DevForge"
+              width={40}
+              height={40}
+              className="flex-shrink-0"
+            />
             <div>
               <h1 className="text-lg font-bold text-terminal-green terminal-glow">
                 {t.appName}

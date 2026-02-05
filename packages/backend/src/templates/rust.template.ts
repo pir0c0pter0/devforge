@@ -12,7 +12,7 @@ export const rustTemplate: ContainerTemplate = {
   category: 'language',
   tags: ['rust', 'cargo', 'systems', 'backend', 'wasm', 'cli'],
   defaultConfig: {
-    image: 'claude-docker/both:latest',
+    image: 'devforge/both:latest',
     environment: {
       CARGO_HOME: '/home/developer/.cargo',
       RUSTUP_HOME: '/home/developer/.rustup',

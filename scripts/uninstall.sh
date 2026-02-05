@@ -1,5 +1,5 @@
 #!/bin/bash
-# Script para desinstalar os serviços systemd do claude-docker-web
+# Script para desinstalar os serviços systemd do devforge
 
 set -e
 
@@ -18,7 +18,7 @@ log_warning() { echo -e "${YELLOW}⚠️  $1${NC}"; }
 
 echo ""
 echo "╔════════════════════════════════════════════════════════════╗"
-echo "║         Claude Docker Web - Desinstalação                  ║"
+echo "║              DevForge - Desinstalação                      ║"
 echo "╚════════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -34,20 +34,20 @@ echo ""
 
 # Parar serviços
 log_info "Parando serviços..."
-systemctl --user stop claude-docker-frontend.service 2>/dev/null || true
-systemctl --user stop claude-docker-backend.service 2>/dev/null || true
+systemctl --user stop devforge-frontend.service 2>/dev/null || true
+systemctl --user stop devforge-backend.service 2>/dev/null || true
 log_success "Serviços parados"
 
 # Desabilitar serviços
 log_info "Desabilitando serviços..."
-systemctl --user disable claude-docker-frontend.service 2>/dev/null || true
-systemctl --user disable claude-docker-backend.service 2>/dev/null || true
+systemctl --user disable devforge-frontend.service 2>/dev/null || true
+systemctl --user disable devforge-backend.service 2>/dev/null || true
 log_success "Serviços desabilitados"
 
 # Remover arquivos de serviço
 log_info "Removendo arquivos de serviço..."
-rm -f "$SYSTEMD_USER_DIR/claude-docker-backend.service"
-rm -f "$SYSTEMD_USER_DIR/claude-docker-frontend.service"
+rm -f "$SYSTEMD_USER_DIR/devforge-backend.service"
+rm -f "$SYSTEMD_USER_DIR/devforge-frontend.service"
 log_success "Arquivos removidos"
 
 # Recarregar systemd

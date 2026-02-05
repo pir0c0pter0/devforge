@@ -1,5 +1,5 @@
 #!/bin/bash
-# Script de instalação completa do claude-docker-web
+# Script de instalação completa do devforge
 # Instala dependências, configura serviços systemd e habilita inicialização automática
 
 set -e
@@ -23,7 +23,7 @@ log_error() { echo -e "${RED}❌ $1${NC}"; }
 
 echo ""
 echo "╔════════════════════════════════════════════════════════════╗"
-echo "║           Claude Docker Web - Instalação                   ║"
+echo "║                DevForge - Instalação                       ║"
 echo "╚════════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -183,9 +183,9 @@ log_info "Configurando serviços systemd..."
 mkdir -p "$SYSTEMD_USER_DIR"
 
 # Serviço do Backend
-cat > "$SYSTEMD_USER_DIR/claude-docker-backend.service" << EOF
+cat > "$SYSTEMD_USER_DIR/devforge-backend.service" << EOF
 [Unit]
-Description=Claude Docker Web - Backend
+Description=DevForge - Backend
 After=network.target
 
 [Service]
@@ -207,11 +207,11 @@ EOF
 log_success "Serviço backend criado"
 
 # Serviço do Frontend
-cat > "$SYSTEMD_USER_DIR/claude-docker-frontend.service" << EOF
+cat > "$SYSTEMD_USER_DIR/devforge-frontend.service" << EOF
 [Unit]
-Description=Claude Docker Web - Frontend
-After=network.target claude-docker-backend.service
-Wants=claude-docker-backend.service
+Description=DevForge - Frontend
+After=network.target devforge-backend.service
+Wants=devforge-backend.service
 
 [Service]
 Type=simple
@@ -242,8 +242,8 @@ echo ""
 # ==============================================================================
 log_info "Habilitando serviços para inicialização automática..."
 
-systemctl --user enable claude-docker-backend.service
-systemctl --user enable claude-docker-frontend.service
+systemctl --user enable devforge-backend.service
+systemctl --user enable devforge-frontend.service
 
 log_success "Serviços habilitados"
 
@@ -293,27 +293,27 @@ log_info "Iniciando serviços..."
 # Parar serviços antigos se existirem
 "$SCRIPT_DIR/stop.sh" 2>/dev/null || true
 
-systemctl --user start claude-docker-backend.service
+systemctl --user start devforge-backend.service
 sleep 3
 
 # Verificar se backend iniciou
-if systemctl --user is-active --quiet claude-docker-backend.service; then
+if systemctl --user is-active --quiet devforge-backend.service; then
     log_success "Backend iniciado"
 else
     log_error "Falha ao iniciar backend. Verificando logs..."
-    journalctl --user -u claude-docker-backend.service -n 20 --no-pager
+    journalctl --user -u devforge-backend.service -n 20 --no-pager
     exit 1
 fi
 
-systemctl --user start claude-docker-frontend.service
+systemctl --user start devforge-frontend.service
 sleep 2
 
 # Verificar se frontend iniciou
-if systemctl --user is-active --quiet claude-docker-frontend.service; then
+if systemctl --user is-active --quiet devforge-frontend.service; then
     log_success "Frontend iniciado"
 else
     log_error "Falha ao iniciar frontend. Verificando logs..."
-    journalctl --user -u claude-docker-frontend.service -n 20 --no-pager
+    journalctl --user -u devforge-frontend.service -n 20 --no-pager
     exit 1
 fi
 
@@ -328,9 +328,9 @@ echo ""
 echo "🌐 Acesse: http://localhost:3000"
 echo ""
 echo "📊 Status dos serviços:"
-systemctl --user status claude-docker-backend.service --no-pager -l | head -5
+systemctl --user status devforge-backend.service --no-pager -l | head -5
 echo ""
-systemctl --user status claude-docker-frontend.service --no-pager -l | head -5
+systemctl --user status devforge-frontend.service --no-pager -l | head -5
 echo ""
 
 # Comandos pendentes

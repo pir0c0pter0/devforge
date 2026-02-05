@@ -224,7 +224,7 @@ router.post('/telegram-config', strictRateLimiter, async (req: Request, res: Res
           const userIds = allowedUsers.split(',').map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id));
           const welcomeMessage =
             '🎉 *Bot Configurado com Sucesso\\!*\n\n' +
-            '✅ Seu bot Claude Docker está pronto para uso\\.\n\n' +
+            '✅ Seu bot DevForge está pronto para uso\\.\n\n' +
             '📋 *Comandos disponíveis:*\n' +
             '• `/help` \\- Lista todos os comandos\n' +
             '• `/list` \\- Lista containers\n' +

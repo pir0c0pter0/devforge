@@ -1,5 +1,5 @@
 #!/bin/bash
-# Script para iniciar os serviços do claude-docker-web
+# Script para iniciar os serviços do devforge
 # Usa systemd se os serviços estiverem instalados, senão inicia manualmente
 
 set -e
@@ -17,10 +17,10 @@ log_info() { echo -e "${BLUE}ℹ️  $1${NC}"; }
 log_success() { echo -e "${GREEN}✅ $1${NC}"; }
 log_error() { echo -e "${RED}❌ $1${NC}"; }
 
-echo "🚀 Iniciando serviços claude-docker-web..."
+echo "🚀 Iniciando serviços devforge..."
 
 # Verificar se serviços systemd existem
-if systemctl --user list-unit-files | grep -q "claude-docker-backend.service"; then
+if systemctl --user list-unit-files | grep -q "devforge-backend.service"; then
     log_info "Usando serviços systemd..."
 
     # Parar processos manuais se existirem
@@ -28,7 +28,7 @@ if systemctl --user list-unit-files | grep -q "claude-docker-backend.service"; t
     pkill -f "next-server" 2>/dev/null || true
 
     # Iniciar via systemd
-    systemctl --user start claude-docker-backend.service
+    systemctl --user start devforge-backend.service
 
     # Aguardar backend
     log_info "Aguardando backend..."
@@ -39,13 +39,13 @@ if systemctl --user list-unit-files | grep -q "claude-docker-backend.service"; t
         fi
         if [ $i -eq 30 ]; then
             log_error "Backend não iniciou. Verificando logs..."
-            journalctl --user -u claude-docker-backend.service -n 20 --no-pager
+            journalctl --user -u devforge-backend.service -n 20 --no-pager
             exit 1
         fi
         sleep 1
     done
 
-    systemctl --user start claude-docker-frontend.service
+    systemctl --user start devforge-frontend.service
 
     # Aguardar frontend
     log_info "Aguardando frontend..."
@@ -56,7 +56,7 @@ if systemctl --user list-unit-files | grep -q "claude-docker-backend.service"; t
         fi
         if [ $i -eq 30 ]; then
             log_error "Frontend não iniciou. Verificando logs..."
-            journalctl --user -u claude-docker-frontend.service -n 20 --no-pager
+            journalctl --user -u devforge-frontend.service -n 20 --no-pager
             exit 1
         fi
         sleep 1
@@ -119,9 +119,9 @@ else
         sleep 1
     done
 
-    # Iniciar frontend
+    # Iniciar frontend (limpar PORT do backend para evitar conflito)
     log_info "Iniciando frontend na porta 3000..."
-    nohup pnpm --filter frontend start > "$LOG_DIR/frontend.log" 2>&1 &
+    PORT=3000 nohup pnpm --filter frontend start > "$LOG_DIR/frontend.log" 2>&1 &
 
     # Aguardar frontend
     log_info "Aguardando frontend..."

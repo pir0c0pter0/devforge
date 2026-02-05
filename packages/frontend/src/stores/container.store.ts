@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { Container } from '@/lib/types'
-import type { ContainerMetrics } from '@claude-docker/shared'
+import type { ContainerMetrics } from '@devforge/shared'
 
 interface ContainerState {
   containers: Container[]

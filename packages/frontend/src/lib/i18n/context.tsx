@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { translations, Language } from './translations'
 
-const STORAGE_KEY = 'claude-docker-language'
+const STORAGE_KEY = 'devforge-language'
 
 // Cotação aproximada USD -> BRL (atualizar conforme necessário)
 const USD_TO_BRL_RATE = 5.80

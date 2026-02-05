@@ -15,7 +15,7 @@ import type {
   TaskBatchSubscription,
   DaemonState,
   ClaudeEvent,
-} from '@claude-docker/shared'
+} from '@devforge/shared'
 import { config } from '../config'
 import { createChildLogger } from '../utils/logger'
 
@@ -87,7 +87,7 @@ import { containerService } from './container.service'
 import { healthMonitorService } from './health-monitor.service'
 import { claudeLogsService } from './claude-logs.service'
 import { setupDockerLogsNamespace as setupDockerLogsNamespaceModule } from '../websocket/namespaces'
-import type { ClaudeLogEntry } from '@claude-docker/shared'
+import type { ClaudeLogEntry } from '@devforge/shared'
 
 /**
  * Socket.io server instance

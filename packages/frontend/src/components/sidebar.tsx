@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
 import { useAuth } from '@/contexts/AuthContext'
@@ -118,25 +119,17 @@ export function Sidebar() {
         <div className="p-4 border-b border-terminal-border">
           <div className="flex items-center justify-between">
             <div className={clsx('flex items-center space-x-3', isCollapsed && 'justify-center')}>
-              <div className="w-10 h-10 bg-primary-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                <svg
-                  className="w-6 h-6 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-                  />
-                </svg>
-              </div>
+              <Image
+                src="/logo-icon.png"
+                alt="DevForge"
+                width={40}
+                height={40}
+                className="flex-shrink-0"
+              />
               {!isCollapsed && (
                 <div className="min-w-0">
                   <h1 className="text-lg font-bold text-terminal-text truncate">
-                    Claude Docker
+                    DevForge
                   </h1>
                   <p className="text-xs text-terminal-textMuted">{t.nav.manager}</p>
                 </div>

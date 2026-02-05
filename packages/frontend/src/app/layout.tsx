@@ -3,10 +3,10 @@ import './globals.css'
 import { ClientLayout } from '@/components/client-layout'
 
 export const metadata: Metadata = {
-  title: 'Claude Docker Manager',
-  description: 'Gerenciador de containers Docker com Claude Code e VS Code',
+  title: 'DevForge',
+  description: 'Orquestração de containers para desenvolvimento com IA',
   icons: {
-    icon: '/favicon.svg',
+    icon: '/favicon.png',
   },
 }
 

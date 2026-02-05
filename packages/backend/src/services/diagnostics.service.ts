@@ -210,8 +210,8 @@ class DiagnosticsService {
    */
   async checkDockerImages(): Promise<DiagnosticCheck> {
     const requiredImages = [
-      'claude-docker/claude:latest',
-      'claude-docker/both:latest',
+      'devforge/claude:latest',
+      'devforge/both:latest',
     ];
     const missingImages: string[] = [];
     const foundImages: string[] = [];
@@ -270,14 +270,14 @@ class DiagnosticsService {
     try {
       const containers = await dockerService.listContainers(true);
       const claudeContainers = containers.filter((c) =>
-        c.Names?.some((n) => n.includes('claude-docker-'))
+        c.Names?.some((n) => n.includes('devforge-') || n.includes('claude-docker-'))
       );
 
       if (claudeContainers.length === 0) {
         return {
           name: 'Containers Órfãos',
           status: 'ok',
-          message: 'Nenhum container claude-docker encontrado',
+          message: 'Nenhum container devforge encontrado',
         };
       }
 
@@ -304,7 +304,7 @@ class DiagnosticsService {
           ),
         ],
         fixInstructions: [
-          "docker container prune -f --filter 'label=app=claude-docker'",
+          "docker container prune -f --filter 'label=app=devforge'",
         ],
       };
     } catch (error) {

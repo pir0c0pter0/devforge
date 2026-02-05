@@ -1,5 +1,5 @@
 import { io, Socket } from 'socket.io-client'
-import type { ContainerMetrics } from '@claude-docker/shared'
+import type { ContainerMetrics } from '@devforge/shared'
 
 const WS_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 

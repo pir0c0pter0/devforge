@@ -7,7 +7,7 @@
 
 import { Markup } from 'telegraf'
 import type { InlineKeyboardMarkup, InlineKeyboardButton } from 'telegraf/types'
-import type { Container } from '@claude-docker/shared'
+import type { Container } from '@devforge/shared'
 
 /**
  * Callback data separator

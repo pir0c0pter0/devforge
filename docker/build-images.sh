@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# Docker Image Build Script for Claude Docker
+# Docker Image Build Script for DevForge
 # Builds all base images with multi-architecture support (amd64, arm64)
 # =============================================================================
 
@@ -18,7 +18,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE_IMAGE_DIR="${SCRIPT_DIR}/base-image"
 
 # Image registry and version
-REGISTRY="${DOCKER_REGISTRY:-claude-docker}"
+REGISTRY="${DOCKER_REGISTRY:-devforge}"
 VERSION="${VERSION:-latest}"
 
 # User ID and Group ID for non-root user
@@ -27,7 +27,7 @@ USER_GID="${USER_GID:-1000}"
 
 # Multi-architecture settings
 PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"
-BUILDER_NAME="claude-docker-builder"
+BUILDER_NAME="devforge-builder"
 
 # Logging functions
 log_info() {
@@ -51,16 +51,16 @@ usage() {
     cat <<EOF
 Usage: $0 [OPTIONS] [IMAGE]
 
-Build Claude Docker base images with multi-architecture support.
+Build DevForge base images with multi-architecture support.
 
 OPTIONS:
     -h, --help              Show this help message
-    -r, --registry REG      Set registry name (default: claude-docker)
+    -r, --registry REG      Set registry name (default: devforge)
     -v, --version VER       Set version tag (default: latest)
     -u, --uid UID           Set user UID (default: 1000)
     -g, --gid GID           Set user GID (default: 1000)
     -p, --platforms PLATS   Set target platforms (default: linux/amd64,linux/arm64)
-    --builder NAME          Set buildx builder name (default: claude-docker-builder)
+    --builder NAME          Set buildx builder name (default: devforge-builder)
     --no-cache              Build without cache
     --push                  Push images after building
     --multi-arch            Enable multi-architecture build (requires --push or buildx)
@@ -298,7 +298,7 @@ push_image() {
 # Main build process
 main() {
     log_info "==================================="
-    log_info "Claude Docker Image Build Script"
+    log_info "DevForge Image Build Script"
     log_info "==================================="
     echo ""
     log_info "Configuration:"

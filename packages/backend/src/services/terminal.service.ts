@@ -2,7 +2,7 @@ import Docker from 'dockerode'
 import { v4 as uuidv4 } from 'uuid'
 import { dockerLogger as logger } from '../utils/logger'
 import { containerRepository } from '../repositories'
-import type { TerminalSession } from '@claude-docker/shared'
+import type { TerminalSession } from '@devforge/shared'
 
 interface ActiveSession {
   session: TerminalSession

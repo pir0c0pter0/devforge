@@ -20,7 +20,7 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.30.0
         version: 0.30.1
-      '@claude-docker/shared':
+      '@devforge/shared':
         specifier: workspace:*
         version: link:../shared
       better-sqlite3:
@@ -144,7 +144,7 @@ importers:
 
   packages/frontend:
     dependencies:
-      '@claude-docker/shared':
+      '@devforge/shared':
         specifier: workspace:*
         version: link:../shared
       '@xterm/addon-fit':

@@ -1,5 +1,5 @@
 {
-  "name": "@claude-docker/shared",
+  "name": "@devforge/shared",
   "version": "0.0.1-alpha",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

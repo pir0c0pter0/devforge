@@ -1027,7 +1027,7 @@ export default function SettingsPage() {
             <ConfigItem label={t.settings.config.defaultDisk} value={`${config.defaultDiskLimit} MB`} />
           </div>
           <p className="mt-4 text-sm text-terminal-textMuted">
-            {t.settings.config.editConfig} <code className="bg-terminal-bg px-2 py-1 rounded text-terminal-green">~/.config/claude-docker-web/config.env</code>
+            {t.settings.config.editConfig} <code className="bg-terminal-bg px-2 py-1 rounded text-terminal-green">~/.config/devforge/config.env</code>
           </p>
         </div>
       )}

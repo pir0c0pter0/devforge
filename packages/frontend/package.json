@@ -1,5 +1,5 @@
 {
-  "name": "@claude-docker/frontend",
+  "name": "@devforge/frontend",
   "version": "0.1.0-alpha",
   "private": true,
   "scripts": {
@@ -13,7 +13,7 @@
     "test:coverage": "jest --coverage"
   },
   "dependencies": {
-    "@claude-docker/shared": "workspace:*",
+    "@devforge/shared": "workspace:*",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-web-links": "^0.12.0",
     "clsx": "^2.1.1",

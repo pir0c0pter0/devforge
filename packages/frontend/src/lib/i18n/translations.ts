@@ -3,7 +3,7 @@ export type Language = 'pt-BR' | 'en'
 export const translations = {
   'pt-BR': {
     // Layout
-    appName: 'Claude Docker Manager',
+    appName: 'DevForge',
     appDescription: 'Orquestração de containers com IA',
     nav: {
       dashboard: 'Painel',
@@ -678,7 +678,7 @@ export const translations = {
 
   en: {
     // Layout
-    appName: 'Claude Docker Manager',
+    appName: 'DevForge',
     appDescription: 'Container orchestration with AI',
     nav: {
       dashboard: 'Dashboard',

@@ -1,24 +1,26 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Version-0.1.31--alpha-22c55e?style=for-the-badge" alt="Version">
-  <img src="https://img.shields.io/badge/License-MIT-22c55e?style=for-the-badge" alt="License">
+  <img src="https://img.shields.io/badge/License-PolyForm%20NC-22c55e?style=for-the-badge" alt="License">
   <img src="https://img.shields.io/badge/Next.js-15-0d1117?style=for-the-badge&logo=next.js&logoColor=white" alt="Next.js">
   <img src="https://img.shields.io/badge/Docker-Required-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker">
   <img src="https://img.shields.io/badge/TypeScript-5.0-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript">
 </p>
 
 ```
-   _____ _                 _        _____             _
-  / ____| |               | |      |  __ \           | |
- | |    | | __ _ _   _  __| | ___  | |  | | ___   ___| | _____ _ __
- | |    | |/ _` | | | |/ _` |/ _ \ | |  | |/ _ \ / __| |/ / _ \ '__|
- | |____| | (_| | |_| | (_| |  __/ | |__| | (_) | (__|   <  __/ |
-  \_____|_|\__,_|\__,_|\__,_|\___| |_____/ \___/ \___|_|\_\___|_|
+  _____              ______
+ |  __ \            |  ____|
+ | |  | | _____   __| |__ ___  _ __ __ _  ___
+ | |  | |/ _ \ \ / /  __/ _ \| '__/ _` |/ _ \
+ | |__| |  __/\ V /| | | (_) | | | (_| |  __/
+ |_____/ \___| \_/ |_|  \___/|_|  \__, |\___|
+                                    __/ |
+                                   |___/
 
-  >_ Claude Docker Manager - Web Dashboard
+  >_ DevForge - Orquestração de containers para desenvolvimento com IA
 ```
 
 <p align="center">
-  <strong>Dashboard web para gerenciar containers Docker isolados com Claude Code e VS Code</strong>
+  <strong>Orquestração de containers para desenvolvimento com IA - Claude Code + VS Code</strong>
 </p>
 
 ---
@@ -157,7 +159,7 @@ Ambiente completo para desenvolvimento ESP32 com PlatformIO:
 ### Tema Terminal Verde
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  >_ Claude Docker Manager                                   │
+│  >_ DevForge                                                 │
 │  Orquestracao de containers com IA                         │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
@@ -209,7 +211,7 @@ Ambiente completo para desenvolvimento ESP32 com PlatformIO:
 ## Arquitetura
 
 ```
-claude-docker/
+devforge/
 ├── packages/
 │   ├── backend/              # API Express + TypeScript
 │   │   ├── src/
@@ -292,8 +294,8 @@ groups | grep docker
 
 ```bash
 # 1. Clone o repositorio
-git clone https://github.com/pir0c0pter0/claude-docker.git
-cd claude-docker
+git clone https://github.com/pir0c0pter0/devforge.git
+cd devforge
 
 # 2. Execute o instalador
 ./scripts/install.sh
@@ -321,16 +323,16 @@ cd claude-docker
 ./scripts/logs.sh       # Ver logs
 
 # Ou via systemctl
-systemctl --user status claude-docker-backend
-systemctl --user status claude-docker-frontend
+systemctl --user status devforge-backend
+systemctl --user status devforge-frontend
 ```
 
 ### Instalacao Manual (desenvolvimento)
 
 ```bash
 # Clone
-git clone https://github.com/pir0c0pter0/claude-docker.git
-cd claude-docker
+git clone https://github.com/pir0c0pter0/devforge.git
+cd devforge
 
 # Instale dependencias
 pnpm install
@@ -425,20 +427,20 @@ Acesse **Configuracoes** no menu para:
 ### Estrutura de Diretorios
 
 ```
-~/.config/claude-docker-web/        # Configuracao do usuario
+~/.config/devforge/                 # Configuracao do usuario
 ├── data/
-│   └── claude-docker.db            # Banco de dados SQLite
+│   └── devforge.db                 # Banco de dados SQLite
 ├── backend.log                     # Log do backend
 └── frontend.log                    # Log do frontend
 
 /var/log/                           # Logs systemd (se instalado)
-├── claude-docker-backend.log
-└── claude-docker-frontend.log
+├── devforge-backend.log
+└── devforge-frontend.log
 ```
 
 ### Variaveis de Ambiente
 
-Crie `.env` na raiz ou configure em `~/.config/claude-docker-web/`:
+Crie `.env` na raiz ou configure em `~/.config/devforge/`:
 
 ```env
 # Servidor
@@ -515,8 +517,8 @@ GET    /api/docker-logs/:id/stats   # Estatisticas de logs
 
 ```bash
 # Clone
-git clone https://github.com/pir0c0pter0/claude-docker.git
-cd claude-docker
+git clone https://github.com/pir0c0pter0/devforge.git
+cd devforge
 
 # Instale dependencias
 pnpm install
@@ -612,8 +614,8 @@ lsof -i :3000 -i :8000
 ./scripts/logs.sh
 
 # Logs especificos
-journalctl --user -u claude-docker-backend -f
-journalctl --user -u claude-docker-frontend -f
+journalctl --user -u devforge-backend -f
+journalctl --user -u devforge-frontend -f
 ```
 
 ---
@@ -660,12 +662,23 @@ Ver historico completo em [CLAUDE.md](CLAUDE.md)
 
 ## Licenca
 
-MIT License - veja [LICENSE](LICENSE)
+**PolyForm Noncommercial License 1.0.0**
+
+| Uso | Permitido? |
+|-----|------------|
+| Pessoal, hobby, estudo | Sim |
+| Educacao e pesquisa | Sim |
+| ONGs e governo | Sim |
+| Comercial (empresas, freelancers) | Requer licenca paga |
+
+- Licenca completa: [LICENSE](LICENSE)
+- Licenca comercial: [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md)
+- Contato: mariostjr@gmail.com
 
 ---
 
 <p align="center">
-  <code>>_ claude-docker-web v0.1.31-alpha</code>
+  <code>>_ devforge v0.1.36-alpha</code>
 </p>
 
 <p align="center">

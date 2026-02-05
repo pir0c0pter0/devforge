@@ -1,7 +1,7 @@
 /**
  * Telegram Bot Module
  *
- * Provides Telegram bot integration for claude-docker.
+ * Provides Telegram bot integration for devforge.
  * Bot allows users to manage containers, send instructions to Claude,
  * and receive notifications via Telegram.
  *

@@ -60,7 +60,7 @@ export class StartCommand extends BaseCommand {
     const welcomeMessage = `
 *Olá, ${escapedName}\\!*
 
-Bem\\-vindo ao *Claude Docker Bot*\\. Este bot permite gerenciar seus containers Docker com Claude Code diretamente pelo Telegram\\.
+Bem\\-vindo ao *DevForge Bot*\\. Este bot permite gerenciar seus containers Docker com Claude Code diretamente pelo Telegram\\.
 
 *Primeiros Passos:*
 1\\. Use /list para ver seus containers

@@ -10,7 +10,7 @@ import type {
   ClaudeLogFilter,
   ClaudeLogsResponse,
   ClaudeLogStats,
-} from '@claude-docker/shared'
+} from '@devforge/shared'
 
 const logger = createChildLogger({ service: 'claude-logs' })
 

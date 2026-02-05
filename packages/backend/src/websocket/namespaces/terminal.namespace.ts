@@ -4,7 +4,7 @@ import { cleanupSocketRateLimit } from '../../middleware/websocket-rate-limit'
 import type {
   ServerToClientEvents,
   ClientToServerEvents,
-} from '@claude-docker/shared'
+} from '@devforge/shared'
 
 /**
  * Map of terminal subscriptions (sessionId -> socket ID)

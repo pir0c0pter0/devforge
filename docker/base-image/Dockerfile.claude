@@ -3,7 +3,7 @@
 
 FROM node:22-bookworm
 
-LABEL maintainer="claude-docker"
+LABEL maintainer="devforge"
 LABEL description="Claude Code development environment"
 LABEL version="1.0.0"
 

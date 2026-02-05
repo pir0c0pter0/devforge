@@ -12,7 +12,7 @@ export const fullstackTemplate: ContainerTemplate = {
   category: 'fullstack',
   tags: ['nextjs', 'react', 'typescript', 'nodejs', 'api', 'fullstack', 'prisma', 'tailwindcss'],
   defaultConfig: {
-    image: 'claude-docker/both:latest',
+    image: 'devforge/both:latest',
     environment: {
       NODE_ENV: 'development',
       NEXT_TELEMETRY_DISABLED: '1',

@@ -1,6 +1,6 @@
 version: '3.8'
 
-# Claude Docker - Development Overrides
+# DevForge - Development Overrides
 # Hot reload and development-specific configurations
 # Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
 
@@ -44,7 +44,7 @@ services:
           memory: 1G
 
     labels:
-      - "claude-docker.mode=development"
+      - "devforge.mode=development"
 
   # Frontend Development Overrides
   frontend:
@@ -82,7 +82,7 @@ services:
           memory: 512M
 
     labels:
-      - "claude-docker.mode=development"
+      - "devforge.mode=development"
 
   # Redis Development Overrides
   redis:
@@ -101,14 +101,14 @@ services:
           memory: 1G
 
     labels:
-      - "claude-docker.mode=development"
+      - "devforge.mode=development"
 
   # Development Tools Container
   devtools:
     build:
       context: ./base-image
       dockerfile: Dockerfile.both
-    container_name: claude-docker-devtools
+    container_name: devforge-devtools
     hostname: devtools
     restart: unless-stopped
 
@@ -131,14 +131,14 @@ services:
       - "5173:5173"  # Vite dev server
 
     networks:
-      - claude-docker-network
+      - devforge-network
 
     working_dir: /workspace
 
     labels:
-      - "claude-docker.managed=true"
-      - "claude-docker.service=devtools"
-      - "claude-docker.mode=development"
+      - "devforge.managed=true"
+      - "devforge.service=devtools"
+      - "devforge.mode=development"
 
     deploy:
       resources:
@@ -161,6 +161,6 @@ volumes:
     driver: local
 
 networks:
-  claude-docker-network:
-    name: claude-docker-network
+  devforge-network:
+    name: devforge-network
     driver: bridge

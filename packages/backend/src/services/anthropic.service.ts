@@ -40,7 +40,7 @@ class AnthropicService {
   /**
    * System prompt for Telegram assistant
    */
-  private readonly systemPrompt = `Voce eh um assistente pessoal no Telegram chamado Claude Docker Bot.
+  private readonly systemPrompt = `Voce eh um assistente pessoal no Telegram chamado DevForge Bot.
 
 Suas responsabilidades:
 - Responder perguntas de forma concisa e util

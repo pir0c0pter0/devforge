@@ -1,11 +1,11 @@
-# Claude Docker Web - Instruções Críticas
+# DevForge - Instruções Críticas
 
-## Versão Atual: 0.1.35-alpha
+## Versão Atual: 0.1.36-alpha
 
 ## Links
 
-- **Repo**: https://github.com/pir0c0pter0/claude-docker
-- **Issues**: https://github.com/pir0c0pter0/claude-docker/issues
+- **Repo**: https://github.com/pir0c0pter0/devforge
+- **Issues**: https://github.com/pir0c0pter0/devforge/issues
 
 ---
 
@@ -78,7 +78,7 @@ taskService.complete(taskId, result);
 ## Estrutura do Projeto
 
 ```
-claude-docker/
+devforge/
 ├── packages/
 │   ├── frontend/     # Next.js 15 (porta 3000)
 │   ├── backend/      # Express + Dockerode (porta 8000)
@@ -128,6 +128,13 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.36-alpha
+- Feat: Licenca alterada de MIT para PolyForm Noncommercial 1.0.0
+- Feat: COMMERCIAL-LICENSE.md com tiers Starter ($19), Pro ($99) e Enterprise
+- Feat: CONTRIBUTING.md com CLA para dual licensing
+- Feat: README atualizado com badge e secao de licenca
+- Feat: FAQ bilingue (EN/PT-BR) no COMMERCIAL-LICENSE.md
 
 ### v0.1.35-alpha
 - Feat: VSCodeHealthService extraído para serviço dedicado (elimina código duplicado)

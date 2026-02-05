@@ -14,11 +14,11 @@ interface DatabaseConfig {
 
 /**
  * Get default database path
- * Uses ~/.local/share/claude-docker-web/claude-docker.db
+ * Uses ~/.local/share/devforge/devforge.db
  */
 const getDefaultDbPath = (): string => {
-  const dataDir = join(homedir(), '.local', 'share', 'claude-docker-web');
-  return join(dataDir, 'claude-docker.db');
+  const dataDir = join(homedir(), '.local', 'share', 'devforge');
+  return join(dataDir, 'devforge.db');
 };
 
 /**

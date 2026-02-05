@@ -1,6 +1,6 @@
-# Claude Docker Backend API
+# DevForge - Backend API
 
-Backend API for Docker container management with Claude Code + VS Code integration.
+Backend API for AI-powered container orchestration with Claude Code + VS Code integration.
 
 ## Overview
 

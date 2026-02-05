@@ -1,4 +1,4 @@
-# Claude Docker - Base Images
+# DevForge - Base Images
 
 Production-ready Docker base images for Claude Code and VS Code development environments.
 
@@ -43,13 +43,13 @@ Full-featured image with both Claude Code and VS Code Server.
 ### Build individual images:
 ```bash
 # Claude Code only
-docker build -f base-image/Dockerfile.claude -t claude-docker/claude:latest base-image/
+docker build -f base-image/Dockerfile.claude -t devforge/claude:latest base-image/
 
 # VS Code Server only
-docker build -f base-image/Dockerfile.vscode -t claude-docker/vscode:latest base-image/
+docker build -f base-image/Dockerfile.vscode -t devforge/vscode:latest base-image/
 
 # Combined image
-docker build -f base-image/Dockerfile.both -t claude-docker/both:latest base-image/
+docker build -f base-image/Dockerfile.both -t devforge/both:latest base-image/
 ```
 
 ### Build with custom user ID:
@@ -58,7 +58,7 @@ docker build \
   --build-arg USER_UID=$(id -u) \
   --build-arg USER_GID=$(id -g) \
   -f base-image/Dockerfile.both \
-  -t claude-docker/both:latest \
+  -t devforge/both:latest \
   base-image/
 ```
 
@@ -84,7 +84,7 @@ docker run -it --rm \
   -v $PWD:/home/developer/workspace \
   -v ~/.claude:/home/developer/.claude \
   -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
-  claude-docker/claude:latest
+  devforge/claude:latest
 ```
 
 **VS Code Server container:**
@@ -92,7 +92,7 @@ docker run -it --rm \
 docker run -d --rm \
   -p 8080:8080 \
   -v $PWD:/home/developer/workspace \
-  claude-docker/vscode:latest
+  devforge/vscode:latest
 ```
 
 **Combined container:**
@@ -104,7 +104,7 @@ docker run -d --rm \
   -v $PWD:/home/developer/workspace \
   -v ~/.claude:/home/developer/.claude \
   -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
-  claude-docker/both:latest
+  devforge/both:latest
 ```
 
 ## Docker Compose Services
@@ -223,10 +223,10 @@ docker-compose up --force-recreate
 docker ps | grep devtools
 
 # Check logs
-docker logs claude-docker-devtools
+docker logs devforge-devtools
 
 # Verify port mapping
-docker port claude-docker-devtools
+docker port devforge-devtools
 ```
 
 ## Cleanup
@@ -243,17 +243,17 @@ docker-compose down -v
 
 ### Remove images:
 ```bash
-docker rmi claude-docker/claude:latest
-docker rmi claude-docker/vscode:latest
-docker rmi claude-docker/both:latest
+docker rmi devforge/claude:latest
+docker rmi devforge/vscode:latest
+docker rmi devforge/both:latest
 ```
 
 ### Full cleanup (managed resources only):
 ```bash
-# Remove all claude-docker managed resources
-docker ps -a --filter "label=claude-docker.managed=true" -q | xargs -r docker rm -f
-docker volume ls --filter "label=claude-docker.managed=true" -q | xargs -r docker volume rm
-docker network ls --filter "label=claude-docker.managed=true" -q | xargs -r docker network rm
+# Remove all devforge managed resources
+docker ps -a --filter "label=devforge.managed=true" -q | xargs -r docker rm -f
+docker volume ls --filter "label=devforge.managed=true" -q | xargs -r docker volume rm
+docker network ls --filter "label=devforge.managed=true" -q | xargs -r docker network rm
 ```
 
 ## Advanced Usage
@@ -270,7 +270,7 @@ docker-compose build devtools
 ### Add custom extensions to VS Code Server:
 ```bash
 # Exec into container
-docker exec -it claude-docker-devtools /bin/zsh
+docker exec -it devforge-devtools /bin/zsh
 
 # Install extension
 code-server --install-extension <extension-id>
@@ -278,14 +278,14 @@ code-server --install-extension <extension-id>
 
 ### Run Claude Code interactively:
 ```bash
-docker exec -it claude-docker-devtools /bin/zsh
+docker exec -it devforge-devtools /bin/zsh
 npx @anthropic-ai/claude-code
 ```
 
 ## Labels
 
 All resources are labeled for easy management:
-- `claude-docker.managed=true` - Managed by claude-docker
-- `claude-docker.service=<name>` - Service name
-- `claude-docker.version=<version>` - Version
-- `claude-docker.mode=<mode>` - production/development
+- `devforge.managed=true` - Managed by devforge
+- `devforge.service=<name>` - Service name
+- `devforge.version=<version>` - Version
+- `devforge.mode=<mode>` - production/development

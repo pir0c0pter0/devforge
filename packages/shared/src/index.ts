@@ -1,6 +1,6 @@
 /**
- * @claude-docker/shared
- * Shared types, schemas, and constants for Claude Docker Web
+ * @devforge/shared
+ * Shared types, schemas, and constants for DevForge
  */
 
 // Export all container types

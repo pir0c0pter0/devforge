@@ -1,6 +1,6 @@
-# Quick Start Guide - Claude Docker
+# Quick Start Guide - DevForge
 
-Get up and running with Claude Docker in 5 minutes.
+Get up and running with DevForge in 5 minutes.
 
 ## Prerequisites
 
@@ -13,7 +13,7 @@ Get up and running with Claude Docker in 5 minutes.
 
 ```bash
 # Navigate to project
-cd /path/to/claude-docker
+cd /path/to/devforge
 
 # Copy environment file
 cp docker/.env.example docker/.env
@@ -76,7 +76,7 @@ docker run -d \
   -v $PWD/..:/workspace \
   -v ~/.claude:/home/developer/.claude \
   -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
-  claude-docker/both:latest
+  devforge/both:latest
 
 # Open VS Code Server
 open http://localhost:8080
@@ -117,7 +117,7 @@ make shell
 npx @anthropic-ai/claude-code
 
 # Or directly
-docker exec -it claude-docker-devtools npx @anthropic-ai/claude-code
+docker exec -it devforge-devtools npx @anthropic-ai/claude-code
 ```
 
 ### Using Backend API:
@@ -128,7 +128,7 @@ curl http://localhost:8000/health
 # Create container (example)
 curl -X POST http://localhost:8000/api/containers \
   -H "Content-Type: application/json" \
-  -d '{"image": "claude-docker/both:latest", "name": "my-container"}'
+  -d '{"image": "devforge/both:latest", "name": "my-container"}'
 ```
 
 ## Common Commands

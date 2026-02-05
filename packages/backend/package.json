@@ -1,7 +1,7 @@
 {
-  "name": "@claude-docker/backend",
+  "name": "@devforge/backend",
   "version": "0.1.0-alpha",
-  "description": "Backend API for Docker container management with Claude Code",
+  "description": "DevForge - Backend API for container orchestration with AI",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -19,10 +19,10 @@
     "api"
   ],
   "author": "",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
-    "@claude-docker/shared": "workspace:*",
+    "@devforge/shared": "workspace:*",
     "better-sqlite3": "^12.6.2",
     "bullmq": "^5.1.0",
     "compression": "^1.7.4",

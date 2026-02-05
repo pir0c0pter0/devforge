@@ -1,6 +1,6 @@
 version: '3.8'
 
-# Claude Docker - Main Orchestration
+# DevForge - Main Orchestration
 # Production-ready docker-compose configuration
 
 services:
@@ -9,7 +9,7 @@ services:
     build:
       context: ../packages/backend
       dockerfile: Dockerfile
-    container_name: claude-docker-backend
+    container_name: devforge-backend
     hostname: backend
     restart: unless-stopped
 
@@ -43,12 +43,12 @@ services:
         condition: service_healthy
 
     networks:
-      - claude-docker-network
+      - devforge-network
 
     labels:
-      - "claude-docker.managed=true"
-      - "claude-docker.service=backend"
-      - "claude-docker.version=1.0.0"
+      - "devforge.managed=true"
+      - "devforge.service=backend"
+      - "devforge.version=1.0.0"
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -79,7 +79,7 @@ services:
     build:
       context: ../packages/frontend
       dockerfile: Dockerfile
-    container_name: claude-docker-frontend
+    container_name: devforge-frontend
     hostname: frontend
     restart: unless-stopped
 
@@ -99,12 +99,12 @@ services:
         condition: service_healthy
 
     networks:
-      - claude-docker-network
+      - devforge-network
 
     labels:
-      - "claude-docker.managed=true"
-      - "claude-docker.service=frontend"
-      - "claude-docker.version=1.0.0"
+      - "devforge.managed=true"
+      - "devforge.service=frontend"
+      - "devforge.version=1.0.0"
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000"]
@@ -133,7 +133,7 @@ services:
   # Redis Cache Service
   redis:
     image: redis:7-alpine
-    container_name: claude-docker-redis
+    container_name: devforge-redis
     hostname: redis
     restart: unless-stopped
 
@@ -151,12 +151,12 @@ services:
       --maxmemory-policy allkeys-lru
 
     networks:
-      - claude-docker-network
+      - devforge-network
 
     labels:
-      - "claude-docker.managed=true"
-      - "claude-docker.service=redis"
-      - "claude-docker.version=7"
+      - "devforge.managed=true"
+      - "devforge.service=redis"
+      - "devforge.version=7"
 
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -182,23 +182,23 @@ volumes:
   redis_data:
     driver: local
     labels:
-      - "claude-docker.managed=true"
-      - "claude-docker.volume=redis_data"
+      - "devforge.managed=true"
+      - "devforge.volume=redis_data"
 
   backend_logs:
     driver: local
     labels:
-      - "claude-docker.managed=true"
-      - "claude-docker.volume=backend_logs"
+      - "devforge.managed=true"
+      - "devforge.volume=backend_logs"
 
 # Custom network for service communication
 networks:
-  claude-docker-network:
-    name: claude-docker-network
+  devforge-network:
+    name: devforge-network
     driver: bridge
     labels:
-      - "claude-docker.managed=true"
-      - "claude-docker.network=main"
+      - "devforge.managed=true"
+      - "devforge.network=main"
     ipam:
       driver: default
       config:

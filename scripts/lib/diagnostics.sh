@@ -112,7 +112,7 @@ check_docker_group() {
 check_docker_images() {
     echo -e "\n${CYAN}${BOLD}=== Docker Images ===${NC}"
 
-    local required_images=("claude-docker/claude:latest" "claude-docker/both:latest")
+    local required_images=("devforge/claude:latest" "devforge/both:latest")
     local missing_images=()
     local found_images=()
 
@@ -158,12 +158,12 @@ check_orphan_containers() {
         return 1
     fi
 
-    # Get all containers with claude-docker prefix
-    local all_containers=$(docker ps -a --filter "name=claude-docker-" --format "{{.Names}}" 2>/dev/null)
-    local running_containers=$(docker ps --filter "name=claude-docker-" --format "{{.Names}}" 2>/dev/null)
+    # Get all containers with devforge prefix
+    local all_containers=$(docker ps -a --filter "name=devforge-" --format "{{.Names}}" 2>/dev/null)
+    local running_containers=$(docker ps --filter "name=devforge-" --format "{{.Names}}" 2>/dev/null)
 
     if [ -z "$all_containers" ]; then
-        echo -e "${OK} Nenhum container claude-docker encontrado"
+        echo -e "${OK} Nenhum container devforge encontrado"
         return 0
     fi
 
@@ -178,9 +178,9 @@ check_orphan_containers() {
     if [ $stopped_count -gt 0 ]; then
         echo -e "${WARN} Containers parados: $stopped_count"
         echo -e "${INFO} Para listar containers parados:"
-        echo -e "    ${YELLOW}docker ps -a --filter 'name=claude-docker-' --filter 'status=exited'${NC}"
+        echo -e "    ${YELLOW}docker ps -a --filter 'name=devforge-' --filter 'status=exited'${NC}"
         echo -e "${INFO} Para remover containers parados:"
-        echo -e "    ${YELLOW}docker container prune -f --filter 'label=app=claude-docker'${NC}"
+        echo -e "    ${YELLOW}docker container prune -f --filter 'label=app=devforge'${NC}"
         return 1
     fi
 
@@ -372,7 +372,7 @@ check_disk_space() {
 # =============================================================================
 run_all_diagnostics() {
     echo -e "${BOLD}╔════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BOLD}║        claude-docker-web - Sistema de Diagnósticos         ║${NC}"
+    echo -e "${BOLD}║            DevForge - Sistema de Diagnósticos              ║${NC}"
     echo -e "${BOLD}╚════════════════════════════════════════════════════════════╝${NC}"
     echo -e "${INFO} Data: $(date '+%Y-%m-%d %H:%M:%S')"
     echo -e "${INFO} Usuário: $(whoami)"

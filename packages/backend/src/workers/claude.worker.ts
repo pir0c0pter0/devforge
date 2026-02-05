@@ -12,7 +12,7 @@ import {
 } from '../services/websocket.service'
 import { moveToDeadLetterQueue, getQueueStatus } from '../services/claude-queue.service'
 import { usageService } from '../services/usage.service'
-import type { InstructionJobData, InstructionEventData, InstructionStage, InstructionProgress } from '@claude-docker/shared'
+import type { InstructionJobData, InstructionEventData, InstructionStage, InstructionProgress } from '@devforge/shared'
 
 /**
  * Helper to create progress data with stage information

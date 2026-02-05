@@ -12,8 +12,8 @@
 import { Server as HttpServer, createServer } from 'http';
 import { Server } from 'socket.io';
 import { io as ioc, Socket as ClientSocket } from 'socket.io-client';
-import type { TaskEventPayload, TaskSubscription, TaskUnsubscription, TaskBatchSubscription } from '@claude-docker/shared';
-import { TaskEvent } from '@claude-docker/shared';
+import type { TaskEventPayload, TaskSubscription, TaskUnsubscription, TaskBatchSubscription } from '@devforge/shared';
+import { TaskEvent } from '@devforge/shared';
 import {
   initializeWebSocket,
   emitTaskEvent,

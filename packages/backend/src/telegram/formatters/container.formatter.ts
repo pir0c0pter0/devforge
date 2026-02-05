@@ -10,7 +10,7 @@ import type {
   Container,
   ContainerMetrics,
   QueueStatus,
-} from '@claude-docker/shared'
+} from '@devforge/shared'
 import type { UsageSummary } from '../../services/usage.service'
 
 /**

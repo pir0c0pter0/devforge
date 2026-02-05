@@ -8,7 +8,7 @@ import {
   emitInstructionFailed,
   emitQueueStatsUpdate,
 } from './websocket.service'
-import type { InstructionJobData, InstructionEventData } from '@claude-docker/shared'
+import type { InstructionJobData, InstructionEventData } from '@devforge/shared'
 
 /**
  * Maximum number of pending jobs per container to prevent DoS

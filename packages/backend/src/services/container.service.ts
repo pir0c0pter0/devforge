@@ -129,7 +129,7 @@ export class ContainerService {
       };
 
       containerId = uuidv4();
-      const containerName = `claude-docker-${config.name}-${Date.now()}`;
+      const containerName = `devforge-${config.name}-${Date.now()}`;
 
       // Create database record FIRST with placeholder dockerId
       // This ensures container appears in list immediately with "creating" status
@@ -187,10 +187,10 @@ export class ContainerService {
           Binds: volumes,
         },
         Labels: {
-          'claude-docker.id': containerId,
-          'claude-docker.name': config.name,
-          'claude-docker.template': config.template,
-          'claude-docker.mode': config.mode,
+          'devforge.id': containerId,
+          'devforge.name': config.name,
+          'devforge.template': config.template,
+          'devforge.mode': config.mode,
         },
       };
 
@@ -425,7 +425,7 @@ export class ContainerService {
       }
 
       const containerId = uuidv4();
-      const containerName = `claude-docker-${safeName}-${Date.now()}`;
+      const containerName = `devforge-${safeName}-${Date.now()}`;
 
       // Get image from template config
       const image = template.defaultConfig.image;
@@ -472,11 +472,11 @@ export class ContainerService {
           Binds: volumes,
         },
         Labels: {
-          'claude-docker.id': containerId,
-          'claude-docker.name': safeName,
-          'claude-docker.template': templateId,
-          'claude-docker.mode': options.mode,
-          'claude-docker.from-template': 'true',
+          'devforge.id': containerId,
+          'devforge.name': safeName,
+          'devforge.template': templateId,
+          'devforge.mode': options.mode,
+          'devforge.from-template': 'true',
         },
       };
 
@@ -1081,7 +1081,7 @@ export class ContainerService {
       await dockerService.deleteContainer(container.dockerId, force);
 
       // Delete workspace volume (each container has its own named volume)
-      const volumeName = `claude-docker-${container.name}-workspace`;
+      const volumeName = `devforge-${container.name}-workspace`;
       try {
         await dockerService.deleteVolume(volumeName);
         logger.info({ containerId, volumeName }, 'Workspace volume deleted');
@@ -1206,7 +1206,7 @@ export class ContainerService {
       taskService.setProgress(taskId, 70, 'Liberando volume de workspace...');
 
       // Step 4.5: Delete workspace volume (each container has its own named volume)
-      const volumeName = `claude-docker-${container.name}-workspace`;
+      const volumeName = `devforge-${container.name}-workspace`;
       try {
         await dockerService.deleteVolume(volumeName);
         taskService.setProgress(taskId, 73, 'Volume de workspace removido');
@@ -1602,12 +1602,12 @@ export class ContainerService {
    */
   private getImageForTemplate(template: string): string {
     const imageMap: Record<string, string> = {
-      'claude': 'claude-docker/claude:latest',
-      'vscode': 'claude-docker/both:latest', // vscode image not built separately
-      'both': 'claude-docker/both:latest',
+      'claude': 'devforge/claude:latest',
+      'vscode': 'devforge/both:latest', // vscode image not built separately
+      'both': 'devforge/both:latest',
     };
 
-    return imageMap[template] || 'claude-docker/claude:latest';
+    return imageMap[template] || 'devforge/claude:latest';
   }
 
   /**
@@ -1646,8 +1646,8 @@ export class ContainerService {
 
     // Mount workspace - each container gets its own named volume for isolation
     // Using named volume ensures data persists across container restarts
-    // Format: claude-docker-{container-name}-workspace
-    const volumeName = `claude-docker-${config.name}-workspace`;
+    // Format: devforge-{container-name}-workspace
+    const volumeName = `devforge-${config.name}-workspace`;
     volumes.push(`${volumeName}:/workspace`);
 
     // Mount Claude credentials (for browser-based auth - Personal/Max/Pro accounts)
@@ -1928,7 +1928,7 @@ export class ContainerService {
       );
       await dockerService.executeCommand(
         dockerId,
-        ['git', 'config', 'user.name', 'Claude Docker'],
+        ['git', 'config', 'user.name', 'DevForge'],
         { user: 'root', workingDir: '/workspace' }
       );
 
@@ -2199,7 +2199,7 @@ EXT_EOF`],
 
       for (const dockerContainer of dockerContainers) {
         const labels = dockerContainer.Labels || {};
-        const claudeDockerId = labels['claude-docker.id'];
+        const claudeDockerId = labels['devforge.id'] || labels['claude-docker.id'];
 
         foundDockerIds.add(dockerContainer.Id);
 
@@ -2211,9 +2211,9 @@ EXT_EOF`],
             // Container found in Docker but not in database - create it
             const createDto: CreateContainerDto = {
               dockerId: dockerContainer.Id,
-              name: labels['claude-docker.name'] || 'unknown',
-              template: (labels['claude-docker.template'] || 'claude') as any,
-              mode: (labels['claude-docker.mode'] || 'interactive') as any,
+              name: labels['devforge.name'] || labels['claude-docker.name'] || 'unknown',
+              template: (labels['devforge.template'] || labels['claude-docker.template'] || 'claude') as any,
+              mode: (labels['devforge.mode'] || labels['claude-docker.mode'] || 'interactive') as any,
               repoType: 'empty',
               cpuLimit: 2,
               memoryLimit: 2048,

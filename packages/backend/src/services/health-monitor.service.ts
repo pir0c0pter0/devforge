@@ -1,6 +1,6 @@
 import { logger } from '../utils/logger'
 import { claudeDaemonService } from './claude-daemon.service'
-import type { DaemonState } from '@claude-docker/shared'
+import type { DaemonState } from '@devforge/shared'
 
 /**
  * Health event types for Claude Daemon monitoring

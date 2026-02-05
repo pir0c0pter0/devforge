@@ -1,5 +1,5 @@
 #!/bin/bash
-# Script para verificar status dos serviços claude-docker-web
+# Script para verificar status dos serviços devforge
 
 # Cores
 GREEN='\033[0;32m'
@@ -8,12 +8,12 @@ RED='\033[0;31m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-echo "📊 Status dos serviços claude-docker-web"
+echo "📊 Status dos serviços devforge"
 echo ""
 
 # Verificar se usa systemd
 USES_SYSTEMD=false
-if systemctl --user list-unit-files | grep -q "claude-docker-backend.service"; then
+if systemctl --user list-unit-files | grep -q "devforge-backend.service"; then
     USES_SYSTEMD=true
 fi
 
@@ -61,27 +61,27 @@ if [ "$USES_SYSTEMD" = true ]; then
     echo ""
 
     # Backend service
-    echo -n "  claude-docker-backend:  "
-    if systemctl --user is-active --quiet claude-docker-backend.service; then
+    echo -n "  devforge-backend:  "
+    if systemctl --user is-active --quiet devforge-backend.service; then
         echo -e "${GREEN}● active${NC}"
     else
-        status=$(systemctl --user is-active claude-docker-backend.service 2>/dev/null || echo "inactive")
+        status=$(systemctl --user is-active devforge-backend.service 2>/dev/null || echo "inactive")
         echo -e "${RED}○ $status${NC}"
     fi
 
     # Frontend service
-    echo -n "  claude-docker-frontend: "
-    if systemctl --user is-active --quiet claude-docker-frontend.service; then
+    echo -n "  devforge-frontend: "
+    if systemctl --user is-active --quiet devforge-frontend.service; then
         echo -e "${GREEN}● active${NC}"
     else
-        status=$(systemctl --user is-active claude-docker-frontend.service 2>/dev/null || echo "inactive")
+        status=$(systemctl --user is-active devforge-frontend.service 2>/dev/null || echo "inactive")
         echo -e "${RED}○ $status${NC}"
     fi
 
     # Auto-start enabled?
     echo ""
     echo -n "  Auto-start habilitado:  "
-    if systemctl --user is-enabled --quiet claude-docker-backend.service 2>/dev/null; then
+    if systemctl --user is-enabled --quiet devforge-backend.service 2>/dev/null; then
         echo -e "${GREEN}✅ Sim${NC}"
     else
         echo -e "${YELLOW}⚠️  Não${NC}"

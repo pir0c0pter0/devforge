@@ -12,7 +12,7 @@ import type {
   DockerLogsRequestHistory,
   ServerToClientEvents,
   ClientToServerEvents,
-} from '@claude-docker/shared'
+} from '@devforge/shared'
 
 const logger = createChildLogger({ service: 'docker-logs-namespace' })
 

@@ -1,6 +1,6 @@
-# Claude Docker Manager - Frontend
+# DevForge - Frontend
 
-Modern React dashboard for managing Docker containers with Claude Code and VS Code integration.
+Modern React dashboard for AI-powered container orchestration with Claude Code and VS Code integration.
 
 ## Tech Stack
 

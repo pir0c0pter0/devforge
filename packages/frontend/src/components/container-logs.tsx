@@ -20,7 +20,7 @@ import {
   Layers,
 } from 'lucide-react'
 import { useI18n } from '@/lib/i18n'
-import type { DockerLogType, DockerLogTabType } from '@claude-docker/shared'
+import type { DockerLogType, DockerLogTabType } from '@devforge/shared'
 import { collapseConsecutiveLogs, flattenDisplayItems, type FlattenedRow } from '@/utils/log-collapse'
 
 const WS_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'

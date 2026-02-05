@@ -5,7 +5,7 @@
  * Groups consecutive similar log lines to reduce visual clutter.
  */
 
-import type { DockerLogEntry, CollapsedLogGroup, LogDisplayItem } from '@claude-docker/shared'
+import type { DockerLogEntry, CollapsedLogGroup, LogDisplayItem } from '@devforge/shared'
 
 /**
  * Configuration for log collapse

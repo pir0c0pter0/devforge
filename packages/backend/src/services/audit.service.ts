@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 
 // Ensure audit log directory exists
-const auditLogDir = process.env['AUDIT_LOG_DIR'] || '/var/log/claude-docker';
+const auditLogDir = process.env['AUDIT_LOG_DIR'] || '/var/log/devforge';
 
 // Create directory if it doesn't exist (with error handling for non-root environments)
 try {
@@ -110,7 +110,7 @@ export function logAuditEvent(event: AuditEvent): void {
     ...event,
     details: sanitizeDetails(event.details),
     timestamp: new Date().toISOString(),
-    service: 'claude-docker',
+    service: 'devforge',
     version: process.env['APP_VERSION'] || 'unknown',
   };
 

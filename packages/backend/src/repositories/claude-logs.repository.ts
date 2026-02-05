@@ -1,5 +1,5 @@
 import { BaseRepository, BaseFilters } from './base.repository';
-import type { ClaudeLogType } from '@claude-docker/shared';
+import type { ClaudeLogType } from '@devforge/shared';
 
 /**
  * Claude log database row type

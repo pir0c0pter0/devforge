@@ -29,7 +29,7 @@ RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-$(dpkg --print-architect
 # ==============================================================================
 FROM node:22-bookworm-slim
 
-LABEL maintainer="claude-docker"
+LABEL maintainer="devforge"
 LABEL description="Combined Claude Code + VS Code Server development environment with multi-language support"
 LABEL version="2.0.0"
 

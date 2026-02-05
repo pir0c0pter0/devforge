@@ -88,7 +88,7 @@ To test the graceful shutdown:
 ./scripts/start.sh
 
 # In another terminal, send SIGTERM
-kill -TERM $(cat /tmp/claude-docker-backend.pid)
+kill -TERM $(cat /tmp/devforge-backend.pid)
 
 # Or use Ctrl+C (SIGINT) in the terminal running the server
 ```

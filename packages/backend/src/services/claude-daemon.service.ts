@@ -14,7 +14,7 @@ import type {
   ClaudeStreamInput,
   ProcessingState,
   ProcessingStage,
-} from '@claude-docker/shared'
+} from '@devforge/shared'
 
 /**
  * Per-container circuit breaker state

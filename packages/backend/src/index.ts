@@ -219,7 +219,7 @@ logger.info('JWT authentication enabled on protected routes (disabled if JWT_SEC
  */
 app.get('/', (_req: Request, res: Response) => {
   res.json({
-    name: 'Claude Docker Backend API',
+    name: 'DevForge Backend API',
     version: '1.0.0',
     description: 'Docker container management API with Claude Code integration',
     endpoints: {

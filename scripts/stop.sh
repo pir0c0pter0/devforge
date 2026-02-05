@@ -1,5 +1,5 @@
 #!/bin/bash
-# Script para parar os serviços do claude-docker-web
+# Script para parar os serviços do devforge
 # Usa systemd se os serviços estiverem instalados, senão para manualmente
 
 set -e
@@ -12,14 +12,14 @@ NC='\033[0m'
 log_info() { echo -e "${BLUE}ℹ️  $1${NC}"; }
 log_success() { echo -e "${GREEN}✅ $1${NC}"; }
 
-echo "🛑 Parando serviços claude-docker-web..."
+echo "🛑 Parando serviços devforge..."
 
 # Verificar se serviços systemd existem e estão rodando
-if systemctl --user list-unit-files | grep -q "claude-docker-backend.service"; then
+if systemctl --user list-unit-files | grep -q "devforge-backend.service"; then
     log_info "Parando serviços systemd..."
 
-    systemctl --user stop claude-docker-frontend.service 2>/dev/null || true
-    systemctl --user stop claude-docker-backend.service 2>/dev/null || true
+    systemctl --user stop devforge-frontend.service 2>/dev/null || true
+    systemctl --user stop devforge-backend.service 2>/dev/null || true
 
     log_success "Serviços systemd parados"
 fi

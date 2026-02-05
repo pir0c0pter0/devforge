@@ -6,7 +6,7 @@ import type {
   DockerLogsResponse,
   DockerLogStats,
   DockerLogStream,
-} from '@claude-docker/shared'
+} from '@devforge/shared'
 
 const logger = createChildLogger({ service: 'docker-logs' })
 

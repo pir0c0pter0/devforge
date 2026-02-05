@@ -1,6 +1,6 @@
-# @claude-docker/shared
+# @devforge/shared
 
-Shared types, schemas, and constants for Claude Docker Web project.
+Shared types, schemas, and constants for DevForge project.
 
 ## Installation
 
@@ -25,7 +25,7 @@ pnpm dev
 ### Types
 
 ```typescript
-import type { Container, ContainerConfig, Instruction } from '@claude-docker/shared'
+import type { Container, ContainerConfig, Instruction } from '@devforge/shared'
 
 const config: ContainerConfig = {
   name: 'my-container',
@@ -41,7 +41,7 @@ const config: ContainerConfig = {
 ### Schemas
 
 ```typescript
-import { containerConfigSchema, addInstructionSchema } from '@claude-docker/shared'
+import { containerConfigSchema, addInstructionSchema } from '@devforge/shared'
 
 // Validate input
 const result = containerConfigSchema.safeParse(userInput)
@@ -53,7 +53,7 @@ if (!result.success) {
 ### Constants
 
 ```typescript
-import { DEFAULT_CPU_LIMIT, SOCKET_EVENTS, API_ENDPOINTS } from '@claude-docker/shared'
+import { DEFAULT_CPU_LIMIT, SOCKET_EVENTS, API_ENDPOINTS } from '@devforge/shared'
 
 // Use constants
 const cpuLimit = DEFAULT_CPU_LIMIT

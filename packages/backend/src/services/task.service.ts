@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
-import type { Task, TaskUpdate, TaskType, TaskEventPayload, TaskStatus } from '@claude-docker/shared'
-import { TaskEvent } from '@claude-docker/shared'
+import type { Task, TaskUpdate, TaskType, TaskEventPayload, TaskStatus } from '@devforge/shared'
+import { TaskEvent } from '@devforge/shared'
 import { logger } from '../utils/logger'
 import { emitTaskEvent } from './websocket.service'
 

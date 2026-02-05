@@ -1,4 +1,4 @@
-# Claude Docker - Makefile
+# DevForge - Makefile
 # Convenient commands for building, running, and managing containers
 
 .PHONY: help build build-claude build-vscode build-both clean clean-volumes clean-all \
@@ -11,12 +11,12 @@
 # Variables
 COMPOSE := docker-compose
 COMPOSE_DEV := docker-compose -f docker-compose.yml -f docker-compose.dev.yml
-REGISTRY := claude-docker
+REGISTRY := devforge
 VERSION := latest
 
 # Help target
 help: ## Show this help message
-	@echo "Claude Docker - Available Commands"
+	@echo "DevForge - Available Commands"
 	@echo ""
 	@echo "Build Commands:"
 	@echo "  make build          - Build all base images"
@@ -118,16 +118,16 @@ restart-redis: ## Restart redis service
 	@$(COMPOSE) restart redis
 
 shell: ## Open shell in devtools container (dev mode)
-	@docker exec -it claude-docker-devtools /bin/zsh || echo "Devtools container not running. Start with 'make up-dev'"
+	@docker exec -it devforge-devtools /bin/zsh || echo "Devtools container not running. Start with 'make up-dev'"
 
 shell-backend: ## Open shell in backend container
-	@docker exec -it claude-docker-backend /bin/bash || echo "Backend container not running"
+	@docker exec -it devforge-backend /bin/bash || echo "Backend container not running"
 
 shell-frontend: ## Open shell in frontend container
-	@docker exec -it claude-docker-frontend /bin/bash || echo "Frontend container not running"
+	@docker exec -it devforge-frontend /bin/bash || echo "Frontend container not running"
 
 shell-redis: ## Open redis-cli
-	@docker exec -it claude-docker-redis redis-cli
+	@docker exec -it devforge-redis redis-cli
 
 # Maintenance targets
 clean: ## Remove containers and images
@@ -145,10 +145,10 @@ clean-volumes: ## Remove all volumes
 	@echo "Volumes removed."
 
 clean-all: ## Clean everything (containers, images, volumes, networks)
-	@echo "Cleaning all Claude Docker resources..."
+	@echo "Cleaning all DevForge resources..."
 	@$(COMPOSE_DEV) down -v --rmi all --remove-orphans || $(COMPOSE) down -v --rmi all --remove-orphans
-	@docker volume ls --filter "label=claude-docker.managed=true" -q | xargs -r docker volume rm || true
-	@docker network ls --filter "label=claude-docker.managed=true" -q | xargs -r docker network rm || true
+	@docker volume ls --filter "label=devforge.managed=true" -q | xargs -r docker volume rm || true
+	@docker network ls --filter "label=devforge.managed=true" -q | xargs -r docker network rm || true
 	@echo "All resources cleaned."
 
 prune: ## Prune Docker system (caution!)
@@ -159,7 +159,7 @@ prune: ## Prune Docker system (caution!)
 # Health and testing
 health: ## Check health status of all services
 	@echo "Checking service health..."
-	@docker ps --filter "label=claude-docker.managed=true" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+	@docker ps --filter "label=devforge.managed=true" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
 test: ## Run tests (placeholder)
 	@echo "Running tests..."
@@ -183,7 +183,7 @@ stop: down ## Alias for down
 
 # Information targets
 info: ## Show configuration information
-	@echo "Claude Docker Configuration"
+	@echo "DevForge Configuration"
 	@echo "============================"
 	@echo "Registry:     $(REGISTRY)"
 	@echo "Version:      $(VERSION)"
@@ -192,13 +192,13 @@ info: ## Show configuration information
 	@docker images "$(REGISTRY)/*" --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}" 2>/dev/null || echo "No images found"
 	@echo ""
 	@echo "Containers:"
-	@docker ps -a --filter "label=claude-docker.managed=true" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || echo "No containers found"
+	@docker ps -a --filter "label=devforge.managed=true" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || echo "No containers found"
 	@echo ""
 	@echo "Volumes:"
-	@docker volume ls --filter "label=claude-docker.managed=true" --format "table {{.Name}}\t{{.Driver}}" 2>/dev/null || echo "No volumes found"
+	@docker volume ls --filter "label=devforge.managed=true" --format "table {{.Name}}\t{{.Driver}}" 2>/dev/null || echo "No volumes found"
 	@echo ""
 	@echo "Networks:"
-	@docker network ls --filter "label=claude-docker.managed=true" --format "table {{.Name}}\t{{.Driver}}\t{{.Scope}}" 2>/dev/null || echo "No networks found"
+	@docker network ls --filter "label=devforge.managed=true" --format "table {{.Name}}\t{{.Driver}}\t{{.Scope}}" 2>/dev/null || echo "No networks found"
 
 urls: ## Show service URLs
 	@echo "Service URLs:"
