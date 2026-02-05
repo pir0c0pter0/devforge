@@ -796,6 +796,42 @@ export class ContainerService {
   }
 
   /**
+   * Wait for VS Code (code-server) to be ready
+   * Polls the code-server health endpoint until it responds
+   */
+  private async waitForVSCodeReady(dockerId: string, timeoutMs: number = 30000): Promise<boolean> {
+    const startTime = Date.now();
+    const pollInterval = 1000; // 1 second
+
+    logger.debug({ dockerId, timeoutMs }, 'Waiting for VS Code (code-server) to be ready...');
+
+    while (Date.now() - startTime < timeoutMs) {
+      try {
+        // Use curl to check if code-server is responding on port 8080
+        const result = await dockerService.executeCommand(
+          dockerId,
+          ['curl', '-sf', '-o', '/dev/null', '-w', '%{http_code}', 'http://localhost:8080/healthz'],
+          { user: 'developer' }
+        );
+
+        // code-server returns 200 when healthy
+        if (result.exitCode === 0 && (result.stdout.includes('200') || result.stdout.includes('302'))) {
+          logger.info({ dockerId, elapsed: Date.now() - startTime }, 'VS Code (code-server) is ready');
+          return true;
+        }
+      } catch {
+        // Ignore errors during polling
+      }
+
+      // Wait before next poll
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+
+    logger.warn({ dockerId, timeoutMs }, 'VS Code (code-server) readiness timeout');
+    return false;
+  }
+
+  /**
    * Start a container
    */
   async start(containerId: string): Promise<Container> {
@@ -817,6 +853,9 @@ export class ContainerService {
       logger.info({ containerId, dockerId: container.dockerId }, 'Starting container');
 
       await dockerService.startContainer(container.dockerId);
+
+      // Wait for VS Code to be ready (with a shorter timeout for non-task start)
+      await this.waitForVSCodeReady(container.dockerId, 20000);
 
       // Update status in database
       const updatedEntity = containerRepository.updateStatus(containerId, 'running');
@@ -855,7 +894,7 @@ export class ContainerService {
 
       // Try cache first, then database
       let container = this.containers.get(containerId);
-      taskService.setProgress(taskId, 10, 'Carregando configuração do container...');
+      taskService.setProgress(taskId, 8, 'Carregando configuração do container...');
 
       if (!container) {
         const entity = containerRepository.findById(containerId);
@@ -871,22 +910,58 @@ export class ContainerService {
       }
 
       // Step 2: Prepare Docker operation
-      taskService.setProgress(taskId, 15, 'Verificando estado do Docker daemon...');
+      taskService.setProgress(taskId, 10, 'Verificando estado do Docker daemon...');
       logger.info({ containerId, dockerId: container.dockerId }, 'Starting container');
 
-      taskService.setProgress(taskId, 20, 'Conectando ao Docker daemon...');
-      taskService.setProgress(taskId, 25, 'Enviando comando de inicialização...');
-      taskService.setProgress(taskId, 30, 'Alocando recursos (CPU, memória)...');
+      taskService.setProgress(taskId, 12, 'Conectando ao Docker daemon...');
+      taskService.setProgress(taskId, 15, 'Enviando comando de inicialização...');
+      taskService.setProgress(taskId, 18, 'Alocando recursos (CPU, memória)...');
 
       // Step 3: Actually start Docker container
-      taskService.setProgress(taskId, 35, 'Iniciando container no Docker...');
+      taskService.setProgress(taskId, 20, 'Iniciando container no Docker...');
       await dockerService.startContainer(container.dockerId);
 
-      // Step 4: Verify container started
-      taskService.setProgress(taskId, 60, 'Container iniciado com sucesso!');
-      taskService.setProgress(taskId, 70, 'Verificando saúde do container...');
+      // Step 4: Wait for VS Code (code-server) to be ready
+      taskService.setProgress(taskId, 30, 'Container Docker iniciado!');
+      taskService.setProgress(taskId, 35, 'Aguardando VS Code inicializar...');
 
-      // Auto-start Claude environment
+      // Poll for VS Code readiness with progress updates
+      const vscodeTimeout = 30000; // 30 seconds
+      const vscodeStartTime = Date.now();
+      let vscodeReady = false;
+
+      while (Date.now() - vscodeStartTime < vscodeTimeout) {
+        try {
+          const result = await dockerService.executeCommand(
+            container.dockerId,
+            ['curl', '-sf', '-o', '/dev/null', '-w', '%{http_code}', 'http://localhost:8080/healthz'],
+            { user: 'developer' }
+          );
+
+          if (result.exitCode === 0 && (result.stdout.includes('200') || result.stdout.includes('302'))) {
+            vscodeReady = true;
+            break;
+          }
+        } catch {
+          // Ignore errors during polling
+        }
+
+        // Update progress based on elapsed time (35% to 60%)
+        const elapsed = Date.now() - vscodeStartTime;
+        const progress = 35 + Math.min(25, Math.floor((elapsed / vscodeTimeout) * 25));
+        taskService.setProgress(taskId, progress, 'Inicializando VS Code...');
+
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      if (vscodeReady) {
+        taskService.setProgress(taskId, 60, 'VS Code pronto!');
+      } else {
+        taskService.setProgress(taskId, 60, 'VS Code ainda inicializando (pode demorar)...');
+        logger.warn({ containerId, taskId }, 'VS Code readiness timeout during task, continuing anyway');
+      }
+
+      // Step 5: Auto-start Claude environment
       taskService.setProgress(taskId, 65, 'Iniciando ambiente Claude Code...');
       try {
         await containerLifecycleService.onContainerStart(containerId, container.dockerId);
@@ -896,7 +971,7 @@ export class ContainerService {
         taskService.setProgress(taskId, 75, 'Ambiente Claude não iniciado (pode iniciar manualmente)');
       }
 
-      // Step 5: Update database
+      // Step 6: Update database
       taskService.setProgress(taskId, 80, 'Atualizando banco de dados...');
       const updatedEntity = containerRepository.updateStatus(containerId, 'running');
       if (!updatedEntity) {
@@ -907,7 +982,7 @@ export class ContainerService {
       const updatedContainer = entityToContainer(updatedEntity);
       this.containers.set(containerId, updatedContainer);
 
-      // Step 6: Finalize
+      // Step 7: Finalize
       taskService.setProgress(taskId, 90, 'Registrando métricas iniciais...');
       taskService.setProgress(taskId, 95, 'Finalizando configuração...');
       taskService.complete(taskId, { containerId });
