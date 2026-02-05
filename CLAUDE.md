@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções Críticas
 
-## Versão Atual: 0.1.22-alpha
+## Versão Atual: 0.1.23-alpha
 
 ## Links
 
@@ -128,6 +128,13 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.23-alpha
+- Feat: Nova aba IDE com VS Code embarcado + Claude Code sidebar
+- Feat: Claude sidebar ocultável com botão toggle
+- Feat: Sidebar redimensionável via drag
+- Feat: VS Code abre dentro do site, não em nova janela
+- Feat: Suporte a C/C++ na detecção de projetos
 
 ### v0.1.22-alpha
 - Feat: VS Code abre com tema escuro por padrão (configurado na imagem Docker)

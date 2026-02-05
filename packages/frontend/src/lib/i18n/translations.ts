@@ -152,6 +152,7 @@ export const translations = {
       // Tabs
       tabs: {
         overview: 'Visão Geral',
+        ide: 'IDE',
         metrics: 'Métricas',
         instructions: 'Instruções',
         logs: 'Logs',
@@ -826,6 +827,7 @@ export const translations = {
       // Tabs
       tabs: {
         overview: 'Overview',
+        ide: 'IDE',
         metrics: 'Metrics',
         instructions: 'Instructions',
         logs: 'Logs',
