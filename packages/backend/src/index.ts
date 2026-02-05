@@ -113,6 +113,12 @@ app.use(helmet({
   contentSecurityPolicy: NODE_ENV === 'production',
 }));
 
+// Security headers: deny dangerous browser APIs
+app.use((_req: Request, res: Response, next: NextFunction) => {
+  res.setHeader('Permissions-Policy', 'usb=(), serial=(), hid=()');
+  next();
+});
+
 app.use(cors({
   origin: corsOriginValidator,
   credentials: true,

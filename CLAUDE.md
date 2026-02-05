@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções Críticas
 
-## Versão Atual: 0.1.28-alpha
+## Versão Atual: 0.1.29-alpha
 
 ## Links
 
@@ -128,6 +128,15 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.29-alpha
+- Fix: Eliminadas conexões WebSocket duplicadas do ClaudeDaemon
+- Fix: ClaudeChat agora usa instância única compartilhada entre abas
+- Fix: IDE tab simplificada (VS Code puro, sem sidebar Claude)
+- Fix: Adicionado connection registry com ref-counting em useClaudeDaemon
+- Fix: Removidos 45 console.log verbosos (mantidos apenas errors/warnings)
+- Feat: Headers de segurança (Permissions-Policy, X-Frame-Options, X-Content-Type-Options)
+- Perf: Reduzido uso de recursos com deduplicação de sockets
 
 ### v0.1.28-alpha
 - Fix: Corrigido erros 404 de vsda.js e vsda_bg.wasm no console do VS Code

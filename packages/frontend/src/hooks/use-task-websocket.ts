@@ -223,14 +223,12 @@ export function useTaskWebSocket(
   const startPollingFallback = useCallback(() => {
     if (!enableFallback) return
 
-    console.log('[TaskWS Fallback] Starting HTTP polling fallback')
     setIsUsingFallback(true)
     pollAttemptRef.current = 0
     completedTasksRef.current.clear()
 
     const schedulePoll = () => {
       const interval = getPollInterval()
-      console.log(`[TaskWS Fallback] Next poll in ${interval}ms`)
 
       pollingIntervalRef.current = setTimeout(async () => {
         // Collect all task IDs to poll
@@ -246,7 +244,6 @@ export function useTaskWebSocket(
         )
 
         if (activeTasks.length === 0) {
-          console.log('[TaskWS Fallback] No active tasks to poll, stopping')
           stopPolling()
           return
         }
@@ -325,7 +322,6 @@ export function useTaskWebSocket(
 
     // Check WebSocket support - fallback immediately if not supported
     if (!isWebSocketSupported()) {
-      console.log('[TaskWS] WebSocket not supported, using HTTP polling fallback')
       if (enableFallback) {
         startPollingFallbackRef.current()
       }
@@ -342,14 +338,12 @@ export function useTaskWebSocket(
       socketRef.current = socket
 
       socket.on('connect', () => {
-        console.log('[TaskWS] Connected to /tasks namespace:', socket.id)
         setSocketId(socket.id || null)
         setIsConnected(true)
         reconnectAttemptsRef.current = 0
 
         // Switch back from fallback polling to WebSocket
         if (isUsingFallback) {
-          console.log('[TaskWS] WebSocket reconnected, stopping HTTP polling fallback')
           stopPolling()
           setIsUsingFallback(false)
         }
@@ -365,15 +359,11 @@ export function useTaskWebSocket(
         }
       })
 
-      socket.on('connect_error', (error) => {
-        console.error('[TaskWS] Connection error:', error)
+      socket.on('connect_error', () => {
         setIsConnected(false)
 
         if (autoReconnect && reconnectAttemptsRef.current < maxReconnectAttempts) {
           const delay = getReconnectDelay()
-          console.log(
-            `[TaskWS] Reconnecting in ${Math.round(delay)}ms (attempt ${reconnectAttemptsRef.current + 1}/${maxReconnectAttempts})`
-          )
           reconnectAttemptsRef.current++
 
           clearReconnectTimeout()
@@ -385,7 +375,6 @@ export function useTaskWebSocket(
           }, delay)
         } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
           // Max reconnect attempts reached - fallback to HTTP polling
-          console.log('[TaskWS] Max reconnect attempts reached, falling back to HTTP polling')
           if (enableFallback && !isUsingFallback) {
             startPollingFallbackRef.current()
           }
@@ -393,7 +382,6 @@ export function useTaskWebSocket(
       })
 
       socket.on('disconnect', (reason) => {
-        console.log('[TaskWS] Disconnected from /tasks namespace:', reason)
         setIsConnected(false)
         setSocketId(null)
 
@@ -404,16 +392,12 @@ export function useTaskWebSocket(
           reconnectAttemptsRef.current < maxReconnectAttempts
         ) {
           const delay = getReconnectDelay()
-          console.log(
-            `[TaskWS] Reconnecting in ${Math.round(delay)}ms (attempt ${reconnectAttemptsRef.current + 1}/${maxReconnectAttempts})`
-          )
           reconnectAttemptsRef.current++
 
           clearReconnectTimeout()
           reconnectTimeoutRef.current = setTimeout(connectSocket, delay)
         } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
           // Max reconnect attempts reached - fallback to HTTP polling
-          console.log('[TaskWS] Max reconnect attempts reached, falling back to HTTP polling')
           if (enableFallback && !isUsingFallback) {
             startPollingFallbackRef.current()
           }
@@ -422,7 +406,6 @@ export function useTaskWebSocket(
 
       // Listen for task events
       socket.on('task:event', (payload: TaskEventPayload) => {
-        console.log('[TaskWS] Received task:event:', payload)
         handleTaskEvent(payload)
       })
     }
@@ -442,15 +425,6 @@ export function useTaskWebSocket(
   // Subscribe to a single task
   const subscribe = useCallback(
     async (taskId: string) => {
-      console.log(
-        '[TaskWS] Subscribing to task:',
-        taskId,
-        'Socket connected:',
-        !!socketRef.current?.connected,
-        'Using fallback:',
-        isUsingFallback
-      )
-
       // Unsubscribe from previous task if any
       if (currentTaskIdRef.current && currentTaskIdRef.current !== taskId) {
         socketRef.current?.emit('task:unsubscribe', {
@@ -471,11 +445,9 @@ export function useTaskWebSocket(
 
           // If task is already completed/failed, trigger callbacks immediately
           if (taskData.status === 'completed') {
-            console.log('[TaskWS] Task already completed:', taskId)
             onCompleteRef.current?.(taskData)
             return // Don't subscribe to WebSocket for completed tasks
           } else if (taskData.status === 'failed') {
-            console.log('[TaskWS] Task already failed:', taskId)
             onErrorRef.current?.(taskData)
             return // Don't subscribe to WebSocket for failed tasks
           }
@@ -497,7 +469,6 @@ export function useTaskWebSocket(
   // Unsubscribe from current single task
   const unsubscribe = useCallback(() => {
     if (currentTaskIdRef.current) {
-      console.log('[TaskWS] Unsubscribing from task:', currentTaskIdRef.current)
       socketRef.current?.emit('task:unsubscribe', {
         taskId: currentTaskIdRef.current,
       })
@@ -510,15 +481,6 @@ export function useTaskWebSocket(
   // Subscribe to multiple tasks
   const subscribeBatch = useCallback(
     (taskIds: string[]) => {
-      console.log(
-        '[TaskWS] Subscribing to batch:',
-        taskIds,
-        'Socket connected:',
-        !!socketRef.current?.connected,
-        'Using fallback:',
-        isUsingFallback
-      )
-
       // Add new task IDs to the set
       taskIds.forEach((id) => {
         batchTaskIdsRef.current.add(id)
@@ -538,10 +500,6 @@ export function useTaskWebSocket(
   // Unsubscribe from all batch tasks
   const unsubscribeBatch = useCallback(() => {
     if (batchTaskIdsRef.current.size > 0) {
-      console.log(
-        '[TaskWS] Unsubscribing from batch:',
-        Array.from(batchTaskIdsRef.current)
-      )
       // Mark all batch tasks as completed to stop polling
       batchTaskIdsRef.current.forEach((id) => completedTasksRef.current.add(id))
       // Note: No batch unsubscribe event defined in shared types

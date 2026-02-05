@@ -616,7 +616,6 @@ export default function ContainerDetailPage() {
         <div className="card overflow-hidden" style={{ height: 'calc(100vh - 280px)', minHeight: '500px' }}>
           {vscodeUrl ? (
             <IDEView
-              containerId={container.id}
               vscodeUrl={vscodeUrl}
               containerStatus={container.status}
             />
@@ -751,20 +750,22 @@ export default function ContainerDetailPage() {
         )}
       </div>
 
-      {/* Claude Code Tab - Separate tab, use CSS hidden to preserve messages */}
-      <div className={clsx('card overflow-hidden', activeTab !== 'claudeCode' && 'hidden')} style={{ height: 'calc(100vh - 340px)', minHeight: '400px' }}>
-        {container.status === 'running' ? (
-          <ClaudeChat containerId={container.id} />
-        ) : (
-          <div className="p-6 text-center">
-            <svg className="mx-auto h-12 w-12 text-terminal-textMuted mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-            </svg>
-            <h3 className="text-lg font-semibold text-terminal-text mb-2">{t.claudeChat.title} {t.containerDetail.terminalUnavailable.toLowerCase()}</h3>
-            <p className="text-sm text-terminal-textMuted">{t.containerDetail.startContainerForTerminal}</p>
-          </div>
-        )}
-      </div>
+      {/* Claude Code Tab - Only mount when tab is active to prevent duplicate WebSocket connections */}
+      {activeTab === 'claudeCode' && (
+        <div className="card overflow-hidden" style={{ height: 'calc(100vh - 340px)', minHeight: '400px' }}>
+          {container.status === 'running' ? (
+            <ClaudeChat containerId={container.id} />
+          ) : (
+            <div className="p-6 text-center">
+              <svg className="mx-auto h-12 w-12 text-terminal-textMuted mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              <h3 className="text-lg font-semibold text-terminal-text mb-2">{t.claudeChat.title} {t.containerDetail.terminalUnavailable.toLowerCase()}</h3>
+              <p className="text-sm text-terminal-textMuted">{t.containerDetail.startContainerForTerminal}</p>
+            </div>
+          )}
+        </div>
+      )}
 
       {activeTab === 'settings' && (
         <div className="space-y-6">

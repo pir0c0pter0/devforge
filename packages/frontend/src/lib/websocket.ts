@@ -38,7 +38,6 @@ class MetricsWebSocketClient {
     if (!this.socket) return
 
     this.socket.on('connect', () => {
-      console.log('[WebSocket] Connected to /metrics')
       this.handlers.onConnect?.()
 
       // Re-subscribe if we were subscribed before disconnect
@@ -48,7 +47,6 @@ class MetricsWebSocketClient {
     })
 
     this.socket.on('disconnect', () => {
-      console.log('[WebSocket] Disconnected from /metrics')
       this.handlers.onDisconnect?.()
     })
 
@@ -83,7 +81,6 @@ class MetricsWebSocketClient {
 
     this.subscribedContainerId = containerId
     this.socket.emit('subscribe:container', containerId)
-    console.log(`[WebSocket] Subscribed to container ${containerId}`)
   }
 
   unsubscribeFromContainer(containerId: string): void {
@@ -96,7 +93,6 @@ class MetricsWebSocketClient {
     if (this.subscribedContainerId === containerId) {
       this.subscribedContainerId = null
     }
-    console.log(`[WebSocket] Unsubscribed from container ${containerId}`)
   }
 
   disconnect(): void {

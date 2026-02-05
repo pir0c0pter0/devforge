@@ -45,7 +45,6 @@ export function useContainerProgress(): UseContainerProgressReturn {
     socketRef.current = socket
 
     socket.on('connect', () => {
-      console.log('[Progress] Connected to /creation namespace:', socket.id)
       setSocketId(socket.id || null)
       setIsConnected(true)
     })
@@ -55,12 +54,10 @@ export function useContainerProgress(): UseContainerProgressReturn {
     })
 
     socket.on('disconnect', () => {
-      console.log('[Progress] Disconnected from /creation namespace')
       setIsConnected(false)
     })
 
     socket.on('container:creation:progress', (data: ContainerProgress) => {
-      console.log('[Progress] Received progress:', data)
       if (currentTaskIdRef.current === data.taskId) {
         setProgress(data)
       }
@@ -73,7 +70,6 @@ export function useContainerProgress(): UseContainerProgressReturn {
   }, [])
 
   const subscribe = useCallback((taskId: string) => {
-    console.log('[Progress] Subscribing to task:', taskId, 'Socket connected:', !!socketRef.current?.connected)
     currentTaskIdRef.current = taskId
     socketRef.current?.emit('subscribe:task', taskId)
   }, [])

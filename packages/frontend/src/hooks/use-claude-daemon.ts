@@ -128,6 +128,81 @@ export interface UseClaudeDaemonReturn {
   clearMessages: () => void
 }
 
+// ============================================================================
+// Connection Deduplication Registry
+// ============================================================================
+
+/**
+ * Module-level connection registry for WebSocket deduplication.
+ * Prevents multiple components mounting with the same containerId from creating
+ * multiple WebSocket connections. Uses reference counting to properly manage
+ * connection lifecycle.
+ */
+interface ConnectionEntry {
+  socket: Socket
+  refCount: number
+  isConnected: boolean
+  /** Set of subscribed containerIds for this socket */
+  subscribedContainers: Set<string>
+}
+
+const connectionRegistry = new Map<string, ConnectionEntry>()
+
+/**
+ * Get or create a shared WebSocket connection for the /claude-daemon namespace.
+ * Increments reference count if connection already exists.
+ */
+function getOrCreateConnection(containerId: string): ConnectionEntry {
+  const existing = connectionRegistry.get(containerId)
+  if (existing) {
+    existing.refCount++
+    return existing
+  }
+
+  const socket = io(`${BACKEND_URL}/claude-daemon`, {
+    transports: ['polling', 'websocket'],
+    upgrade: true,
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    reconnectionAttempts: 10,
+    timeout: 10000,
+  })
+
+  const entry: ConnectionEntry = {
+    socket,
+    refCount: 1,
+    isConnected: false,
+    subscribedContainers: new Set(),
+  }
+
+  connectionRegistry.set(containerId, entry)
+  return entry
+}
+
+/**
+ * Release a connection. Decrements reference count and disconnects if no more references.
+ */
+function releaseConnection(containerId: string): void {
+  const entry = connectionRegistry.get(containerId)
+  if (!entry) return
+
+  entry.refCount--
+
+  if (entry.refCount <= 0) {
+    // Unsubscribe from all containers
+    entry.subscribedContainers.forEach((cid) => {
+      entry.socket.emit('output:unsubscribe', { containerId: cid })
+    })
+    entry.socket.disconnect()
+    connectionRegistry.delete(containerId)
+  }
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
 /**
  * Extract text content from Claude message content array
  * Claude returns content as array: [{"type": "text", "text": "..."}]
@@ -316,7 +391,6 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
 
     const loadHistory = async () => {
       try {
-        console.log('[ClaudeDaemon] Loading chat history for container:', containerId)
         const response = await apiClient.getChatMessages(containerId, { limit: 500 })
 
         if (response.success && response.data?.messages) {
@@ -330,7 +404,6 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
           }))
 
           // Always set messages (replace store state), even if empty
-          console.log('[ClaudeDaemon] Loaded', loadedMessages.length, 'messages from history')
           setMessages(containerId, loadedMessages)
         }
       } catch (error) {
@@ -345,63 +418,53 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [containerId]) // Only re-run when containerId changes, not setMessages
 
-  // Initialize WebSocket connection
+  // Initialize WebSocket connection with deduplication
   useEffect(() => {
     if (typeof window === 'undefined') return
     if (!containerId) return
 
-    console.log('[ClaudeDaemon] Connecting to /claude-daemon namespace for container:', containerId)
-
-    const socket = io(`${BACKEND_URL}/claude-daemon`, {
-      transports: ['polling', 'websocket'],
-      upgrade: true,
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      reconnectionAttempts: 10,
-      timeout: 10000,
-    })
-
+    // Get or create shared connection (increments refCount)
+    const connectionEntry = getOrCreateConnection(containerId)
+    const socket = connectionEntry.socket
     socketRef.current = socket
 
-    socket.on('connect', () => {
-      console.log('[ClaudeDaemon] Connected:', socket.id)
+    // Handler functions that we can add/remove
+    const handleConnect = () => {
+      connectionEntry.isConnected = true
       setIsConnected(true)
 
-      // Auto-subscribe to container output
-      socket.emit('output:subscribe', { containerId })
-      console.log('[ClaudeDaemon] Subscribed to container output:', containerId)
+      // Subscribe to container output if not already subscribed
+      if (!connectionEntry.subscribedContainers.has(containerId)) {
+        socket.emit('output:subscribe', { containerId })
+        connectionEntry.subscribedContainers.add(containerId)
+      }
 
       // Request current daemon status
       socket.emit('daemon:get-status', { containerId })
-    })
+    }
 
-    socket.on('disconnect', (reason) => {
-      console.log('[ClaudeDaemon] Disconnected:', reason)
+    const handleDisconnect = () => {
+      connectionEntry.isConnected = false
       setIsConnected(false)
-    })
+    }
 
-    socket.on('connect_error', (error) => {
+    const handleConnectError = (error: Error) => {
       console.error('[ClaudeDaemon] Connection error:', error)
       onErrorRef.current?.(`Connection error: ${error.message}`)
-    })
+    }
 
-    // Handle daemon status updates
-    socket.on('daemon:status', (state: DaemonState) => {
-      console.log('[ClaudeDaemon] Daemon status:', state)
+    const handleDaemonStatus = (state: DaemonState) => {
+      // Only process if this is for our container
+      if (state.containerId !== containerId) return
       setDaemonStatus(containerId, state)
       onStatusChangeRef.current?.(state)
-    })
+    }
 
-    // Handle Claude output events
-    socket.on('claude:output', (event: ClaudeEvent) => {
+    const handleClaudeOutput = (event: ClaudeEvent) => {
       // Skip if message updates are temporarily blocked (during session switch)
       if (blockMessageUpdatesRef.current) {
-        console.log('[ClaudeDaemon] Blocking message update during session switch:', event.type)
         return
       }
-
-      console.log('[ClaudeDaemon] Claude output:', event)
       const messageId = getNextMessageId(containerId)
       const message = parseClaudeEventToMessage(event, messageId)
 
@@ -409,14 +472,16 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
         addMessage(containerId, message)
         onMessageRef.current?.(message)
         // Save to backend asynchronously (fire and forget)
-        apiClient.saveChatMessage(containerId, {
-          id: message.id,
-          type: message.type,
-          content: message.content,
-          timestamp: message.timestamp.toISOString(),
-          toolName: message.toolName,
-          toolInput: message.toolInput,
-        }).catch((err) => console.error('[ClaudeDaemon] Failed to save message:', err))
+        apiClient
+          .saveChatMessage(containerId, {
+            id: message.id,
+            type: message.type,
+            content: message.content,
+            timestamp: message.timestamp.toISOString(),
+            toolName: message.toolName,
+            toolInput: message.toolInput,
+          })
+          .catch((err) => console.error('[ClaudeDaemon] Failed to save message:', err))
       }
 
       // Fix #9: Removed setIsLoading(false) here - now derived from backend processingState
@@ -425,48 +490,38 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
         // Reset retry count on successful response
         retryCountRef.current = 0
       }
-    })
+    }
 
-    // Fix #9: Listen to processing state events from backend (source of truth)
-    socket.on('instruction:processing:start', ({ timestamp }: { timestamp: string }) => {
-      console.log('[ClaudeDaemon] Processing started')
+    const handleProcessingStart = ({ timestamp }: { timestamp: string }) => {
       setProcessingState({
         isProcessing: true,
         stage: 'starting',
         startedAt: new Date(timestamp),
         lastActivityAt: new Date(timestamp),
       })
-    })
+    }
 
-    socket.on('instruction:processing:progress', ({ stage, timestamp }: { stage: ProcessingStage; timestamp: string }) => {
-      console.log('[ClaudeDaemon] Processing progress:', stage)
-      setProcessingState(prev => ({
+    const handleProcessingProgress = ({ stage, timestamp }: { stage: ProcessingStage; timestamp: string }) => {
+      setProcessingState((prev) => ({
         ...prev,
         stage,
         lastActivityAt: new Date(timestamp),
       }))
-    })
+    }
 
-    socket.on('instruction:processing:complete', () => {
-      console.log('[ClaudeDaemon] Processing complete')
+    const handleProcessingComplete = () => {
       setProcessingState({ isProcessing: false, stage: 'idle' })
-    })
+    }
 
-    socket.on('instruction:processing:error', () => {
-      console.log('[ClaudeDaemon] Processing error')
+    const handleProcessingError = () => {
       setProcessingState({ isProcessing: false, stage: 'idle' })
-    })
+    }
 
-    // Handle instruction received confirmation
-    // Note: We do NOT set isLoading=false here because Claude is still processing
-    // isLoading will be set to false when we receive 'result' or 'assistant' event
-    socket.on('instruction:received', () => {
-      console.log('[ClaudeDaemon] Instruction received by daemon, waiting for response...')
-    })
+    const handleInstructionReceived = () => {
+      // Instruction acknowledged by daemon, waiting for response
+    }
 
-    // Handle instruction cancelled
-    socket.on('instruction:cancelled', ({ cancelled }: { containerId: string; cancelled: boolean }) => {
-      console.log('[ClaudeDaemon] Instruction cancelled:', cancelled)
+    const handleInstructionCancelled = ({ cancelled }: { containerId: string; cancelled: boolean }) => {
       if (cancelled) {
         // Fix #9: processingState will be updated via instruction:processing:complete event
         // Add system message to inform user
@@ -479,10 +534,9 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
         }
         addMessage(containerId, cancelMessage)
       }
-    })
+    }
 
-    // Handle errors with automatic retry for 400 errors
-    socket.on('error', (data: { message: string; code?: number; status?: number }) => {
+    const handleError = (data: { message: string; code?: number; status?: number }) => {
       console.error('[ClaudeDaemon] Error:', data.message, 'Code:', data.code || data.status)
 
       // Check if it's a 400 error and we have a last instruction to retry
@@ -490,7 +544,6 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
       const is400Error = errorCode === 400 || data.message?.includes('400') || data.message?.includes('Bad Request')
 
       if (is400Error && lastInstructionRef.current && retryCountRef.current < MAX_RETRIES) {
-        console.log('[ClaudeDaemon] 400 error detected, attempting /rewind and retry...')
         retryCountRef.current++
 
         // First, send /rewind to go back to last good state
@@ -502,7 +555,6 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
         // Wait a bit then retry the last instruction
         setTimeout(() => {
           if (lastInstructionRef.current && socketRef.current?.connected) {
-            console.log('[ClaudeDaemon] Retrying instruction (attempt', retryCountRef.current, ')')
             socket.emit('instruction:send', {
               containerId,
               instruction: lastInstructionRef.current,
@@ -514,9 +566,9 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
         // Fix #9: processingState will be updated via instruction:processing:error event
         retryCountRef.current = 0
       }
-    })
+    }
 
-    socket.on('daemon:error', (data: { error: string; code?: number; status?: number }) => {
+    const handleDaemonError = (data: { error: string; code?: number; status?: number }) => {
       console.error('[ClaudeDaemon] Daemon error:', data.error)
 
       // Check if it's a 400 error
@@ -524,7 +576,6 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
       const is400Error = errorCode === 400 || data.error?.includes('400') || data.error?.includes('Bad Request')
 
       if (is400Error && lastInstructionRef.current && retryCountRef.current < MAX_RETRIES) {
-        console.log('[ClaudeDaemon] 400 error detected, attempting /rewind and retry...')
         retryCountRef.current++
 
         socket.emit('instruction:send', {
@@ -534,7 +585,6 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
 
         setTimeout(() => {
           if (lastInstructionRef.current && socketRef.current?.connected) {
-            console.log('[ClaudeDaemon] Retrying instruction (attempt', retryCountRef.current, ')')
             socket.emit('instruction:send', {
               containerId,
               instruction: lastInstructionRef.current,
@@ -546,15 +596,47 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
         // Fix #9: processingState will be updated via instruction:processing:error event
         retryCountRef.current = 0
       }
-    })
+    }
+
+    // Set up event handlers
+    socket.on('connect', handleConnect)
+    socket.on('disconnect', handleDisconnect)
+    socket.on('connect_error', handleConnectError)
+    socket.on('daemon:status', handleDaemonStatus)
+    socket.on('claude:output', handleClaudeOutput)
+    socket.on('instruction:processing:start', handleProcessingStart)
+    socket.on('instruction:processing:progress', handleProcessingProgress)
+    socket.on('instruction:processing:complete', handleProcessingComplete)
+    socket.on('instruction:processing:error', handleProcessingError)
+    socket.on('instruction:received', handleInstructionReceived)
+    socket.on('instruction:cancelled', handleInstructionCancelled)
+    socket.on('error', handleError)
+    socket.on('daemon:error', handleDaemonError)
+
+    // If already connected, trigger connect handler manually
+    if (socket.connected) {
+      handleConnect()
+    }
 
     return () => {
-      console.log('[ClaudeDaemon] Cleaning up connection')
-      if (socketRef.current) {
-        socketRef.current.emit('output:unsubscribe', { containerId })
-        socketRef.current.disconnect()
-        socketRef.current = null
-      }
+      // Remove event handlers for this hook instance
+      socket.off('connect', handleConnect)
+      socket.off('disconnect', handleDisconnect)
+      socket.off('connect_error', handleConnectError)
+      socket.off('daemon:status', handleDaemonStatus)
+      socket.off('claude:output', handleClaudeOutput)
+      socket.off('instruction:processing:start', handleProcessingStart)
+      socket.off('instruction:processing:progress', handleProcessingProgress)
+      socket.off('instruction:processing:complete', handleProcessingComplete)
+      socket.off('instruction:processing:error', handleProcessingError)
+      socket.off('instruction:received', handleInstructionReceived)
+      socket.off('instruction:cancelled', handleInstructionCancelled)
+      socket.off('error', handleError)
+      socket.off('daemon:error', handleDaemonError)
+
+      // Release the connection (will disconnect if refCount reaches 0)
+      releaseConnection(containerId)
+      socketRef.current = null
     }
   }, [containerId, addMessage, setDaemonStatus, getNextMessageId])
 
@@ -572,7 +654,6 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
         return
       }
 
-      console.log('[ClaudeDaemon] Sending instruction:', instruction)
       // Fix #9: Set optimistic processing state (will be confirmed by backend event)
       setProcessingState({
         isProcessing: true,
@@ -629,8 +710,6 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
         return
       }
 
-      console.log('[ClaudeDaemon] Sending silent instruction:', instruction)
-
       // Send without adding to UI or saving to backend
       socketRef.current.emit('instruction:send', {
         containerId,
@@ -643,7 +722,6 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
 
   // Block/unblock message updates (used during session switch)
   const setBlockMessageUpdates = useCallback((block: boolean) => {
-    console.log('[ClaudeDaemon] Setting blockMessageUpdates:', block)
     blockMessageUpdatesRef.current = block
   }, [])
 
@@ -654,7 +732,6 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
       return
     }
 
-    console.log('[ClaudeDaemon] Cancelling current instruction for container:', containerId)
     socketRef.current.emit('instruction:cancel', { containerId })
     // Fix #9: processingState will be updated via instruction:processing:complete event from backend
   }, [containerId])
@@ -667,7 +744,6 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
       return
     }
 
-    console.log('[ClaudeDaemon] Starting daemon for container:', containerId)
     socketRef.current.emit('daemon:start', { containerId })
   }, [containerId])
 
@@ -679,7 +755,6 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
       return
     }
 
-    console.log('[ClaudeDaemon] Stopping daemon for container:', containerId)
     socketRef.current.emit('daemon:stop', { containerId })
   }, [containerId])
 
@@ -688,7 +763,6 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
     storeClearMessages(containerId)
     // Clear from backend too
     apiClient.clearChatMessages(containerId)
-      .then(() => console.log('[ClaudeDaemon] Messages cleared from backend'))
       .catch((err) => console.error('[ClaudeDaemon] Failed to clear messages from backend:', err))
   }, [containerId, storeClearMessages])
 
@@ -697,7 +771,6 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
     if (!processingState.isProcessing) return
 
     const timeoutId = setTimeout(() => {
-      console.warn('[ClaudeDaemon] Safety timeout reached (5 min), resetting processing state')
       setProcessingState({ isProcessing: false, stage: 'idle' })
     }, PROCESSING_SAFETY_TIMEOUT)
 
