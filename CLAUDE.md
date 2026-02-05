@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções Críticas
 
-## Versão Atual: 0.1.17-alpha
+## Versão Atual: 0.1.19-alpha
 
 ## Links
 
@@ -128,6 +128,17 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.19-alpha
+- Fix: Histórico de sessões agora mostra TODAS as conversas (não apenas a última)
+- Fix: Frontend usava /messages?limit=500, perdendo sessões antigas
+- Fix: Agora usa API dedicada /sessions que agrupa todas as mensagens
+- Feat: Implementado endpoint /sessions/:sessionId para buscar mensagens de sessão específica
+- Feat: Mensagens carregadas sob demanda ao selecionar sessão
+
+### v0.1.18-alpha
+- Fix: Timeout de instruções e melhorias de confiabilidade na fila
+- Fix: Bloqueio de atualizações WebSocket durante troca de sessão
 
 ### v0.1.17-alpha
 - Feat: Clicar em conversa histórica agora carrega mensagens na UI
