@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções Críticas
 
-## Versão Atual: 0.1.9-alpha
+## Versão Atual: 0.1.10-alpha
 
 ## Links
 
@@ -128,6 +128,10 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.10-alpha
+- Fix: Inicialização do DockerLogsCollectorService no startup do backend
+- Fix: Logs Docker agora são coletados em background 24/7
 
 ### v0.1.9-alpha
 - Feat: Logs Docker persistentes com retenção de 24h

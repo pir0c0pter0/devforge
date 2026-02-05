@@ -38,6 +38,7 @@ import { claudeDaemonService } from './services/claude-daemon.service';
 import { metricsCollectorService } from './services/metrics-collector.service';
 import { usageService } from './services/usage.service';
 import { telegramService } from './telegram/telegram.service';
+import { dockerLogsCollectorService } from './services/docker-logs-collector.service';
 
 // Load environment variables
 dotenv.config();
@@ -302,6 +303,14 @@ const gracefulShutdown = async (signal: string) => {
     logger.info('Stopping metrics collector...');
     metricsCollectorService.stop();
 
+    // 1.2. Parar docker logs collector
+    logger.info('Stopping Docker logs collector...');
+    try {
+      await dockerLogsCollectorService.stop();
+    } catch (error) {
+      logger.warn({ error }, 'Error stopping Docker logs collector');
+    }
+
     // 1.5. Parar usage cleanup timer
     logger.info('Stopping usage cleanup timer...');
     usageService.stopCleanupTimer();
@@ -439,6 +448,10 @@ const startServer = async () => {
     // Start background metrics collector (for 5-hour chart history)
     logger.info('Starting background metrics collector');
     metricsCollectorService.start();
+
+    // Start Docker logs collector (for 24-hour log history)
+    logger.info('Starting Docker logs collector');
+    dockerLogsCollectorService.start();
 
     // Start usage cleanup timer (deletes records older than 30 days)
     logger.info('Starting usage cleanup timer');
