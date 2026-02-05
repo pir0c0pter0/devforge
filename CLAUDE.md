@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções Críticas
 
-## Versão Atual: 0.1.33-alpha
+## Versão Atual: 0.1.34-alpha
 
 ## Links
 
@@ -128,6 +128,13 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.34-alpha
+- Fix: VS Code removido da aba Visão Geral (agora só aparece na aba IDE)
+- Feat: Container só mostra 100% iniciado quando VS Code (code-server) está pronto
+- Feat: Progress bar mostra status de inicialização do VS Code (35%-60%)
+- Feat: waitForVSCodeReady() com polling de health check na porta 8080
+- UX: Iniciar container agora aguarda VS Code, não apenas Docker
 
 ### v0.1.33-alpha
 - Feat: Bolinha de notificação na aba Claude Code quando termina processamento em background
