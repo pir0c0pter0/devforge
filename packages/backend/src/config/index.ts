@@ -82,7 +82,7 @@ const loadConfig = (): Config => {
 const validateRequiredEnvVars = (): void => {
   const required: Array<{ key: string; description: string }> = [
     { key: 'REDIS_URL', description: 'Redis connection URL' },
-    { key: 'JWT_SECRET', description: 'JWT signing secret (required for authentication)' },
+    // JWT_SECRET is optional - when not set, WebSocket auth is disabled (development mode)
   ]
 
   const missing = required.filter(({ key }) => !process.env[key])
