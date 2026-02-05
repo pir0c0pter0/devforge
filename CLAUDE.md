@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções Críticas
 
-## Versão Atual: 0.1.13-alpha
+## Versão Atual: 0.1.15-alpha
 
 ## Links
 
@@ -128,6 +128,15 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.15-alpha
+- Fix: Gráfico de métricas agora carrega dados históricos corretamente
+- Fix: Formato de data incompatível entre JavaScript ISO e SQLite DATETIME
+- Fix: Conversão de `toISOString()` para formato SQLite (YYYY-MM-DD HH:MM:SS)
+- Fix: Todas as queries de métricas agora usam formato de data correto
+
+### v0.1.14-alpha
+- Fix: Classificação de config dumps como build em vez de info
 
 ### v0.1.13-alpha
 - Fix: UI mostra tipo do log (info, build, error) em vez de STDOUT/STDERR

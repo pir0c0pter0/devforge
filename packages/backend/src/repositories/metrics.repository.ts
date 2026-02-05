@@ -139,12 +139,14 @@ export class MetricsRepository extends BaseRepository<
 
     if (filters?.fromDate) {
       conditions.push('recorded_at >= ?');
-      params.push(filters.fromDate.toISOString());
+      // Convert to SQLite-compatible format (YYYY-MM-DD HH:MM:SS)
+      params.push(filters.fromDate.toISOString().replace('T', ' ').slice(0, 19));
     }
 
     if (filters?.toDate) {
       conditions.push('recorded_at <= ?');
-      params.push(filters.toDate.toISOString());
+      // Convert to SQLite-compatible format (YYYY-MM-DD HH:MM:SS)
+      params.push(filters.toDate.toISOString().replace('T', ' ').slice(0, 19));
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -314,9 +316,11 @@ export class MetricsRepository extends BaseRepository<
    * Delete old metrics records
    */
   deleteOld(olderThan: Date): number {
+    // Convert to SQLite-compatible format (YYYY-MM-DD HH:MM:SS)
+    const olderThanStr = olderThan.toISOString().replace('T', ' ').slice(0, 19);
     const result = this.db
       .prepare(`DELETE FROM ${this.tableName} WHERE recorded_at < ?`)
-      .run(olderThan.toISOString());
+      .run(olderThanStr);
     return result.changes;
   }
 
@@ -334,12 +338,14 @@ export class MetricsRepository extends BaseRepository<
 
     if (filters?.fromDate) {
       conditions.push('recorded_at >= ?');
-      params.push(filters.fromDate.toISOString());
+      // Convert to SQLite-compatible format (YYYY-MM-DD HH:MM:SS)
+      params.push(filters.fromDate.toISOString().replace('T', ' ').slice(0, 19));
     }
 
     if (filters?.toDate) {
       conditions.push('recorded_at <= ?');
-      params.push(filters.toDate.toISOString());
+      // Convert to SQLite-compatible format (YYYY-MM-DD HH:MM:SS)
+      params.push(filters.toDate.toISOString().replace('T', ' ').slice(0, 19));
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -362,12 +368,14 @@ export class MetricsRepository extends BaseRepository<
 
     if (options?.fromDate) {
       conditions.push('recorded_at >= ?');
-      params.push(options.fromDate.toISOString());
+      // Convert to SQLite-compatible format (YYYY-MM-DD HH:MM:SS)
+      params.push(options.fromDate.toISOString().replace('T', ' ').slice(0, 19));
     }
 
     if (options?.toDate) {
       conditions.push('recorded_at <= ?');
-      params.push(options.toDate.toISOString());
+      // Convert to SQLite-compatible format (YYYY-MM-DD HH:MM:SS)
+      params.push(options.toDate.toISOString().replace('T', ' ').slice(0, 19));
     }
 
     const whereClause = `WHERE ${conditions.join(' AND ')}`;
@@ -442,12 +450,14 @@ export class MetricsRepository extends BaseRepository<
 
     if (options?.fromDate) {
       conditions.push('recorded_at >= ?');
-      params.push(options.fromDate.toISOString());
+      // Convert to SQLite-compatible format (YYYY-MM-DD HH:MM:SS)
+      params.push(options.fromDate.toISOString().replace('T', ' ').slice(0, 19));
     }
 
     if (options?.toDate) {
       conditions.push('recorded_at <= ?');
-      params.push(options.toDate.toISOString());
+      // Convert to SQLite-compatible format (YYYY-MM-DD HH:MM:SS)
+      params.push(options.toDate.toISOString().replace('T', ' ').slice(0, 19));
     }
 
     const whereClause = `WHERE ${conditions.join(' AND ')}`;
@@ -493,6 +503,9 @@ export class MetricsRepository extends BaseRepository<
     hours: number = 5
   ): readonly MetricsHistoryPoint[] {
     const fromDate = new Date(Date.now() - hours * 60 * 60 * 1000);
+    // Convert to SQLite-compatible format (YYYY-MM-DD HH:MM:SS)
+    // SQLite CURRENT_TIMESTAMP uses this format, not ISO 8601
+    const fromDateStr = fromDate.toISOString().replace('T', ' ').slice(0, 19);
 
     const sql = `
       SELECT
@@ -507,7 +520,7 @@ export class MetricsRepository extends BaseRepository<
       ORDER BY recorded_at ASC
     `;
 
-    const rows = this.db.prepare(sql).all(containerId, fromDate.toISOString()) as Array<{
+    const rows = this.db.prepare(sql).all(containerId, fromDateStr) as Array<{
       timestamp: string;
       cpu_percent: number | null;
       memory_usage: number | null;
