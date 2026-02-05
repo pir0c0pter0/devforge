@@ -216,6 +216,16 @@ export const translations = {
       paused: 'Pausado',
       timeRange: 'Intervalo de tempo',
       jumpToBottom: 'Ir para o fim',
+      // Log tabs and collapse
+      logTabs: {
+        all: 'Todos',
+        build: 'Build',
+        runtime: 'Runtime',
+        errors: 'Erros',
+      },
+      collapseToggle: 'Agrupar similares',
+      similarLogs: 'similares',
+      groupsCollapsed: 'grupos',
       // Terminal section
       terminalUnavailable: 'Terminal Indisponível',
       startContainerForTerminal: 'Inicie o container para acessar o terminal.',
@@ -880,6 +890,16 @@ export const translations = {
       paused: 'Paused',
       timeRange: 'Time range',
       jumpToBottom: 'Jump to bottom',
+      // Log tabs and collapse
+      logTabs: {
+        all: 'All',
+        build: 'Build',
+        runtime: 'Runtime',
+        errors: 'Errors',
+      },
+      collapseToggle: 'Group similar',
+      similarLogs: 'similar',
+      groupsCollapsed: 'groups',
       // Terminal section
       terminalUnavailable: 'Terminal Unavailable',
       startContainerForTerminal: 'Start the container to access the terminal.',

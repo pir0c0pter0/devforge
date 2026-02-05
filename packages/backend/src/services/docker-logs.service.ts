@@ -119,6 +119,7 @@ class DockerLogsService extends EventEmitter {
       id: dbEntry.id,
       containerId: dbEntry.containerId,
       stream: dbEntry.stream,
+      logType: dbEntry.logType,
       content: dbEntry.content,
       recordedAt: timestamp || dbEntry.recordedAt,
     }
@@ -181,6 +182,7 @@ class DockerLogsService extends EventEmitter {
             id: entity.id,
             containerId: entity.containerId,
             stream: entity.stream,
+            logType: entity.logType,
             content: entity.content,
             recordedAt: entity.recordedAt,
           }
@@ -284,6 +286,7 @@ class DockerLogsService extends EventEmitter {
         id: entity.id,
         containerId: entity.containerId,
         stream: entity.stream,
+        logType: entity.logType,
         content: entity.content,
         recordedAt: entity.recordedAt,
       }))
@@ -316,6 +319,7 @@ class DockerLogsService extends EventEmitter {
           id: entity.id,
           containerId: entity.containerId,
           stream: entity.stream,
+          logType: entity.logType,
           content: entity.content,
           recordedAt: entity.recordedAt,
         })),
@@ -344,6 +348,7 @@ class DockerLogsService extends EventEmitter {
           id: entity.id,
           containerId: entity.containerId,
           stream: entity.stream,
+          logType: entity.logType,
           content: entity.content,
           recordedAt: entity.recordedAt,
         })),
@@ -371,6 +376,7 @@ class DockerLogsService extends EventEmitter {
         totalLogs: stats.total,
         stdoutCount: stats.byStream.stdout,
         stderrCount: stats.byStream.stderr,
+        byType: stats.byType,
         oldestLog: stats.oldestLog || null,
         newestLog: stats.newestLog || null,
         sizeBytes: 0, // TODO: Calculate actual size if needed
@@ -381,6 +387,7 @@ class DockerLogsService extends EventEmitter {
         totalLogs: 0,
         stdoutCount: 0,
         stderrCount: 0,
+        byType: { build: 0, runtime: 0, error: 0, warning: 0, info: 0 },
         oldestLog: null,
         newestLog: null,
         sizeBytes: 0,

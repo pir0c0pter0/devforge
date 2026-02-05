@@ -273,10 +273,69 @@ const dockerLogsMigration: Migration = {
 };
 
 /**
+ * Migration 007 - Add log_type column to docker_logs for classification
+ * Allows filtering logs by type: build, runtime, error, warning, info
+ */
+const dockerLogsLogTypeMigration: Migration = {
+  name: '007_docker_logs_log_type',
+  up: (db: Database.Database) => {
+    // Check if column already exists
+    const columns = db.prepare('PRAGMA table_info(docker_logs)').all() as Array<{ name: string }>;
+    const hasColumn = columns.some((c) => c.name === 'log_type');
+
+    if (!hasColumn) {
+      db.exec("ALTER TABLE docker_logs ADD COLUMN log_type TEXT NOT NULL DEFAULT 'runtime'");
+      logger.debug('Added log_type column to docker_logs');
+    } else {
+      logger.debug('log_type column already exists');
+    }
+
+    // Create indexes for efficient filtering
+    db.exec('CREATE INDEX IF NOT EXISTS idx_docker_logs_log_type ON docker_logs(log_type)');
+    db.exec(
+      'CREATE INDEX IF NOT EXISTS idx_docker_logs_container_type ON docker_logs(container_id, log_type)'
+    );
+    logger.debug('Created docker_logs log_type indexes');
+
+    // Backfill existing logs based on content patterns
+    const backfillPatterns = [
+      // Error patterns
+      { type: 'error', patterns: ['ERROR', 'Error:', 'error:', 'FAIL', 'Failed', 'Exception', 'exception', 'EXCEPTION', 'TypeError', 'SyntaxError', 'ReferenceError', 'fatal', 'FATAL', 'panic', 'PANIC'] },
+      // Warning patterns
+      { type: 'warning', patterns: ['WARN', 'Warning', 'warning:', 'DEPRECAT', 'Deprecat', 'deprecated'] },
+      // Build patterns
+      { type: 'build', patterns: ['npm ', 'pnpm ', 'yarn ', 'webpack', 'vite', 'rollup', 'esbuild', 'tsc ', 'tsconfig', 'compil', 'Compil', 'Build', 'build:', 'Building', 'Bundl', 'bundl'] },
+      // Info patterns
+      { type: 'info', patterns: ['INFO', 'info:', '[INFO]'] },
+    ];
+
+    // Update logs in batches
+    for (const { type, patterns } of backfillPatterns) {
+      for (const pattern of patterns) {
+        db.prepare(
+          `UPDATE docker_logs SET log_type = ? WHERE log_type = 'runtime' AND content LIKE ?`
+        ).run(type, `%${pattern}%`);
+      }
+    }
+
+    // Set stderr logs without other classification as error
+    db.prepare(
+      `UPDATE docker_logs SET log_type = 'error' WHERE log_type = 'runtime' AND stream = 'stderr'`
+    ).run();
+
+    logger.debug('Backfilled existing docker_logs with log_type');
+  },
+  down: (_db: Database.Database) => {
+    // SQLite doesn't support DROP COLUMN easily, would need table recreation
+    logger.warn('Rollback not supported for docker_logs_log_type migration');
+  },
+};
+
+/**
  * All migrations in order
  * Add new migrations here as the schema evolves
  */
-const migrations: readonly Migration[] = [initialMigration, usageTrackingMigration, claudeLogsMigration, ownerTelegramIdMigration, telegramConversationsMigration, dockerLogsMigration];
+const migrations: readonly Migration[] = [initialMigration, usageTrackingMigration, claudeLogsMigration, ownerTelegramIdMigration, telegramConversationsMigration, dockerLogsMigration, dockerLogsLogTypeMigration];
 
 /**
  * Check if a migration has been applied

@@ -6,6 +6,7 @@ import {
   dockerLogsRepository,
   CreateDockerLogDto,
 } from '../repositories/docker-logs.repository';
+import { classifyLogLine, DockerLogType } from '../utils/log-classifier';
 
 const logger = createChildLogger({ service: 'docker-logs-collector' });
 
@@ -45,6 +46,7 @@ interface LogEntry {
   readonly stream: 'stdout' | 'stderr';
   readonly content: string;
   readonly timestamp: Date;
+  readonly logType: DockerLogType;
 }
 
 /**
@@ -415,11 +417,13 @@ class DockerLogsCollectorServiceImpl extends EventEmitter implements DockerLogsC
                     const { timestamp, content } = parseLogTimestamp(line);
                     const sanitized = sanitizeLogContent(content);
                     if (sanitized) {
+                      const logType = classifyLogLine(sanitized, 'stdout');
                       this.addToBuffer({
                         containerId,
                         stream: 'stdout', // Assume stdout for tty mode
                         content: sanitized,
                         timestamp,
+                        logType,
                       });
                     }
                   }
@@ -438,11 +442,13 @@ class DockerLogsCollectorServiceImpl extends EventEmitter implements DockerLogsC
                 const sanitized = sanitizeLogContent(content);
 
                 if (sanitized) {
+                  const logType = classifyLogLine(sanitized, streamType);
                   this.addToBuffer({
                     containerId,
                     stream: streamType,
                     content: sanitized,
                     timestamp,
+                    logType,
                   });
                 }
               }
@@ -598,6 +604,7 @@ class DockerLogsCollectorServiceImpl extends EventEmitter implements DockerLogsC
         containerId: entry.containerId,
         stream: entry.stream,
         content: entry.content,
+        logType: entry.logType,
       }));
 
       const inserted = dockerLogsRepository.createBatch(dtos);

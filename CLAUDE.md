@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções Críticas
 
-## Versão Atual: 0.1.11-alpha
+## Versão Atual: 0.1.12-alpha
 
 ## Links
 
@@ -128,6 +128,14 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.12-alpha
+- Feat: Docker logs smart collapse (agrupa logs similares consecutivos)
+- Feat: Sub-tabs de logs: All | Build | Runtime | Errors
+- Feat: Classificação automática de logs (build, runtime, error, warning, info)
+- Feat: Badges de tipo de log com cores distintas
+- Feat: Migration 007 para coluna log_type no SQLite
+- Feat: API com filtros logType e logTypes
 
 ### v0.1.11-alpha
 - Fix: Docker logs collection para containers com TTY habilitado

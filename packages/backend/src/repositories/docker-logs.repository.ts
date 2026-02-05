@@ -1,4 +1,8 @@
 import { BaseRepository, BaseFilters } from './base.repository';
+import { DockerLogType } from '../utils/log-classifier';
+
+// Re-export DockerLogType for convenience
+export { DockerLogType } from '../utils/log-classifier';
 
 /**
  * Docker log database row type
@@ -7,6 +11,7 @@ interface DockerLogRow {
   id: number;
   container_id: string;
   stream: 'stdout' | 'stderr';
+  log_type: DockerLogType;
   content: string;
   recorded_at: string;
 }
@@ -18,6 +23,7 @@ export interface DockerLogEntity {
   readonly id: number;
   readonly containerId: string;
   readonly stream: 'stdout' | 'stderr';
+  readonly logType: DockerLogType;
   readonly content: string;
   readonly recordedAt: Date;
 }
@@ -28,6 +34,7 @@ export interface DockerLogEntity {
 export interface CreateDockerLogDto {
   readonly containerId: string;
   readonly stream: 'stdout' | 'stderr';
+  readonly logType?: DockerLogType;
   readonly content: string;
 }
 
@@ -37,6 +44,8 @@ export interface CreateDockerLogDto {
 export interface DockerLogFilters extends BaseFilters {
   readonly containerId?: string;
   readonly stream?: 'stdout' | 'stderr';
+  readonly logType?: DockerLogType;
+  readonly logTypes?: readonly DockerLogType[];
   readonly since?: Date;
   readonly until?: Date;
 }
@@ -49,6 +58,13 @@ export interface DockerLogStats {
   readonly byStream: {
     readonly stdout: number;
     readonly stderr: number;
+  };
+  readonly byType: {
+    readonly build: number;
+    readonly runtime: number;
+    readonly error: number;
+    readonly warning: number;
+    readonly info: number;
   };
   readonly oldestLog?: Date;
   readonly newestLog?: Date;
@@ -83,6 +99,7 @@ export class DockerLogsRepository extends BaseRepository<
       id: row.id,
       containerId: row.container_id,
       stream: row.stream,
+      logType: row.log_type || 'runtime',
       content: row.content,
       recordedAt: new Date(row.recorded_at),
     };
@@ -103,6 +120,17 @@ export class DockerLogsRepository extends BaseRepository<
     if (filters?.stream) {
       conditions.push('stream = ?');
       params.push(filters.stream);
+    }
+
+    if (filters?.logType) {
+      conditions.push('log_type = ?');
+      params.push(filters.logType);
+    }
+
+    if (filters?.logTypes && filters.logTypes.length > 0) {
+      const placeholders = filters.logTypes.map(() => '?').join(', ');
+      conditions.push(`log_type IN (${placeholders})`);
+      params.push(...filters.logTypes);
     }
 
     if (filters?.since) {
@@ -147,13 +175,14 @@ export class DockerLogsRepository extends BaseRepository<
    */
   create(data: CreateDockerLogDto): DockerLogEntity {
     const sql = `
-      INSERT INTO ${this.tableName} (container_id, stream, content)
-      VALUES (?, ?, ?)
+      INSERT INTO ${this.tableName} (container_id, stream, log_type, content)
+      VALUES (?, ?, ?, ?)
     `;
 
     const result = this.db.prepare(sql).run(
       data.containerId,
       data.stream,
+      data.logType || 'runtime',
       data.content
     );
 
@@ -167,8 +196,8 @@ export class DockerLogsRepository extends BaseRepository<
     if (logs.length === 0) return 0;
 
     const sql = `
-      INSERT INTO ${this.tableName} (container_id, stream, content)
-      VALUES (?, ?, ?)
+      INSERT INTO ${this.tableName} (container_id, stream, log_type, content)
+      VALUES (?, ?, ?, ?)
     `;
 
     const stmt = this.db.prepare(sql);
@@ -177,6 +206,7 @@ export class DockerLogsRepository extends BaseRepository<
         stmt.run(
           item.containerId,
           item.stream,
+          item.logType || 'runtime',
           item.content
         );
       }
@@ -277,6 +307,29 @@ export class DockerLogsRepository extends BaseRepository<
       byStream[row.stream] = row.count;
     }
 
+    const byTypeRows = this.db
+      .prepare(`
+        SELECT log_type, COUNT(*) as count
+        FROM ${this.tableName}
+        WHERE container_id = ?
+        GROUP BY log_type
+      `)
+      .all(containerId) as Array<{ log_type: DockerLogType; count: number }>;
+
+    const byType = {
+      build: 0,
+      runtime: 0,
+      error: 0,
+      warning: 0,
+      info: 0,
+    };
+
+    for (const row of byTypeRows) {
+      if (row.log_type in byType) {
+        byType[row.log_type] = row.count;
+      }
+    }
+
     const timeRange = this.db
       .prepare(`
         SELECT
@@ -290,6 +343,7 @@ export class DockerLogsRepository extends BaseRepository<
     return {
       total,
       byStream,
+      byType,
       oldestLog: timeRange?.oldest ? new Date(timeRange.oldest) : undefined,
       newestLog: timeRange?.newest ? new Date(timeRange.newest) : undefined,
     };
@@ -310,6 +364,17 @@ export class DockerLogsRepository extends BaseRepository<
     if (filters?.stream) {
       conditions.push('stream = ?');
       params.push(filters.stream);
+    }
+
+    if (filters?.logType) {
+      conditions.push('log_type = ?');
+      params.push(filters.logType);
+    }
+
+    if (filters?.logTypes && filters.logTypes.length > 0) {
+      const placeholders = filters.logTypes.map(() => '?').join(', ');
+      conditions.push(`log_type IN (${placeholders})`);
+      params.push(...filters.logTypes);
     }
 
     if (filters?.since) {
@@ -351,7 +416,14 @@ export class DockerLogsRepository extends BaseRepository<
    */
   getContainerLogs(
     containerId: string,
-    options?: { limit?: number; offset?: number; since?: Date; stream?: 'stdout' | 'stderr' }
+    options?: {
+      limit?: number;
+      offset?: number;
+      since?: Date;
+      stream?: 'stdout' | 'stderr';
+      logType?: DockerLogType;
+      logTypes?: readonly DockerLogType[];
+    }
   ): { logs: readonly DockerLogEntity[]; total: number; hasMore: boolean } {
     const limit = options?.limit ?? 500;
     const offset = options?.offset ?? 0;
@@ -360,13 +432,21 @@ export class DockerLogsRepository extends BaseRepository<
       containerId,
       since: options?.since,
       stream: options?.stream,
+      logType: options?.logType,
+      logTypes: options?.logTypes,
       limit,
       offset,
       orderBy: 'recorded_at',
       orderDirection: 'ASC',
     });
 
-    const total = this.count({ containerId, since: options?.since, stream: options?.stream });
+    const total = this.count({
+      containerId,
+      since: options?.since,
+      stream: options?.stream,
+      logType: options?.logType,
+      logTypes: options?.logTypes,
+    });
 
     return {
       logs,

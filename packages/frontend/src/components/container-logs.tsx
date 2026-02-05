@@ -15,9 +15,13 @@ import {
   Filter,
   Clock,
   ChevronDown,
+  ChevronRight,
   ArrowDown,
+  Layers,
 } from 'lucide-react'
 import { useI18n } from '@/lib/i18n'
+import type { DockerLogType, DockerLogTabType } from '@claude-docker/shared'
+import { collapseConsecutiveLogs, flattenDisplayItems, type FlattenedRow } from '@/utils/log-collapse'
 
 const WS_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -32,6 +36,7 @@ interface LogEntry {
   timestamp: Date
   content: string
   stream: 'stdout' | 'stderr'
+  logType: DockerLogType
   recordedAt?: Date
 }
 
@@ -54,6 +59,56 @@ type TimeRange = typeof TIME_RANGES[number]['hours']
 // Generate unique ID
 let logIdCounter = 0
 const generateLogId = () => `log-${Date.now()}-${++logIdCounter}`
+
+// Log type colors for badges
+const LOG_TYPE_COLORS: Record<DockerLogType, string> = {
+  build: 'bg-blue-500/20 text-blue-400',
+  runtime: 'bg-gray-500/20 text-gray-400',
+  error: 'bg-red-500/20 text-red-400',
+  warning: 'bg-yellow-500/20 text-yellow-400',
+  info: 'bg-cyan-500/20 text-cyan-400',
+}
+
+// Tab to log types mapping
+const TAB_LOG_TYPES: Record<DockerLogTabType, DockerLogType[] | null> = {
+  all: null,
+  build: ['build'],
+  runtime: ['runtime', 'info'],
+  errors: ['error', 'warning'],
+}
+
+// Simple log type classifier for client-side (for real-time logs without server classification)
+function classifyLogContent(content: string, stream: 'stdout' | 'stderr'): DockerLogType {
+  // Error patterns
+  if (stream === 'stderr' ||
+      /\berror\b/i.test(content) ||
+      /\bfail(ed)?\b/i.test(content) ||
+      /\bexception\b/i.test(content) ||
+      /\bcritical\b/i.test(content) ||
+      /\bpanic\b/i.test(content)) {
+    return 'error'
+  }
+
+  // Warning patterns
+  if (/\bwarn(ing)?\b/i.test(content) ||
+      /\bdeprecated?\b/i.test(content)) {
+    return 'warning'
+  }
+
+  // Build patterns
+  if (/\b(npm|pnpm|yarn|webpack|vite|tsc|compil|build|bundl)\b/i.test(content) ||
+      /^\[?\d+\/\d+\]/.test(content)) {
+    return 'build'
+  }
+
+  // Info patterns
+  if (/\binfo\b/i.test(content) ||
+      /^\[\d{2}:\d{2}:\d{2}\]/.test(content)) {
+    return 'info'
+  }
+
+  return 'runtime'
+}
 
 // Debounce hook
 function useDebounce<T>(value: T, delay: number): T {
@@ -79,14 +134,22 @@ const formatTime = (date: Date): string => {
 
 // Row props type for the List component
 interface LogRowProps {
-  logs: LogEntry[]
+  rows: FlattenedRow[]
+  expandedGroups: Set<string>
+  onToggleGroup: (groupId: string) => void
+  showTypeBadge: boolean
+  t: ReturnType<typeof useI18n>['t']
 }
 
 // Row component for the virtual list (react-window v2 API)
 function LogRow({
   index,
   style,
-  logs
+  rows,
+  expandedGroups,
+  onToggleGroup,
+  showTypeBadge,
+  t,
 }: {
   index: number
   style: CSSProperties
@@ -96,21 +159,78 @@ function LogRow({
     role: "listitem"
   }
 } & LogRowProps) {
-  const log = logs[index]
+  const row = rows[index]
+  if (!row) return null
+
+  // Collapsed group header
+  if (row.type === 'group-header' && row.group) {
+    const isExpanded = expandedGroups.has(row.group.id)
+    return (
+      <div
+        style={style}
+        className="font-mono text-sm leading-relaxed flex items-center px-2 cursor-pointer hover:bg-[#303030] bg-[#252525]"
+        onClick={() => onToggleGroup(row.group!.id)}
+      >
+        {/* Expand/Collapse icon */}
+        <span className="flex-shrink-0 mr-2 text-gray-400">
+          {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+        </span>
+
+        {/* Type badge */}
+        <span className={clsx(
+          'flex-shrink-0 px-1.5 py-0.5 rounded text-xs mr-2',
+          LOG_TYPE_COLORS[row.group.logType]
+        )}>
+          {row.group.logType}
+        </span>
+
+        {/* Count badge */}
+        <span className="flex-shrink-0 px-1.5 py-0.5 rounded text-xs bg-blue-500/20 text-blue-400 mr-2">
+          {row.group.count} {t.containerDetail.similarLogs || 'similar'}
+        </span>
+
+        {/* Pattern preview */}
+        <span className="flex-1 truncate text-gray-400" title={row.group.pattern}>
+          {row.group.pattern.slice(0, 80)}{row.group.pattern.length > 80 ? '...' : ''}
+        </span>
+
+        {/* Time range */}
+        <span className="flex-shrink-0 text-gray-500 ml-2 text-xs">
+          {formatTime(new Date(row.group.firstLog.recordedAt))} - {formatTime(new Date(row.group.lastLog.recordedAt))}
+        </span>
+      </div>
+    )
+  }
+
+  // Individual log (single or from expanded group)
+  const log = row.log
   if (!log) return null
+
+  const isGroupItem = row.type === 'group-item'
 
   return (
     <div
       style={style}
       className={clsx(
         'font-mono text-sm leading-relaxed flex px-2 hover:bg-[#252525]',
-        log.stream === 'stderr' ? 'text-red-400' : 'text-gray-200'
+        log.stream === 'stderr' ? 'text-red-400' : 'text-gray-200',
+        isGroupItem && 'pl-8 bg-[#1d1d1d]'
       )}
     >
       {/* Timestamp */}
       <span className="flex-shrink-0 text-gray-500 mr-2 select-none">
-        [{formatTime(log.timestamp)}]
+        [{formatTime(new Date(log.recordedAt))}]
       </span>
+
+      {/* Type badge (optional) */}
+      {showTypeBadge && (
+        <span className={clsx(
+          'flex-shrink-0 px-1 py-0.5 rounded text-xs mr-2',
+          LOG_TYPE_COLORS[log.logType]
+        )}>
+          {log.logType.slice(0, 4)}
+        </span>
+      )}
 
       {/* Stream indicator */}
       <span className={clsx(
@@ -135,11 +255,14 @@ export function ContainerLogs({ containerId, className }: ContainerLogsProps) {
   const [isPaused, setIsPaused] = useState(false)
   const [filter, setFilter] = useState('')
   const [streamFilter, setStreamFilter] = useState<'all' | 'stdout' | 'stderr'>('all')
+  const [logTab, setLogTab] = useState<DockerLogTabType>('all')
   const [timeRange, setTimeRange] = useState<TimeRange>(24)
   const [showFilters, setShowFilters] = useState(false)
   const [showTimeDropdown, setShowTimeDropdown] = useState(false)
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [isAtBottom, setIsAtBottom] = useState(true)
+  const [enableCollapse, setEnableCollapse] = useState(true)
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 
   const socketRef = useRef<Socket | null>(null)
   const listRef = useListRef(null)
@@ -242,6 +365,7 @@ export function ContainerLogs({ containerId, className }: ContainerLogsProps) {
           id: number
           containerId: string
           stream: 'stdout' | 'stderr'
+          logType?: DockerLogType
           content: string
           recordedAt: string
         }) => ({
@@ -249,6 +373,7 @@ export function ContainerLogs({ containerId, className }: ContainerLogsProps) {
           timestamp: new Date(log.recordedAt),
           content: log.content,
           stream: log.stream,
+          logType: log.logType || classifyLogContent(log.content, log.stream),
           recordedAt: new Date(log.recordedAt),
         }))
 
@@ -288,7 +413,7 @@ export function ContainerLogs({ containerId, className }: ContainerLogsProps) {
       console.log('[ContainerLogs] Disconnected from /docker-logs')
     })
 
-    socket.on('log', (data: { containerId: string; timestamp: string; content: string; stream: 'stdout' | 'stderr' }) => {
+    socket.on('log', (data: { containerId: string; timestamp: string; content: string; stream: 'stdout' | 'stderr'; logType?: DockerLogType }) => {
       if (data.containerId !== containerId) return
 
       const entry: LogEntry = {
@@ -296,6 +421,7 @@ export function ContainerLogs({ containerId, className }: ContainerLogsProps) {
         timestamp: new Date(data.timestamp),
         content: data.content,
         stream: data.stream,
+        logType: data.logType || classifyLogContent(data.content, data.stream),
       }
       addLog(entry)
     })
@@ -346,20 +472,75 @@ export function ContainerLogs({ containerId, className }: ContainerLogsProps) {
       if (streamFilter !== 'all' && log.stream !== streamFilter) {
         return false
       }
+      // Log type tab filter
+      const allowedTypes = TAB_LOG_TYPES[logTab]
+      if (allowedTypes !== null && !allowedTypes.includes(log.logType)) {
+        return false
+      }
       // Text search filter (debounced)
       if (debouncedFilter) {
         return log.content.toLowerCase().includes(debouncedFilter.toLowerCase())
       }
       return true
     })
-  }, [logs, streamFilter, debouncedFilter, timeRange])
+  }, [logs, streamFilter, logTab, debouncedFilter, timeRange])
+
+  // Convert logs to DockerLogEntry format for collapse utility
+  const logsForCollapse = useMemo(() => {
+    return filteredLogs.map(log => ({
+      id: parseInt(log.id.replace(/\D/g, '')) || 0,
+      containerId: containerId,
+      stream: log.stream,
+      logType: log.logType,
+      content: log.content,
+      recordedAt: log.timestamp,
+    }))
+  }, [filteredLogs, containerId])
+
+  // Apply smart collapse
+  const displayItems = useMemo(() => {
+    if (!enableCollapse) {
+      return logsForCollapse.map(log => ({ type: 'single' as const, log }))
+    }
+    return collapseConsecutiveLogs(logsForCollapse)
+  }, [logsForCollapse, enableCollapse])
+
+  // Flatten for virtual list
+  const flattenedRows = useMemo(() => {
+    return flattenDisplayItems(displayItems, expandedGroups, logsForCollapse)
+  }, [displayItems, expandedGroups, logsForCollapse])
+
+  // Toggle group expansion
+  const handleToggleGroup = useCallback((groupId: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(groupId)) {
+        next.delete(groupId)
+      } else {
+        next.add(groupId)
+      }
+      return next
+    })
+  }, [])
+
+  // Count logs by type for tab badges
+  const logTypeCounts = useMemo(() => {
+    const counts = { all: 0, build: 0, runtime: 0, errors: 0 }
+    for (const log of logs) {
+      counts.all++
+      if (log.logType === 'build') counts.build++
+      if (log.logType === 'runtime' || log.logType === 'info') counts.runtime++
+      if (log.logType === 'error' || log.logType === 'warning') counts.errors++
+    }
+    return counts
+  }, [logs])
 
   // Auto-scroll to bottom when new logs arrive (if already at bottom)
   useEffect(() => {
-    if (!isPaused && isAtBottom && listRef.current && filteredLogs.length > 0) {
-      listRef.current.scrollToRow({ index: filteredLogs.length - 1, align: 'end' })
+    if (!isPaused && isAtBottom && listRef.current && flattenedRows.length > 0) {
+      listRef.current.scrollToRow({ index: flattenedRows.length - 1, align: 'end' })
     }
-  }, [filteredLogs.length, isPaused, isAtBottom, listRef])
+  }, [flattenedRows.length, isPaused, isAtBottom, listRef])
 
   // Handle rows rendered to detect if user is at bottom
   const handleRowsRendered = useCallback((
@@ -369,10 +550,10 @@ export function ContainerLogs({ containerId, className }: ContainerLogsProps) {
     lastRenderedStopIndex.current = visibleRows.stopIndex
 
     // Check if we're at the bottom (within 2 rows of the end)
-    const atBottom = visibleRows.stopIndex >= filteredLogs.length - 2
+    const atBottom = visibleRows.stopIndex >= flattenedRows.length - 2
 
     setIsAtBottom(atBottom)
-  }, [filteredLogs.length])
+  }, [flattenedRows.length])
 
   // Resume and add paused logs
   const handleResume = useCallback(() => {
@@ -394,6 +575,7 @@ export function ContainerLogs({ containerId, className }: ContainerLogsProps) {
     setLogs([])
     pausedLogsRef.current = []
     seenIdsRef.current.clear()
+    setExpandedGroups(new Set())
   }, [])
 
   // Download logs
@@ -415,11 +597,11 @@ export function ContainerLogs({ containerId, className }: ContainerLogsProps) {
 
   // Jump to bottom
   const handleJumpToBottom = useCallback(() => {
-    if (listRef.current && filteredLogs.length > 0) {
-      listRef.current.scrollToRow({ index: filteredLogs.length - 1, align: 'end' })
+    if (listRef.current && flattenedRows.length > 0) {
+      listRef.current.scrollToRow({ index: flattenedRows.length - 1, align: 'end' })
       setIsAtBottom(true)
     }
-  }, [filteredLogs.length, listRef])
+  }, [flattenedRows.length, listRef])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -461,6 +643,39 @@ export function ContainerLogs({ containerId, className }: ContainerLogsProps) {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Sub-tabs for log types */}
+          <div className="flex items-center gap-1 border-r border-terminal-border pr-3 mr-1">
+            {(['all', 'build', 'runtime', 'errors'] as DockerLogTabType[]).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setLogTab(tab)}
+                className={clsx(
+                  'px-2 py-1 text-xs rounded transition-colors',
+                  logTab === tab
+                    ? 'bg-terminal-green/20 text-terminal-green'
+                    : 'text-terminal-textMuted hover:text-terminal-text hover:bg-terminal-bg'
+                )}
+              >
+                {t.containerDetail.logTabs?.[tab] || tab.charAt(0).toUpperCase() + tab.slice(1)}
+                <span className="ml-1 text-terminal-textMuted">({logTypeCounts[tab]})</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Collapse toggle */}
+          <button
+            onClick={() => setEnableCollapse(!enableCollapse)}
+            className={clsx(
+              'p-1.5 rounded transition-colors',
+              enableCollapse
+                ? 'bg-terminal-green/20 text-terminal-green'
+                : 'text-terminal-textMuted hover:text-terminal-text hover:bg-terminal-bg'
+            )}
+            title={t.containerDetail.collapseToggle || 'Group similar'}
+          >
+            <Layers className="w-4 h-4" />
+          </button>
+
           {/* Time range dropdown */}
           <div className="relative">
             <button
@@ -605,7 +820,7 @@ export function ContainerLogs({ containerId, className }: ContainerLogsProps) {
         ref={containerRef}
         className="flex-1 overflow-hidden font-mono text-sm min-h-0 bg-[#1a1a1a] relative"
       >
-        {filteredLogs.length === 0 ? (
+        {flattenedRows.length === 0 ? (
           <div className="flex items-center justify-center h-full text-terminal-textMuted">
             {logs.length === 0 ? (
               <div className="text-center">
@@ -622,9 +837,15 @@ export function ContainerLogs({ containerId, className }: ContainerLogsProps) {
             <List<LogRowProps>
               listRef={listRef}
               rowComponent={LogRow}
-              rowCount={filteredLogs.length}
+              rowCount={flattenedRows.length}
               rowHeight={ROW_HEIGHT}
-              rowProps={{ logs: filteredLogs }}
+              rowProps={{
+                rows: flattenedRows,
+                expandedGroups,
+                onToggleGroup: handleToggleGroup,
+                showTypeBadge: logTab === 'all',
+                t,
+              }}
               onRowsRendered={handleRowsRendered}
               overscanCount={20}
               defaultHeight={containerHeight}
@@ -648,9 +869,14 @@ export function ContainerLogs({ containerId, className }: ContainerLogsProps) {
       {/* Status bar */}
       <div className="flex-shrink-0 flex items-center justify-between px-4 py-1 bg-terminal-bgLight border-t border-terminal-border text-xs text-terminal-textMuted rounded-b-lg">
         <span>
-          {filteredLogs.length.toLocaleString()} logs
-          {(debouncedFilter || streamFilter !== 'all' || timeRange !== 24) && ` (${t.containerDetail.filtered || 'filtrado'})`}
+          {flattenedRows.length.toLocaleString()} {enableCollapse && displayItems.some(i => i.type === 'group') ? 'rows' : 'logs'}
+          {(debouncedFilter || streamFilter !== 'all' || logTab !== 'all' || timeRange !== 24) && ` (${t.containerDetail.filtered || 'filtrado'})`}
           {logs.length > filteredLogs.length && ` | ${logs.length.toLocaleString()} total`}
+          {enableCollapse && displayItems.filter(i => i.type === 'group').length > 0 && (
+            <span className="ml-2 text-blue-400">
+              {displayItems.filter(i => i.type === 'group').length} {t.containerDetail.groupsCollapsed || 'groups'}
+            </span>
+          )}
         </span>
         <span>
           {isConnected ? (t.containerDetail.connected || 'Conectado') : (t.containerDetail.disconnected || 'Desconectado')}

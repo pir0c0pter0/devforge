@@ -195,8 +195,12 @@ export type {
 // Export all Docker Logs types
 export type {
   DockerLogStream,
+  DockerLogType,
   DockerLogTimeRange,
+  DockerLogTabType,
   DockerLogEntry,
+  CollapsedLogGroup,
+  LogDisplayItem,
   DockerLogFilter,
   DockerLogsResponse,
   DockerLogStats,

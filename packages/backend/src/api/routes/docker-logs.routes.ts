@@ -1,9 +1,15 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { dockerLogsRepository, containerRepository } from '../../repositories';
+import { DockerLogType } from '../../repositories/docker-logs.repository';
 import { validateParams, validateQuery } from '../../utils/validation';
 import { apiLogger as logger } from '../../utils/logger';
 import { requireRole, AuthenticatedRequest } from '../../middleware/auth.middleware';
+
+/**
+ * Valid log type values
+ */
+const LOG_TYPES: DockerLogType[] = ['build', 'runtime', 'error', 'warning', 'info'];
 
 const router: Router = Router();
 
@@ -47,6 +53,15 @@ const DockerLogsQuerySchema = z.object({
     }),
   stream: z.enum(['stdout', 'stderr'])
     .optional(),
+  logType: z.enum(['build', 'runtime', 'error', 'warning', 'info'])
+    .optional(),
+  logTypes: z.string()
+    .optional()
+    .transform((val) => {
+      if (!val) return undefined;
+      const types = val.split(',').map(t => t.trim()) as DockerLogType[];
+      return types.filter(t => LOG_TYPES.includes(t));
+    }),
   search: z.string()
     .optional(),
   limit: z.string()
@@ -105,16 +120,18 @@ router.get(
   async (req: Request, res: Response): Promise<void> => {
     try {
       const id = req.params['id'] as string;
-      const { since, until, stream, search, limit, offset } = req.query as unknown as {
+      const { since, until, stream, logType, logTypes, search, limit, offset } = req.query as unknown as {
         since?: Date;
         until?: Date;
         stream?: 'stdout' | 'stderr';
+        logType?: DockerLogType;
+        logTypes?: DockerLogType[];
         search?: string;
         limit: number;
         offset: number;
       };
 
-      logger.info({ containerId: id, filters: { since, until, stream, search, limit, offset } }, 'Getting docker logs');
+      logger.info({ containerId: id, filters: { since, until, stream, logType, logTypes, search, limit, offset } }, 'Getting docker logs');
 
       // Verify container exists
       if (!verifyContainerAccess(id)) {
@@ -129,6 +146,8 @@ router.get(
         offset,
         since,
         stream,
+        logType,
+        logTypes,
       });
 
       // Apply search filter if provided (in-memory filtering)

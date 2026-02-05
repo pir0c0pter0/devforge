@@ -8,9 +8,19 @@
 export type DockerLogStream = 'stdout' | 'stderr'
 
 /**
+ * Log type classification
+ */
+export type DockerLogType = 'build' | 'runtime' | 'error' | 'warning' | 'info'
+
+/**
  * Time range presets for UI filtering
  */
 export type DockerLogTimeRange = '1h' | '6h' | '12h' | '24h' | 'all'
+
+/**
+ * Log tab filter type (for UI sub-tabs)
+ */
+export type DockerLogTabType = 'all' | 'build' | 'runtime' | 'errors'
 
 /**
  * Single log entry from a Docker container
@@ -22,11 +32,40 @@ export interface DockerLogEntry {
   readonly containerId: string
   /** Stream type (stdout or stderr) */
   readonly stream: DockerLogStream
+  /** Log type classification */
+  readonly logType: DockerLogType
   /** Log content */
   readonly content: string
   /** Timestamp when log was recorded */
   readonly recordedAt: Date | string
 }
+
+/**
+ * Collapsed log group for smart collapse feature
+ */
+export interface CollapsedLogGroup {
+  /** Unique ID for the group */
+  readonly id: string
+  /** Log type of the group */
+  readonly logType: DockerLogType
+  /** Pattern that represents this group */
+  readonly pattern: string
+  /** Number of logs in the group */
+  readonly count: number
+  /** First log in the group */
+  readonly firstLog: DockerLogEntry
+  /** Last log in the group */
+  readonly lastLog: DockerLogEntry
+  /** Whether the group is currently collapsed */
+  collapsed: boolean
+}
+
+/**
+ * Display item for log list (either single log or collapsed group)
+ */
+export type LogDisplayItem =
+  | { readonly type: 'single'; readonly log: DockerLogEntry }
+  | { readonly type: 'group'; readonly group: CollapsedLogGroup }
 
 /**
  * Filter for querying Docker logs
@@ -36,6 +75,10 @@ export interface DockerLogFilter {
   readonly containerId?: string
   /** Filter by stream type */
   readonly stream?: DockerLogStream
+  /** Filter by single log type */
+  readonly logType?: DockerLogType
+  /** Filter by multiple log types (comma-separated in API) */
+  readonly logTypes?: readonly DockerLogType[]
   /** Filter logs after this timestamp (ISO string or Date) */
   readonly since?: Date | string
   /** Filter logs before this timestamp (ISO string or Date) */
@@ -70,6 +113,14 @@ export interface DockerLogStats {
   readonly stdoutCount: number
   /** Count of stderr entries */
   readonly stderrCount: number
+  /** Count by log type */
+  readonly byType: {
+    readonly build: number
+    readonly runtime: number
+    readonly error: number
+    readonly warning: number
+    readonly info: number
+  }
   /** Timestamp of oldest log entry */
   readonly oldestLog: Date | string | null
   /** Timestamp of newest log entry */
