@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { apiClient } from '@/lib/api-client'
 import { useMetrics } from '@/hooks/use-metrics'
 import { useContainerStore } from '@/stores/container.store'
+import { useClaudeChatStore, getProcessingState, getHasNotification } from '@/stores/claude-chat.store'
 import { useI18n } from '@/lib/i18n'
 import { MetricsChart } from '@/components/metrics-chart'
 import { InstructionQueue } from '@/components/instruction-queue'
@@ -136,6 +137,32 @@ export default function ContainerDetailPage() {
   const [activeTab, setActiveTab] = useState<TabType>(initialTab)
   const [vscodeUrl, setVscodeUrl] = useState<string | null>(null)
   const { updateContainer, containers, addContainer } = useContainerStore()
+
+  // Claude processing state for notification badge
+  const claudeProcessingState = useClaudeChatStore((state) => getProcessingState(state, containerId))
+  const hasClaudeNotification = useClaudeChatStore((state) => getHasNotification(state, containerId))
+  const setHasNotification = useClaudeChatStore((state) => state.setHasNotification)
+  const prevIsProcessingRef = useRef(claudeProcessingState.isProcessing)
+
+  // Track when Claude finishes processing while on another tab
+  useEffect(() => {
+    const wasProcessing = prevIsProcessingRef.current
+    const isProcessing = claudeProcessingState.isProcessing
+
+    // If just finished processing and we're not on the Claude tab, show notification
+    if (wasProcessing && !isProcessing && activeTab !== 'claudeCode') {
+      setHasNotification(containerId, true)
+    }
+
+    prevIsProcessingRef.current = isProcessing
+  }, [claudeProcessingState.isProcessing, activeTab, containerId, setHasNotification])
+
+  // Clear notification when switching to Claude tab
+  useEffect(() => {
+    if (activeTab === 'claudeCode' && hasClaudeNotification) {
+      setHasNotification(containerId, false)
+    }
+  }, [activeTab, hasClaudeNotification, containerId, setHasNotification])
 
   // Resource limits editor state
   const [isEditingLimits, setIsEditingLimits] = useState(false)
@@ -508,7 +535,7 @@ export default function ContainerDetailPage() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={clsx(
-                'flex items-center gap-2 py-4 px-1 border-b-2 font-medium text-sm transition-colors',
+                'relative flex items-center gap-2 py-4 px-1 border-b-2 font-medium text-sm transition-colors',
                 activeTab === tab.id
                   ? 'border-terminal-green text-terminal-green'
                   : 'border-transparent text-terminal-textMuted hover:text-terminal-text hover:border-terminal-border'
@@ -516,6 +543,10 @@ export default function ContainerDetailPage() {
             >
               {tab.icon}
               {getTabName(tab.id)}
+              {/* Notification badge for Claude Code tab */}
+              {tab.id === 'claudeCode' && hasClaudeNotification && (
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-terminal-green rounded-full animate-pulse" />
+              )}
             </button>
           ))}
         </nav>
@@ -748,22 +779,20 @@ export default function ContainerDetailPage() {
         )}
       </div>
 
-      {/* Claude Code Tab - Only mount when tab is active to prevent duplicate WebSocket connections */}
-      {activeTab === 'claudeCode' && (
-        <div className="card overflow-hidden" style={{ height: 'calc(100vh - 340px)', minHeight: '400px' }}>
-          {container.status === 'running' ? (
-            <ClaudeChat containerId={container.id} />
-          ) : (
-            <div className="p-6 text-center">
-              <svg className="mx-auto h-12 w-12 text-terminal-textMuted mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-              <h3 className="text-lg font-semibold text-terminal-text mb-2">{t.claudeChat.title} {t.containerDetail.terminalUnavailable.toLowerCase()}</h3>
-              <p className="text-sm text-terminal-textMuted">{t.containerDetail.startContainerForTerminal}</p>
-            </div>
-          )}
-        </div>
-      )}
+      {/* Claude Code Tab - Uses CSS hidden to preserve state across tab switches (like Terminal/IDE) */}
+      <div className={clsx('card overflow-hidden', activeTab !== 'claudeCode' && 'hidden')} style={{ height: 'calc(100vh - 340px)', minHeight: '400px' }}>
+        {container.status === 'running' ? (
+          <ClaudeChat containerId={container.id} />
+        ) : (
+          <div className="p-6 text-center">
+            <svg className="mx-auto h-12 w-12 text-terminal-textMuted mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+            <h3 className="text-lg font-semibold text-terminal-text mb-2">{t.claudeChat.title} {t.containerDetail.terminalUnavailable.toLowerCase()}</h3>
+            <p className="text-sm text-terminal-textMuted">{t.containerDetail.startContainerForTerminal}</p>
+          </div>
+        )}
+      </div>
 
       {activeTab === 'settings' && (
         <div className="space-y-6">

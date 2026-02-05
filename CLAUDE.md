@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções Críticas
 
-## Versão Atual: 0.1.31-alpha
+## Versão Atual: 0.1.33-alpha
 
 ## Links
 
@@ -128,6 +128,18 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.33-alpha
+- Feat: Bolinha de notificação na aba Claude Code quando termina processamento em background
+- Refactor: ProcessingState movido para Zustand store (persiste entre tab switches)
+- Refactor: Notification state gerenciado globalmente via hasNotificationByContainer
+- UX: Bolinha verde pulsante aparece quando Claude termina enquanto em outra aba
+- UX: Notificação limpa automaticamente ao voltar para aba Claude Code
+
+### v0.1.32-alpha
+- Fix: Claude Code tab agora persiste estado "thinking" ao trocar de aba
+- Fix: Alterado de conditional render para CSS hidden pattern (igual Terminal/IDE)
+- Perf: ClaudeChat permanece montado, preservando WebSocket e estado de processamento
 
 ### v0.1.31-alpha
 - Feat: Opções de Embedded Development na criação de containers

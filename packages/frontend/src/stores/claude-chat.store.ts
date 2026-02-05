@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { ClaudeMessage, DaemonState } from '@/hooks/use-claude-daemon'
+import type { ClaudeMessage, DaemonState, ProcessingState } from '@/hooks/use-claude-daemon'
 
 interface ClaudeChatState {
   // Messages per container (keyed by containerId)
@@ -8,6 +8,10 @@ interface ClaudeChatState {
   daemonStatusByContainer: Record<string, DaemonState | null>
   // Message ID counter per container
   messageIdCounterByContainer: Record<string, number>
+  // Processing state per container (moved from useState in useClaudeDaemon for persistence across tab switches)
+  processingStateByContainer: Record<string, ProcessingState>
+  // Notification badge per container (shows when Claude completes while on another tab)
+  hasNotificationByContainer: Record<string, boolean>
 
   // Actions
   addMessage: (containerId: string, message: ClaudeMessage) => void
@@ -15,12 +19,21 @@ interface ClaudeChatState {
   clearMessages: (containerId: string) => void
   setDaemonStatus: (containerId: string, status: DaemonState | null) => void
   getNextMessageId: (containerId: string) => string
+  setProcessingState: (containerId: string, state: ProcessingState) => void
+  setHasNotification: (containerId: string, hasNotification: boolean) => void
+}
+
+const DEFAULT_PROCESSING_STATE: ProcessingState = {
+  isProcessing: false,
+  stage: 'idle',
 }
 
 export const useClaudeChatStore = create<ClaudeChatState>((set, get) => ({
   messagesByContainer: {},
   daemonStatusByContainer: {},
   messageIdCounterByContainer: {},
+  processingStateByContainer: {},
+  hasNotificationByContainer: {},
 
   addMessage: (containerId, message) =>
     set((state) => ({
@@ -75,4 +88,27 @@ export const useClaudeChatStore = create<ClaudeChatState>((set, get) => ({
 
     return `msg-${containerId}-${Date.now()}-${nextCounter}`
   },
+
+  setProcessingState: (containerId, processingState) =>
+    set((state) => ({
+      processingStateByContainer: {
+        ...state.processingStateByContainer,
+        [containerId]: processingState,
+      },
+    })),
+
+  setHasNotification: (containerId, hasNotification) =>
+    set((state) => ({
+      hasNotificationByContainer: {
+        ...state.hasNotificationByContainer,
+        [containerId]: hasNotification,
+      },
+    })),
 }))
+
+// Selector helpers
+export const getProcessingState = (state: ClaudeChatState, containerId: string): ProcessingState =>
+  state.processingStateByContainer[containerId] || DEFAULT_PROCESSING_STATE
+
+export const getHasNotification = (state: ClaudeChatState, containerId: string): boolean =>
+  state.hasNotificationByContainer[containerId] || false

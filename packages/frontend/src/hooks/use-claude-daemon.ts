@@ -334,25 +334,37 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
 
   const [isConnected, setIsConnected] = useState(false)
 
-  // Processing state from backend (fix #9 - single source of truth)
-  const [processingState, setProcessingState] = useState<ProcessingState>({
-    isProcessing: false,
-    stage: 'idle',
-  })
-
-  // Derive isLoading from processingState (fix #9)
-  const isLoading = processingState.isProcessing
-
-  // Use Zustand store for state management
+  // Use Zustand store for state management (processingState moved here for persistence across tab switches)
   const {
     messagesByContainer,
     daemonStatusByContainer,
+    processingStateByContainer,
     addMessage,
     setMessages,
     clearMessages: storeClearMessages,
     setDaemonStatus,
     getNextMessageId,
+    setProcessingState: storeSetProcessingState,
   } = useClaudeChatStore()
+
+  // Get processing state from store (persists across tab switches)
+  const processingState = processingStateByContainer[containerId] || {
+    isProcessing: false,
+    stage: 'idle' as ProcessingStage,
+  }
+
+  // Wrapper to update processing state in store
+  const setProcessingState = useCallback((state: ProcessingState | ((prev: ProcessingState) => ProcessingState)) => {
+    if (typeof state === 'function') {
+      const currentState = processingStateByContainer[containerId] || { isProcessing: false, stage: 'idle' as ProcessingStage }
+      storeSetProcessingState(containerId, state(currentState))
+    } else {
+      storeSetProcessingState(containerId, state)
+    }
+  }, [containerId, processingStateByContainer, storeSetProcessingState])
+
+  // Derive isLoading from processingState (fix #9)
+  const isLoading = processingState.isProcessing
 
   // Get messages and daemon status for this container from store
   const messages = messagesByContainer[containerId] || []
@@ -775,7 +787,7 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
     }, PROCESSING_SAFETY_TIMEOUT)
 
     return () => clearTimeout(timeoutId)
-  }, [processingState.isProcessing])
+  }, [processingState.isProcessing, setProcessingState])
 
   return {
     isConnected,
