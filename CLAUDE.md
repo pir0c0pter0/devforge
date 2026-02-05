@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções Críticas
 
-## Versão Atual: 0.1.21-alpha
+## Versão Atual: 0.1.22-alpha
 
 ## Links
 
@@ -128,6 +128,13 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.22-alpha
+- Feat: VS Code abre com tema escuro por padrão (configurado na imagem Docker)
+- Feat: Detecção automática de linguagem do projeto (Node.js, TypeScript, Rust, Go, Python, etc.)
+- Feat: Configuração automática de VS Code baseada no projeto clonado
+- Feat: Extensões recomendadas criadas em .vscode/extensions.json
+- Feat: Settings de formatação e linting configurados por linguagem
 
 ### v0.1.21-alpha
 - Fix: Adicionado ExposedPorts no ContainerCreateOptions (Docker API best practice)

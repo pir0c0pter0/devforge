@@ -1747,9 +1747,209 @@ export class ContainerService {
       );
 
       logger.info({ dockerId }, 'Repository cloned successfully');
+
+      // Configure VS Code settings based on detected project type
+      await this.configureVSCodeForProject(dockerId);
     } catch (error) {
       logger.error({ error, dockerId, repoUrl }, 'Failed to clone repository');
       throw new Error(`Failed to clone repository: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Configure VS Code settings based on detected project type
+   * Detects: Node.js, TypeScript, Python, Rust, Go, etc.
+   */
+  private async configureVSCodeForProject(dockerId: string): Promise<void> {
+    try {
+      logger.info({ dockerId }, 'Configuring VS Code for project');
+
+      // Detect project type by checking for specific files
+      const fileChecks = await dockerService.executeCommand(
+        dockerId,
+        ['sh', '-c', `
+          echo "PACKAGE_JSON=$([ -f /workspace/package.json ] && echo 1 || echo 0)"
+          echo "TSCONFIG=$([ -f /workspace/tsconfig.json ] && echo 1 || echo 0)"
+          echo "CARGO_TOML=$([ -f /workspace/Cargo.toml ] && echo 1 || echo 0)"
+          echo "GO_MOD=$([ -f /workspace/go.mod ] && echo 1 || echo 0)"
+          echo "PYPROJECT=$([ -f /workspace/pyproject.toml ] && echo 1 || echo 0)"
+          echo "REQUIREMENTS=$([ -f /workspace/requirements.txt ] && echo 1 || echo 0)"
+          echo "COMPOSER=$([ -f /workspace/composer.json ] && echo 1 || echo 0)"
+          echo "GEMFILE=$([ -f /workspace/Gemfile ] && echo 1 || echo 0)"
+          echo "POM_XML=$([ -f /workspace/pom.xml ] && echo 1 || echo 0)"
+          echo "BUILD_GRADLE=$([ -f /workspace/build.gradle ] && echo 1 || echo 0)"
+        `],
+        { user: 'developer', workingDir: '/workspace' }
+      );
+
+      const files: Record<string, boolean> = {};
+      for (const line of fileChecks.stdout.split('\n')) {
+        const [key, value] = line.split('=');
+        if (key && value) {
+          files[key.trim()] = value.trim() === '1';
+        }
+      }
+
+      // Build settings based on detected project type
+      const additionalSettings: Record<string, unknown> = {};
+      const recommendedExtensions: string[] = [];
+
+      // TypeScript/Node.js project
+      if (files['TSCONFIG'] || files['PACKAGE_JSON']) {
+        additionalSettings['editor.defaultFormatter'] = 'esbenp.prettier-vscode';
+        additionalSettings['editor.codeActionsOnSave'] = {
+          'source.fixAll.eslint': 'explicit',
+          'source.organizeImports': 'explicit'
+        };
+        additionalSettings['typescript.updateImportsOnFileMove.enabled'] = 'always';
+        additionalSettings['javascript.updateImportsOnFileMove.enabled'] = 'always';
+        recommendedExtensions.push(
+          'esbenp.prettier-vscode',
+          'dbaeumer.vscode-eslint',
+          'bradlc.vscode-tailwindcss'
+        );
+
+        // Check for specific frameworks
+        const packageJsonCheck = await dockerService.executeCommand(
+          dockerId,
+          ['sh', '-c', 'cat /workspace/package.json 2>/dev/null || echo "{}"'],
+          { user: 'developer', workingDir: '/workspace' }
+        );
+        try {
+          const packageJson = JSON.parse(packageJsonCheck.stdout);
+          const deps = { ...packageJson.dependencies, ...packageJson.devDependencies };
+
+          if (deps['next']) {
+            recommendedExtensions.push('prisma.prisma');
+          }
+          if (deps['react'] || deps['react-dom']) {
+            additionalSettings['emmet.includeLanguages'] = { 'javascript': 'javascriptreact', 'typescript': 'typescriptreact' };
+          }
+        } catch {
+          // Ignore JSON parse errors
+        }
+      }
+
+      // Rust project
+      if (files['CARGO_TOML']) {
+        additionalSettings['editor.defaultFormatter'] = 'rust-lang.rust-analyzer';
+        additionalSettings['rust-analyzer.checkOnSave.command'] = 'clippy';
+        recommendedExtensions.push(
+          'rust-lang.rust-analyzer',
+          'tamasfe.even-better-toml',
+          'vadimcn.vscode-lldb'
+        );
+      }
+
+      // Go project
+      if (files['GO_MOD']) {
+        additionalSettings['editor.defaultFormatter'] = 'golang.go';
+        additionalSettings['go.useLanguageServer'] = true;
+        additionalSettings['go.lintOnSave'] = 'package';
+        additionalSettings['[go]'] = {
+          'editor.formatOnSave': true,
+          'editor.codeActionsOnSave': {
+            'source.organizeImports': 'explicit'
+          }
+        };
+        recommendedExtensions.push('golang.go');
+      }
+
+      // Python project
+      if (files['PYPROJECT'] || files['REQUIREMENTS']) {
+        additionalSettings['python.analysis.typeCheckingMode'] = 'basic';
+        additionalSettings['python.formatting.provider'] = 'black';
+        additionalSettings['[python]'] = {
+          'editor.formatOnSave': true,
+          'editor.defaultFormatter': 'ms-python.black-formatter'
+        };
+        recommendedExtensions.push(
+          'ms-python.python',
+          'ms-python.vscode-pylance',
+          'ms-python.black-formatter'
+        );
+      }
+
+      // PHP project
+      if (files['COMPOSER']) {
+        recommendedExtensions.push(
+          'bmewburn.vscode-intelephense-client',
+          'xdebug.php-debug'
+        );
+      }
+
+      // Ruby project
+      if (files['GEMFILE']) {
+        recommendedExtensions.push('shopify.ruby-lsp');
+      }
+
+      // Java project
+      if (files['POM_XML'] || files['BUILD_GRADLE']) {
+        recommendedExtensions.push(
+          'vscjava.vscode-java-pack',
+          'redhat.java'
+        );
+      }
+
+      // If we have additional settings, merge them
+      if (Object.keys(additionalSettings).length > 0) {
+        const settingsPath = '/home/developer/.local/share/code-server/User/settings.json';
+
+        // Read existing settings
+        const existingSettingsResult = await dockerService.executeCommand(
+          dockerId,
+          ['cat', settingsPath],
+          { user: 'developer' }
+        );
+
+        let existingSettings: Record<string, unknown> = {};
+        try {
+          existingSettings = JSON.parse(existingSettingsResult.stdout);
+        } catch {
+          // Use empty object if parse fails
+        }
+
+        // Merge settings (additional settings override existing)
+        const mergedSettings = { ...existingSettings, ...additionalSettings };
+
+        // Write merged settings
+        await dockerService.executeCommand(
+          dockerId,
+          ['sh', '-c', `cat > ${settingsPath} << 'SETTINGS_EOF'
+${JSON.stringify(mergedSettings, null, 2)}
+SETTINGS_EOF`],
+          { user: 'developer' }
+        );
+
+        logger.info({ dockerId, detectedTypes: Object.keys(files).filter(k => files[k]) },
+          'VS Code settings configured for project');
+      }
+
+      // Create .vscode/extensions.json with recommended extensions
+      if (recommendedExtensions.length > 0) {
+        await dockerService.executeCommand(
+          dockerId,
+          ['mkdir', '-p', '/workspace/.vscode'],
+          { user: 'developer', workingDir: '/workspace' }
+        );
+
+        const extensionsJson = {
+          recommendations: recommendedExtensions
+        };
+
+        await dockerService.executeCommand(
+          dockerId,
+          ['sh', '-c', `cat > /workspace/.vscode/extensions.json << 'EXT_EOF'
+${JSON.stringify(extensionsJson, null, 2)}
+EXT_EOF`],
+          { user: 'developer', workingDir: '/workspace' }
+        );
+
+        logger.info({ dockerId, extensions: recommendedExtensions },
+          'VS Code extension recommendations created');
+      }
+    } catch (error) {
+      logger.warn({ error, dockerId }, 'Failed to configure VS Code for project, continuing anyway');
     }
   }
 
