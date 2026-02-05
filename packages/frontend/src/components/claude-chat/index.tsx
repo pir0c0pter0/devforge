@@ -153,10 +153,27 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
     // loadMessagesFromSession(data.messages)
   }, [])
 
-  const handleNewSession = useCallback(() => {
-    setCurrentSessionId(undefined)
+  const handleNewSession = useCallback(async () => {
+    // Create explicit new session in backend (marks end of current session)
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/claude-daemon/${containerId}/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success && data.data?.id) {
+          setCurrentSessionId(data.data.id)
+        }
+      }
+    } catch (error) {
+      console.error('[ClaudeChat] Failed to create new session:', error)
+    }
+
+    // Clear messages from UI
     clearMessages()
-  }, [clearMessages])
+  }, [containerId, clearMessages])
 
   const isDaemonRunning = daemonStatus?.status === 'running'
   const isDaemonTransitioning = daemonStatus?.status === 'starting' || daemonStatus?.status === 'stopping'
