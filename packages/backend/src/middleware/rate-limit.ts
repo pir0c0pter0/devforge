@@ -7,23 +7,23 @@ import { logger } from '../utils/logger';
  */
 const STANDARD_LIMIT = process.env['RATE_LIMIT_STANDARD']
   ? parseInt(process.env['RATE_LIMIT_STANDARD'], 10)
-  : 100;
+  : 1000; // Local system: high limit
 
 const STANDARD_WINDOW_MS = process.env['RATE_LIMIT_STANDARD_WINDOW_MS']
   ? parseInt(process.env['RATE_LIMIT_STANDARD_WINDOW_MS'], 10)
-  : 15 * 60 * 1000; // 15 minutes
+  : 60 * 1000; // 1 minute window
 
 const STRICT_LIMIT = process.env['RATE_LIMIT_STRICT']
   ? parseInt(process.env['RATE_LIMIT_STRICT'], 10)
-  : 20;
+  : 500; // Local system: high limit for writes
 
 const STRICT_WINDOW_MS = process.env['RATE_LIMIT_STRICT_WINDOW_MS']
   ? parseInt(process.env['RATE_LIMIT_STRICT_WINDOW_MS'], 10)
-  : 15 * 60 * 1000; // 15 minutes
+  : 60 * 1000; // 1 minute window
 
 const AUTH_LIMIT = process.env['RATE_LIMIT_AUTH']
   ? parseInt(process.env['RATE_LIMIT_AUTH'], 10)
-  : 5;
+  : 50; // Local system: higher auth limit
 
 const AUTH_WINDOW_MS = process.env['RATE_LIMIT_AUTH_WINDOW_MS']
   ? parseInt(process.env['RATE_LIMIT_AUTH_WINDOW_MS'], 10)
