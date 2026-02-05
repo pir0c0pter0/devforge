@@ -631,6 +631,7 @@ export default function ContainerDetailPage() {
           <IDEView
             vscodeUrl={vscodeUrl}
             containerStatus={container.status}
+            containerId={containerId}
           />
         ) : (
           <div className="h-full flex items-center justify-center">

@@ -223,3 +223,13 @@ export type {
   UpdateClaudeSessionRequest,
   ClaudeSessionStats,
 } from './types/claude-sessions.types'
+
+// Export all VS Code types
+export type {
+  VSCodeStatus,
+  VSCodeHealthResponse,
+  VSCodeHealthCheckOptions,
+  VSCodeBootstrapEvent,
+  VSCodeBootstrapStage,
+  VSCodeCredentials,
+} from './types/vscode.types'

@@ -28,6 +28,8 @@ import { getQueueStatus, getActiveQueues } from './claude-queue.service';
 import { sanitizeRepositoryUrl } from '../validators/repository.validator';
 import * as path from 'path';
 import * as os from 'os';
+import { vscodeHealthService } from './vscode-health.service';
+import { VSCodeConfig, TaskProgressRanges } from '../config/vscode.config';
 
 /**
  * Convert repository entity to service model
@@ -797,38 +799,18 @@ export class ContainerService {
 
   /**
    * Wait for VS Code (code-server) to be ready
-   * Polls the code-server health endpoint until it responds
+   * Delegates to vscodeHealthService for centralized health checking
    */
-  private async waitForVSCodeReady(dockerId: string, timeoutMs: number = 30000): Promise<boolean> {
-    const startTime = Date.now();
-    const pollInterval = 1000; // 1 second
-
-    logger.debug({ dockerId, timeoutMs }, 'Waiting for VS Code (code-server) to be ready...');
-
-    while (Date.now() - startTime < timeoutMs) {
-      try {
-        // Use curl to check if code-server is responding on port 8080
-        const result = await dockerService.executeCommand(
-          dockerId,
-          ['curl', '-sf', '-o', '/dev/null', '-w', '%{http_code}', 'http://localhost:8080/healthz'],
-          { user: 'developer' }
-        );
-
-        // code-server returns 200 when healthy
-        if (result.exitCode === 0 && (result.stdout.includes('200') || result.stdout.includes('302'))) {
-          logger.info({ dockerId, elapsed: Date.now() - startTime }, 'VS Code (code-server) is ready');
-          return true;
-        }
-      } catch {
-        // Ignore errors during polling
-      }
-
-      // Wait before next poll
-      await new Promise(resolve => setTimeout(resolve, pollInterval));
-    }
-
-    logger.warn({ dockerId, timeoutMs }, 'VS Code (code-server) readiness timeout');
-    return false;
+  private async waitForVSCodeReady(
+    dockerId: string,
+    containerId: string,
+    timeoutMs: number = VSCodeConfig.STARTUP_TIMEOUT_MS
+  ): Promise<boolean> {
+    const status = await vscodeHealthService.waitUntilReady(dockerId, containerId, {
+      timeoutMs,
+      pollIntervalMs: VSCodeConfig.POLL_INTERVAL_MS
+    });
+    return status.ready;
   }
 
   /**
@@ -855,7 +837,7 @@ export class ContainerService {
       await dockerService.startContainer(container.dockerId);
 
       // Wait for VS Code to be ready (with a shorter timeout for non-task start)
-      await this.waitForVSCodeReady(container.dockerId, 20000);
+      await this.waitForVSCodeReady(container.dockerId, container.id, VSCodeConfig.RESTART_TIMEOUT_MS);
 
       // Update status in database
       const updatedEntity = containerRepository.updateStatus(containerId, 'running');
@@ -923,42 +905,36 @@ export class ContainerService {
 
       // Step 4: Wait for VS Code (code-server) to be ready
       taskService.setProgress(taskId, 30, 'Container Docker iniciado!');
-      taskService.setProgress(taskId, 35, 'Aguardando VS Code inicializar...');
 
-      // Poll for VS Code readiness with progress updates
-      const vscodeTimeout = 30000; // 30 seconds
-      const vscodeStartTime = Date.now();
-      let vscodeReady = false;
+      // VS Code health check via service
+      const vscodeStartProgress = TaskProgressRanges.VSCODE_STARTUP.START;
+      const vscodeEndProgress = TaskProgressRanges.VSCODE_STARTUP.END;
 
-      while (Date.now() - vscodeStartTime < vscodeTimeout) {
-        try {
-          const result = await dockerService.executeCommand(
-            container.dockerId,
-            ['curl', '-sf', '-o', '/dev/null', '-w', '%{http_code}', 'http://localhost:8080/healthz'],
-            { user: 'developer' }
-          );
+      taskService.setProgress(taskId, vscodeStartProgress, 'Aguardando VS Code inicializar...');
 
-          if (result.exitCode === 0 && (result.stdout.includes('200') || result.stdout.includes('302'))) {
-            vscodeReady = true;
-            break;
+      const vscodeStatus = await vscodeHealthService.waitUntilReady(
+        container.dockerId,
+        containerId,
+        {
+          timeoutMs: VSCodeConfig.STARTUP_TIMEOUT_MS,
+          onProgress: (elapsed, total) => {
+            const progressRange = vscodeEndProgress - vscodeStartProgress;
+            const currentProgress = vscodeStartProgress + Math.floor((elapsed / total) * progressRange);
+
+            let message = 'Aguardando VS Code...';
+            if (elapsed > 15000) message = 'VS Code ainda inicializando...';
+            if (elapsed > 25000) message = 'Quase pronto...';
+
+            taskService.setProgress(taskId, currentProgress, message);
           }
-        } catch {
-          // Ignore errors during polling
         }
+      );
 
-        // Update progress based on elapsed time (35% to 60%)
-        const elapsed = Date.now() - vscodeStartTime;
-        const progress = 35 + Math.min(25, Math.floor((elapsed / vscodeTimeout) * 25));
-        taskService.setProgress(taskId, progress, 'Inicializando VS Code...');
-
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-
-      if (vscodeReady) {
-        taskService.setProgress(taskId, 60, 'VS Code pronto!');
+      if (!vscodeStatus.ready) {
+        logger.warn({ containerId, taskId }, 'VS Code readiness timeout, continuing anyway');
+        taskService.setProgress(taskId, vscodeEndProgress, 'VS Code pode estar instável...');
       } else {
-        taskService.setProgress(taskId, 60, 'VS Code ainda inicializando (pode demorar)...');
-        logger.warn({ containerId, taskId }, 'VS Code readiness timeout during task, continuing anyway');
+        taskService.setProgress(taskId, vscodeEndProgress, 'VS Code pronto!');
       }
 
       // Step 5: Auto-start Claude environment

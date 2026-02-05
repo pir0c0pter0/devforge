@@ -56,11 +56,22 @@ main() {
         mkdir -p /home/developer/.claude/{agents,skills,rules,cache}
     fi
 
+    # Generate random VS Code password if not set
+    if [ -z "$PASSWORD" ]; then
+        export PASSWORD=$(openssl rand -base64 16 | tr -d '/+=' | head -c 16)
+        # Remove old credentials file if exists
+        rm -f /workspace/.vscode-credentials
+        # Save to file for reference (password NOT logged for security)
+        echo "VSCODE_PASSWORD=$PASSWORD" > /workspace/.vscode-credentials
+        chmod 600 /workspace/.vscode-credentials
+        log_info "VS Code password generated and saved to /workspace/.vscode-credentials"
+    fi
+
     # Start code-server in the background with workspace folder
     log_info "Starting VS Code Server on port 8080..."
     code-server \
         --bind-addr 0.0.0.0:8080 \
-        --auth none \
+        --auth password \
         --disable-telemetry \
         /workspace &
     CODE_SERVER_PID=$!

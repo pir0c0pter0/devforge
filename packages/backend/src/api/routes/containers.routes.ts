@@ -9,6 +9,7 @@ import { apiLogger as logger } from '../../utils/logger';
 import { strictRateLimiter } from '../../middleware/rate-limit';
 import { diskMetricsService } from '../../services/disk-metrics.service';
 import { usageService } from '../../services/usage.service';
+import { vscodeHealthService } from '../../services/vscode-health.service';
 
 const router: Router = Router();
 
@@ -820,6 +821,64 @@ router.post(
           : 500;
 
       res.status(statusCode).json(errorResponse(errorMessage, statusCode));
+    }
+  }
+);
+
+/**
+ * GET /api/containers/:id/vscode-health
+ * Verifica se o VS Code (code-server) está pronto no container
+ */
+router.get(
+  '/:id/vscode-health',
+  validateParams(ContainerIdParamsSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const id = req.params['id'] as string;
+      const container = await containerService.getById(id);
+
+      if (!container) {
+        res.status(404).json(errorResponse('Container not found', 404));
+        return;
+      }
+
+      if (container.status !== 'running') {
+        res.json(successResponse({
+          ready: false,
+          containerId: id,
+          reason: 'container_not_running',
+          containerStatus: container.status
+        }));
+        return;
+      }
+
+      // Verificar cache primeiro
+      const cachedStatus = vscodeHealthService.getStatus(id);
+      if (cachedStatus && cachedStatus.ready &&
+          (Date.now() - cachedStatus.lastCheck.getTime()) < 10000) {
+        res.json(successResponse({
+          ready: true,
+          containerId: id,
+          cached: true,
+          lastCheck: cachedStatus.lastCheck
+        }));
+        return;
+      }
+
+      // Health check real
+      const isReady = await vscodeHealthService.checkHealth(container.dockerId!);
+
+      res.json(successResponse({
+        ready: isReady,
+        containerId: id,
+        dockerId: container.dockerId,
+        cached: false,
+        timestamp: new Date().toISOString()
+      }));
+
+    } catch (error) {
+      logger.error({ error, containerId: req.params['id'] }, 'VS Code health check failed');
+      res.status(500).json(errorResponse('Health check failed', 500));
     }
   }
 );

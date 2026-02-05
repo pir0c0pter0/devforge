@@ -1,53 +1,102 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { AnimatedDots } from '@/components/ui/animated-dots'
 
 interface IDEViewProps {
   vscodeUrl: string
   containerStatus: string
+  containerId: string
 }
 
-const MIN_LOADING_TIME = 30000 // 30 seconds - VS Code needs full bootstrap time
+const MIN_LOADING_TIME = 3000 // 3 seconds - avoid flash, reduced from 30s
+const MAX_LOADING_TIME = 60000 // 60 seconds timeout
+const POLL_INTERVAL = 1000 // 1 second between health checks
 
-// Progressive loading messages
-const LOADING_PHASES = [
-  { time: 0, text: 'Connecting to VS Code' },
-  { time: 5000, text: 'Loading editor' },
-  { time: 12000, text: 'Initializing extensions' },
-  { time: 20000, text: 'Preparing workspace' },
-  { time: 27000, text: 'Almost ready' },
-]
+// Progressive loading messages based on elapsed time
+const getLoadingText = (elapsed: number): string => {
+  if (elapsed < 5000) return 'Connecting to VS Code'
+  if (elapsed < 15000) return 'Loading editor'
+  if (elapsed < 30000) return 'Initializing extensions'
+  if (elapsed < 45000) return 'Almost ready'
+  return 'Still loading (this may take a moment)'
+}
 
-export function IDEView({ vscodeUrl, containerStatus }: IDEViewProps) {
+export function IDEView({ vscodeUrl, containerStatus, containerId }: IDEViewProps) {
   const [isIframeLoading, setIsIframeLoading] = useState(true)
   const [iframeLoaded, setIframeLoaded] = useState(false)
   const [minTimeElapsed, setMinTimeElapsed] = useState(false)
-  const [loadingText, setLoadingText] = useState(LOADING_PHASES[0].text)
+  const [isVSCodeReady, setIsVSCodeReady] = useState(false)
+  const [loadingText, setLoadingText] = useState('Connecting to VS Code')
+  const pollingRef = useRef<boolean>(true)
 
-  // Minimum loading time to ensure VS Code has time to render
+  // Minimum loading time to avoid flash
   useEffect(() => {
     const timer = setTimeout(() => {
       setMinTimeElapsed(true)
     }, MIN_LOADING_TIME)
 
-    // Progressive loading messages
-    const phaseTimers = LOADING_PHASES.slice(1).map(phase =>
-      setTimeout(() => setLoadingText(phase.text), phase.time)
-    )
-
-    return () => {
-      clearTimeout(timer)
-      phaseTimers.forEach(t => clearTimeout(t))
-    }
+    return () => clearTimeout(timer)
   }, [])
 
-  // Hide loading only when both conditions are met
+  // Real health check via API polling
   useEffect(() => {
-    if (iframeLoaded && minTimeElapsed) {
+    if (containerStatus !== 'running' || !containerId) {
+      return
+    }
+
+    pollingRef.current = true
+    const startTime = Date.now()
+    const abortController = new AbortController()
+
+    const checkHealth = async () => {
+      while (pollingRef.current && (Date.now() - startTime) < MAX_LOADING_TIME) {
+        try {
+          const response = await fetch(`/api/containers/${containerId}/vscode-health`, {
+            signal: abortController.signal
+          })
+          const data = await response.json()
+
+          if (data.success && data.data?.ready) {
+            setIsVSCodeReady(true)
+            setLoadingText('VS Code ready!')
+            return
+          }
+        } catch (error) {
+          // Exit on abort, continue polling on other errors
+          if (error instanceof Error && error.name === 'AbortError') {
+            return
+          }
+        }
+
+        // Update loading text based on elapsed time
+        const elapsed = Date.now() - startTime
+        setLoadingText(getLoadingText(elapsed))
+
+        await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL))
+      }
+
+      // Timeout - show anyway
+      if (pollingRef.current) {
+        setIsVSCodeReady(true)
+        setLoadingText('Loading complete')
+      }
+    }
+
+    checkHealth()
+
+    return () => {
+      pollingRef.current = false
+      abortController.abort()
+    }
+  }, [containerStatus, containerId])
+
+  // Hide loading only when all conditions are met
+  useEffect(() => {
+    if (iframeLoaded && minTimeElapsed && isVSCodeReady) {
       setIsIframeLoading(false)
     }
-  }, [iframeLoaded, minTimeElapsed])
+  }, [iframeLoaded, minTimeElapsed, isVSCodeReady])
 
   if (containerStatus !== 'running') {
     return (

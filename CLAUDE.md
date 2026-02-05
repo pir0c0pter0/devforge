@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções Críticas
 
-## Versão Atual: 0.1.34-alpha
+## Versão Atual: 0.1.35-alpha
 
 ## Links
 
@@ -128,6 +128,18 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.35-alpha
+- Feat: VSCodeHealthService extraído para serviço dedicado (elimina código duplicado)
+- Feat: Endpoint GET /api/containers/:id/vscode-health para health check real
+- Feat: Frontend usa health check real em vez de timer fixo de 30s (reduz para 3-15s)
+- Feat: Tipos compartilhados VSCodeHealthResponse, VSCodeBootstrapStage no shared package
+- Feat: Constantes centralizadas em vscode.config.ts (VSCodeConfig, TaskProgressRanges)
+- Security: VS Code agora requer autenticação por senha (auth: password)
+- Security: Senha gerada automaticamente e salva em /workspace/.vscode-credentials
+- Security: Senha NÃO é mais logada em plaintext (apenas path do arquivo)
+- Fix: Memory leak no polling do frontend (AbortController para cancelar fetch)
+- Refactor: container.service.ts usa vscodeHealthService em vez de lógica inline
 
 ### v0.1.34-alpha
 - Fix: VS Code removido da aba Visão Geral (agora só aparece na aba IDE)
