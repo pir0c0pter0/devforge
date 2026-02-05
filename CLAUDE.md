@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções Críticas
 
-## Versão Atual: 0.1.12-alpha
+## Versão Atual: 0.1.13-alpha
 
 ## Links
 
@@ -128,6 +128,12 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.13-alpha
+- Fix: UI mostra tipo do log (info, build, error) em vez de STDOUT/STDERR
+- Fix: Classificador mais inteligente - stdout padrão agora é 'info'
+- Fix: Runtime tab mostra apenas logs 'info' (informativos)
+- Fix: Adicionados ~50 novos padrões de detecção para 'info'
 
 ### v0.1.12-alpha
 - Feat: Docker logs smart collapse (agrupa logs similares consecutivos)

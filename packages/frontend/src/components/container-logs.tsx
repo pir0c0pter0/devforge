@@ -73,7 +73,7 @@ const LOG_TYPE_COLORS: Record<DockerLogType, string> = {
 const TAB_LOG_TYPES: Record<DockerLogTabType, DockerLogType[] | null> = {
   all: null,
   build: ['build'],
-  runtime: ['runtime', 'info'],
+  runtime: ['info'],  // Runtime shows informational logs only
   errors: ['error', 'warning'],
 }
 
@@ -101,13 +101,15 @@ function classifyLogContent(content: string, stream: 'stdout' | 'stderr'): Docke
     return 'build'
   }
 
-  // Info patterns
-  if (/\binfo\b/i.test(content) ||
-      /^\[\d{2}:\d{2}:\d{2}\]/.test(content)) {
-    return 'info'
+  // Runtime patterns (truly generic output)
+  if (/^[\s\d\-:.,]+$/.test(content) ||
+      /^\s*$/.test(content) ||
+      /^[=-]+$/.test(content)) {
+    return 'runtime'
   }
 
-  return 'runtime'
+  // Default for stdout: info (most stdout is informational)
+  return 'info'
 }
 
 // Debounce hook
@@ -137,7 +139,6 @@ interface LogRowProps {
   rows: FlattenedRow[]
   expandedGroups: Set<string>
   onToggleGroup: (groupId: string) => void
-  showTypeBadge: boolean
   t: ReturnType<typeof useI18n>['t']
 }
 
@@ -148,7 +149,6 @@ function LogRow({
   rows,
   expandedGroups,
   onToggleGroup,
-  showTypeBadge,
   t,
 }: {
   index: number
@@ -222,22 +222,12 @@ function LogRow({
         [{formatTime(new Date(log.recordedAt))}]
       </span>
 
-      {/* Type badge (optional) */}
-      {showTypeBadge && (
-        <span className={clsx(
-          'flex-shrink-0 px-1 py-0.5 rounded text-xs mr-2',
-          LOG_TYPE_COLORS[log.logType]
-        )}>
-          {log.logType.slice(0, 4)}
-        </span>
-      )}
-
-      {/* Stream indicator */}
+      {/* Log type badge */}
       <span className={clsx(
-        'flex-shrink-0 mr-2 select-none w-16',
-        log.stream === 'stderr' ? 'text-red-500' : 'text-blue-400'
+        'flex-shrink-0 px-1.5 py-0.5 rounded text-xs mr-2 w-14 text-center',
+        LOG_TYPE_COLORS[log.logType]
       )}>
-        {log.stream === 'stderr' ? 'STDERR' : 'STDOUT'}:
+        {log.logType}
       </span>
 
       {/* Content */}
@@ -843,7 +833,6 @@ export function ContainerLogs({ containerId, className }: ContainerLogsProps) {
                 rows: flattenedRows,
                 expandedGroups,
                 onToggleGroup: handleToggleGroup,
-                showTypeBadge: logTab === 'all',
                 t,
               }}
               onRowsRendered={handleRowsRendered}

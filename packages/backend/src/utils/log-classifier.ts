@@ -140,8 +140,64 @@ const CLASSIFICATION_PATTERNS: readonly ClassificationPattern[] = [
       /\bDEBUG\b/,
       /\bdebug:/,
       /\[DEBUG\]/,
+      /\bLoaded\b/i,
+      /\bInitialized?\b/i,
+      /\bConfigured?\b/i,
+      /\bEnabled\b/i,
+      /\bDisabled\b/i,
+      /\bUsing\b/i,
+      /\bVersion\b/i,
+      /\bv\d+\.\d+/,  // Version numbers like v1.0.0
+      /\bport\s*\d+/i,
+      /\bhttp:\/\//i,
+      /\bhttps:\/\//i,
+      /\bws:\/\//i,
+      /\bwss:\/\//i,
+      /\bPID\s*\d+/i,
+      /\bworker\b/i,
+      /\bprocess\b/i,
+      /\bservice\b/i,
+      /\bmodule\b/i,
+      /\bplugin\b/i,
+      /\broute\b/i,
+      /\bendpoint\b/i,
+      /\bmiddleware\b/i,
+      /\bdatabase\b/i,
+      /\bredis\b/i,
+      /\bmongo\b/i,
+      /\bpostgres\b/i,
+      /\bmysql\b/i,
+      /\bsqlite\b/i,
+      /\bconnection\b/i,
+      /\bsocket\b/i,
+      /\bwebsocket\b/i,
+      /\bauth\b/i,
+      /\btoken\b/i,
+      /\bsession\b/i,
+      /\bcache\b/i,
+      /\bqueue\b/i,
+      /\bjob\b/i,
+      /\btask\b/i,
+      /\bevent\b/i,
+      /\bhandler\b/i,
+      /\bcontroller\b/i,
+      /\brepository\b/i,
+      /^\s*[→>-]\s+/,  // Arrow/bullet prefixes
+      /^\s*\*\s+/,     // Asterisk prefix
+      /^\s*•\s+/,      // Bullet prefix
     ],
   },
+];
+
+/**
+ * Patterns that indicate "runtime" type (truly generic output)
+ * These are checked AFTER info patterns fail
+ */
+const RUNTIME_PATTERNS: readonly RegExp[] = [
+  /^[\s\d\-:.,]+$/, // Just numbers, spaces, punctuation
+  /^\s*$/,          // Empty or whitespace only
+  /^[=-]+$/,        // Separator lines
+  /^\s*\|\s*/,      // Table-like output
 ];
 
 /**
@@ -169,12 +225,20 @@ export function classifyLogLine(
     }
   }
 
-  // Default: stderr without specific pattern -> error, stdout -> runtime
+  // stderr without specific pattern -> error
   if (stream === 'stderr') {
     return 'error';
   }
 
-  return 'runtime';
+  // Check if it's truly generic runtime output
+  for (const pattern of RUNTIME_PATTERNS) {
+    if (pattern.test(content)) {
+      return 'runtime';
+    }
+  }
+
+  // Default for stdout: info (most stdout is informational)
+  return 'info';
 }
 
 /**
