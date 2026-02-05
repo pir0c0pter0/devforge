@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import { History, MessageSquare, Clock, Plus, ChevronDown } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
@@ -150,7 +151,20 @@ export function SessionSelector({
   const [sessions, setSessions] = useState<ChatSession[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [hasMore, setHasMore] = useState(false)
+  const buttonRef = useRef<HTMLButtonElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 })
+
+  // Calculate dropdown position when opening
+  useEffect(() => {
+    if (isOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      setDropdownPosition({
+        top: rect.bottom + 8,
+        left: rect.left,
+      })
+    }
+  }, [isOpen])
 
   // Load sessions from backend
   const loadSessions = useCallback(async () => {
@@ -180,7 +194,11 @@ export function SessionSelector({
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      const target = event.target as Node
+      const isOutsideButton = buttonRef.current && !buttonRef.current.contains(target)
+      const isOutsideDropdown = dropdownRef.current && !dropdownRef.current.contains(target)
+
+      if (isOutsideButton && isOutsideDropdown) {
         setIsOpen(false)
       }
     }
@@ -207,9 +225,10 @@ export function SessionSelector({
     : null
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative">
       {/* Trigger Button */}
       <button
+        ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
         className={clsx(
           'flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors',
@@ -230,13 +249,19 @@ export function SessionSelector({
         />
       </button>
 
-      {/* Dropdown */}
-      {isOpen && (
+      {/* Dropdown - rendered via portal to escape overflow:hidden */}
+      {isOpen && typeof document !== 'undefined' && createPortal(
         <div
+          ref={dropdownRef}
+          style={{
+            position: 'fixed',
+            top: dropdownPosition.top,
+            left: dropdownPosition.left,
+            zIndex: 9999,
+          }}
           className={clsx(
-            'absolute top-full left-0 mt-2 w-80 max-h-96 overflow-y-auto',
-            'bg-terminal-bgLight border border-terminal-border rounded-lg shadow-lg',
-            'z-50'
+            'w-80 max-h-96 overflow-y-auto',
+            'bg-terminal-bgLight border border-terminal-border rounded-lg shadow-xl'
           )}
         >
           {/* New Session Button */}
@@ -319,7 +344,8 @@ export function SessionSelector({
               )}
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
