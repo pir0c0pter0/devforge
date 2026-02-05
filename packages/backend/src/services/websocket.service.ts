@@ -86,7 +86,7 @@ import { claudeDaemonService } from './claude-daemon.service'
 import { containerService } from './container.service'
 import { healthMonitorService } from './health-monitor.service'
 import { claudeLogsService } from './claude-logs.service'
-import { dockerService } from './docker.service'
+import { setupDockerLogsNamespace as setupDockerLogsNamespaceModule } from '../websocket/namespaces'
 import type { ClaudeLogEntry } from '@claude-docker/shared'
 
 /**
@@ -148,7 +148,7 @@ export const initializeWebSocket = (
   setupMetricsNamespace()
   setupQueueNamespace()
   setupLogsNamespace()
-  setupDockerLogsNamespace()
+  setupDockerLogsNamespaceModule(io) // Use modular namespace with persistence
   setupCreationNamespace()
   setupTasksNamespace()
   setupTerminalNamespace()
@@ -366,135 +366,6 @@ const setupLogsNamespace = (): void => {
       cleanupSocketSubscriptions(socket.id)
       cleanupSocketRateLimit(socket.id)
       logger.debug(`[WebSocket] Client disconnected from /logs: ${socket.id}`)
-    })
-  })
-}
-
-/**
- * Map of active Docker log streams (containerId -> cleanup function)
- */
-const dockerLogStreams = new Map<string, () => void>()
-
-/**
- * Map of Docker logs subscriptions (containerId -> Set of socket IDs)
- */
-const dockerLogsSubscriptions = new Map<string, Set<string>>()
-
-/**
- * Add docker logs subscription
- */
-const addDockerLogsSubscription = (containerId: string, socketId: string): void => {
-  if (!dockerLogsSubscriptions.has(containerId)) {
-    dockerLogsSubscriptions.set(containerId, new Set())
-  }
-  dockerLogsSubscriptions.get(containerId)?.add(socketId)
-}
-
-/**
- * Remove docker logs subscription
- */
-const removeDockerLogsSubscription = (containerId: string, socketId: string): void => {
-  const subs = dockerLogsSubscriptions.get(containerId)
-  if (subs) {
-    subs.delete(socketId)
-    if (subs.size === 0) {
-      dockerLogsSubscriptions.delete(containerId)
-    }
-  }
-}
-
-/**
- * Cleanup all docker logs subscriptions for a socket
- */
-const cleanupSocketDockerLogsSubscriptions = (socketId: string): void => {
-  for (const [containerId, sockets] of dockerLogsSubscriptions.entries()) {
-    sockets.delete(socketId)
-    if (sockets.size === 0) {
-      dockerLogsSubscriptions.delete(containerId)
-      // Stop the stream if no more subscribers
-      const cleanup = dockerLogStreams.get(containerId)
-      if (cleanup) {
-        cleanup()
-        dockerLogStreams.delete(containerId)
-        logger.debug(`[WebSocket] Stopped Docker log stream for container ${containerId}`)
-      }
-    }
-  }
-}
-
-/**
- * Setup /docker-logs namespace for native Docker log streaming with timestamps
- */
-const setupDockerLogsNamespace = (): void => {
-  if (!io) return
-
-  const dockerLogsNamespace = io.of('/docker-logs')
-
-  // Apply authentication middleware to namespace
-  applyAuthMiddleware(dockerLogsNamespace)
-
-  dockerLogsNamespace.on('connection', (socket: AuthenticatedSocket) => {
-    logger.debug(`[WebSocket] Client connected to /docker-logs: ${socket.id}`)
-
-    let currentContainerId: string | null = null
-
-    socket.on('subscribe', async ({ containerId }: { containerId: string }) => {
-      // Get container info to find dockerId
-      const container = await containerRepository.findById(containerId)
-      if (!container || !container.dockerId) {
-        socket.emit('error', { message: 'Container não encontrado ou não tem dockerId' })
-        return
-      }
-
-      currentContainerId = containerId
-      socket.join(`docker-logs:${containerId}`)
-      addDockerLogsSubscription(containerId, socket.id)
-      logger.debug(`[WebSocket] Client ${socket.id} subscribed to Docker logs ${containerId}`)
-
-      // Start log stream if this is the first subscriber
-      const subscribers = dockerLogsSubscriptions.get(containerId)
-      if (subscribers && subscribers.size === 1 && !dockerLogStreams.has(containerId)) {
-        const cleanup = dockerService.streamContainerLogs(
-          container.dockerId,
-          (line, stream, timestamp) => {
-            dockerLogsNamespace.to(`docker-logs:${containerId}`).emit('log' as any, {
-              containerId,
-              timestamp,
-              content: line,
-              stream,
-            })
-          },
-          { tail: 100 }
-        )
-        dockerLogStreams.set(containerId, cleanup)
-        logger.debug(`[WebSocket] Started Docker log stream for container ${containerId}`)
-      }
-    })
-
-    socket.on('unsubscribe', ({ containerId }: { containerId: string }) => {
-      socket.leave(`docker-logs:${containerId}`)
-      removeDockerLogsSubscription(containerId, socket.id)
-      if (currentContainerId === containerId) {
-        currentContainerId = null
-      }
-      logger.debug(`[WebSocket] Client ${socket.id} unsubscribed from Docker logs ${containerId}`)
-
-      // Stop stream if no more subscribers
-      const subscribers = dockerLogsSubscriptions.get(containerId)
-      if (!subscribers || subscribers.size === 0) {
-        const cleanup = dockerLogStreams.get(containerId)
-        if (cleanup) {
-          cleanup()
-          dockerLogStreams.delete(containerId)
-          logger.debug(`[WebSocket] Stopped Docker log stream for container ${containerId}`)
-        }
-      }
-    })
-
-    socket.on('disconnect', () => {
-      cleanupSocketDockerLogsSubscriptions(socket.id)
-      cleanupSocketRateLimit(socket.id)
-      logger.debug(`[WebSocket] Client disconnected from /docker-logs: ${socket.id}`)
     })
   })
 }

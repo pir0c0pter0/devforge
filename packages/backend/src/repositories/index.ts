@@ -99,3 +99,13 @@ export {
   type ClaudeMessageFilters,
   type ClaudeMessageType,
 } from './claude-messages.repository';
+
+// Docker logs repository
+export {
+  DockerLogsRepository,
+  dockerLogsRepository,
+  type DockerLogEntity,
+  type CreateDockerLogDto,
+  type DockerLogFilters,
+  type DockerLogStats,
+} from './docker-logs.repository';

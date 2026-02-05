@@ -191,3 +191,17 @@ export type {
   ClaudeLogStats,
   ClaudeLogEvents,
 } from './types/claude-logs.types'
+
+// Export all Docker Logs types
+export type {
+  DockerLogStream,
+  DockerLogTimeRange,
+  DockerLogEntry,
+  DockerLogFilter,
+  DockerLogsResponse,
+  DockerLogStats,
+  DockerLogEvents,
+  DockerLogsSubscribe,
+  DockerLogsUnsubscribe,
+  DockerLogsRequestHistory,
+} from './types/docker-logs.types'

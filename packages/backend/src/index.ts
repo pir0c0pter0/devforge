@@ -11,6 +11,7 @@ import { dockerService } from './services/docker.service';
 import { initializeWebSocket, getSocketServer } from './services/websocket.service';
 import { containerLifecycleService } from './services/container-lifecycle.service';
 import containersRouter from './api/routes/containers.routes';
+import dockerLogsRouter from './api/routes/docker-logs.routes';
 import templatesRouter from './api/routes/templates.routes';
 import diagnosticsRouter from './api/routes/diagnostics.routes';
 import settingsRouter from './api/routes/settings.routes';
@@ -196,6 +197,7 @@ app.use('/api/telegram', telegramRouter);
  * (When JWT_SECRET is not configured, auth is skipped for development)
  */
 app.use('/api/containers', authenticateJWT, containersRouter);
+app.use('/api/containers', authenticateJWT, dockerLogsRouter);
 app.use('/api/templates', authenticateJWT, templatesRouter);
 app.use('/api/diagnostics', authenticateJWT, diagnosticsRouter);
 app.use('/api/settings', authenticateJWT, settingsRouter);
@@ -241,6 +243,12 @@ app.get('/', (_req: Request, res: Response) => {
       pauseQueue: 'POST /api/claude-daemon/:containerId/queue/pause',
       resumeQueue: 'POST /api/claude-daemon/:containerId/queue/resume',
       getDeadLetterQueue: 'GET /api/claude-daemon/:containerId/queue/dlq',
+    },
+    dockerLogsEndpoints: {
+      getLogs: 'GET /api/containers/:id/docker-logs',
+      getStats: 'GET /api/containers/:id/docker-logs/stats',
+      deleteLogs: 'DELETE /api/containers/:id/docker-logs',
+      downloadLogs: 'GET /api/containers/:id/docker-logs/download',
     },
     websocketNamespaces: {
       metrics: '/metrics',

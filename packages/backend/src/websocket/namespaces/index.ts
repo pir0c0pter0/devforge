@@ -26,3 +26,12 @@ export {
   emitClaudeEvent,
   getClaudeDaemonSubscribers,
 } from './claude-daemon.namespace'
+
+// Docker logs namespace
+export {
+  setupDockerLogsNamespace,
+  emitDockerLog,
+  emitDockerLogsBatch,
+  getDockerLogsSubscribers,
+  getAllDockerLogsSubscriptions,
+} from './docker-logs.namespace'

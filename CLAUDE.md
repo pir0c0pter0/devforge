@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções Críticas
 
-## Versão Atual: 0.1.3-alpha
+## Versão Atual: 0.1.9-alpha
 
 ## Links
 
@@ -112,6 +112,8 @@ claude-docker/
 | `/tasks` | Progresso de tarefas |
 | `/queue` | Fila de instruções |
 | `/terminal` | Terminal interativo |
+| `/docker-logs` | Logs de containers em tempo real |
+| `/claude-daemon` | Eventos do Claude Code |
 
 ---
 
@@ -126,6 +128,17 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.9-alpha
+- Feat: Logs Docker persistentes com retenção de 24h
+- Feat: Virtual scrolling para 100k+ linhas de logs
+- Feat: Filtro por tempo (1h, 6h, 12h, 24h)
+- Feat: Sanitização de secrets nos logs
+- Feat: REST API para download de logs
+- Feat: WebSocket namespace `/docker-logs` com batch mode
+
+### v0.1.8-alpha
+- Feat: Claude Code separado em aba independente
 
 ### v0.1.3-alpha
 - Doc: CLAUDE.md resumido de 1184 para 147 linhas (pontos críticos)

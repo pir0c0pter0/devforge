@@ -236,6 +236,20 @@ export const TELEGRAM_REMINDERS_TABLE = `
 `;
 
 /**
+ * Docker logs table - stores container stdout/stderr logs with 24-hour retention
+ */
+export const DOCKER_LOGS_TABLE = `
+  CREATE TABLE IF NOT EXISTS docker_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    container_id TEXT NOT NULL,
+    stream TEXT NOT NULL CHECK (stream IN ('stdout', 'stderr')),
+    content TEXT NOT NULL,
+    recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (container_id) REFERENCES containers(id) ON DELETE CASCADE
+  )
+`;
+
+/**
  * All table creation statements in order (respecting foreign keys)
  */
 export const ALL_TABLES = [
@@ -251,6 +265,7 @@ export const ALL_TABLES = [
   { name: 'telegram_conversations', sql: TELEGRAM_CONVERSATIONS_TABLE },
   { name: 'telegram_messages', sql: TELEGRAM_MESSAGES_TABLE },
   { name: 'telegram_reminders', sql: TELEGRAM_REMINDERS_TABLE },
+  { name: 'docker_logs', sql: DOCKER_LOGS_TABLE },
 ];
 
 /**
@@ -320,6 +335,12 @@ export const INDEXES = [
   'CREATE INDEX IF NOT EXISTS idx_telegram_reminders_user_id ON telegram_reminders(user_id)',
   'CREATE INDEX IF NOT EXISTS idx_telegram_reminders_scheduled_status ON telegram_reminders(scheduled_for, status)',
   'CREATE INDEX IF NOT EXISTS idx_telegram_reminders_job_id ON telegram_reminders(job_id)',
+
+  // Docker logs indexes
+  'CREATE INDEX IF NOT EXISTS idx_docker_logs_container_id ON docker_logs(container_id)',
+  'CREATE INDEX IF NOT EXISTS idx_docker_logs_stream ON docker_logs(stream)',
+  'CREATE INDEX IF NOT EXISTS idx_docker_logs_recorded_at ON docker_logs(recorded_at)',
+  'CREATE INDEX IF NOT EXISTS idx_docker_logs_container_recorded ON docker_logs(container_id, recorded_at DESC)',
 ];
 
 /**

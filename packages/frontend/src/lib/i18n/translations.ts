@@ -214,6 +214,8 @@ export const translations = {
       connected: 'Conectado',
       disconnected: 'Desconectado',
       paused: 'Pausado',
+      timeRange: 'Intervalo de tempo',
+      jumpToBottom: 'Ir para o fim',
       // Terminal section
       terminalUnavailable: 'Terminal Indisponível',
       startContainerForTerminal: 'Inicie o container para acessar o terminal.',
@@ -876,6 +878,8 @@ export const translations = {
       connected: 'Connected',
       disconnected: 'Disconnected',
       paused: 'Paused',
+      timeRange: 'Time range',
+      jumpToBottom: 'Jump to bottom',
       // Terminal section
       terminalUnavailable: 'Terminal Unavailable',
       startContainerForTerminal: 'Start the container to access the terminal.',

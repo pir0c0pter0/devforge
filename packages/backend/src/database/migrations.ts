@@ -242,10 +242,41 @@ const telegramConversationsMigration: Migration = {
 };
 
 /**
+ * Migration 006 - Add docker_logs table for container stdout/stderr logs
+ * Stores Docker container logs with 24-hour retention
+ */
+const dockerLogsMigration: Migration = {
+  name: '006_docker_logs',
+  up: (db: Database.Database) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS docker_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        container_id TEXT NOT NULL,
+        stream TEXT NOT NULL CHECK (stream IN ('stdout', 'stderr')),
+        content TEXT NOT NULL,
+        recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (container_id) REFERENCES containers(id) ON DELETE CASCADE
+      )
+    `);
+    logger.debug('Created docker_logs table');
+
+    // Create indexes
+    db.exec('CREATE INDEX IF NOT EXISTS idx_docker_logs_container_id ON docker_logs(container_id)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_docker_logs_stream ON docker_logs(stream)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_docker_logs_recorded_at ON docker_logs(recorded_at)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_docker_logs_container_recorded ON docker_logs(container_id, recorded_at DESC)');
+    logger.debug('Created docker_logs indexes');
+  },
+  down: (db: Database.Database) => {
+    db.exec('DROP TABLE IF EXISTS docker_logs');
+  },
+};
+
+/**
  * All migrations in order
  * Add new migrations here as the schema evolves
  */
-const migrations: readonly Migration[] = [initialMigration, usageTrackingMigration, claudeLogsMigration, ownerTelegramIdMigration, telegramConversationsMigration];
+const migrations: readonly Migration[] = [initialMigration, usageTrackingMigration, claudeLogsMigration, ownerTelegramIdMigration, telegramConversationsMigration, dockerLogsMigration];
 
 /**
  * Check if a migration has been applied
