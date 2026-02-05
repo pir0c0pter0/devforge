@@ -6,6 +6,11 @@ export type ContainerMode = 'interactive' | 'autonomous'
 
 export type RepositoryType = 'empty' | 'github'
 
+export interface EmbeddedDevConfig {
+  stm32?: boolean
+  esp32?: boolean
+}
+
 export interface Container {
   id: string
   dockerId?: string
@@ -42,6 +47,7 @@ export interface CreateContainerRequest {
     memoryMB: number
     diskGB: number
   }
+  embeddedDev?: EmbeddedDevConfig
   taskId?: string
 }
 

@@ -142,7 +142,10 @@ export class ContainerService {
         cpuLimit: config.cpuLimit,
         memoryLimit: config.memoryLimit,
         diskLimit: config.diskLimit,
-        config: taskId ? { taskId } : undefined,
+        config: {
+          ...(taskId ? { taskId } : {}),
+          ...(config.embeddedDev ? { embeddedDev: config.embeddedDev } : {}),
+        },
       };
 
       const initialEntity = containerRepository.create(createDto);
@@ -210,7 +213,9 @@ export class ContainerService {
       logger.info({ containerId, dockerId: dockerContainer.id }, 'Updated Docker ID in database');
 
       // Start container temporarily for setup operations
-      const needsSetup = config.repoType === 'clone' && config.repoUrl;
+      const needsClone = config.repoType === 'clone' && config.repoUrl;
+      const needsEmbeddedTools = config.embeddedDev?.stm32 || config.embeddedDev?.esp32;
+      const needsSetup = needsClone || needsEmbeddedTools;
       if (needsSetup) {
         // Update task progress - starting
         if (taskId) {
@@ -233,7 +238,7 @@ export class ContainerService {
       }
 
       // Clone repository if specified (before copying configs)
-      if (config.repoType === 'clone' && config.repoUrl) {
+      if (needsClone) {
         // Update task progress - cloning
         if (taskId) {
           taskService.setProgress(taskId, 55, 'Clonando repositório...');
@@ -247,7 +252,7 @@ export class ContainerService {
           });
         }
 
-        await this.cloneRepository(dockerContainer.id, config.repoUrl, config.sshKeyPath);
+        await this.cloneRepository(dockerContainer.id, config.repoUrl!, config.sshKeyPath);
       }
 
       // Update task progress - configuring
@@ -265,6 +270,23 @@ export class ContainerService {
 
       // Copy Claude configs from host to container
       await this.copyClaudeConfigs(dockerContainer.id);
+
+      // Install embedded development tools if configured (STM32, ESP32)
+      if (needsEmbeddedTools) {
+        if (taskId) {
+          taskService.setProgress(taskId, 80, 'Instalando ferramentas de desenvolvimento embarcado...');
+          emitContainerCreationProgress(taskId, {
+            taskId,
+            containerId,
+            stage: 'configuring',
+            percentage: 80,
+            message: 'Installing embedded development tools...',
+            timestamp: new Date()
+          });
+        }
+
+        await this.installEmbeddedTools(dockerContainer.id, config.embeddedDev);
+      }
 
       // Stop container after setup if it was started
       if (needsSetup) {
@@ -645,6 +667,132 @@ export class ContainerService {
     }
 
     logger.info({ dockerId }, 'VS Code extensions installation completed');
+  }
+
+  /**
+   * Install STM32 development tools
+   * Includes: arm-none-eabi-gcc, OpenOCD, ST-Link tools, Cortex-Debug extension
+   */
+  private async installSTM32Tools(dockerId: string): Promise<void> {
+    logger.info({ dockerId }, 'Installing STM32 development tools...');
+
+    // Commands to install STM32 toolchain
+    const commands = [
+      // Install ARM GCC toolchain and debugging tools
+      'sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi gdb-multiarch openocd stlink-tools cmake ninja-build',
+      // Create udev rules for ST-Link (requires restart)
+      'sudo bash -c \'echo "SUBSYSTEM==\\"usb\\", ATTRS{idVendor}==\\"0483\\", ATTRS{idProduct}==\\"374b\\", MODE=\\"0666\\"" > /etc/udev/rules.d/99-stlink.rules\'',
+      // Verify installation
+      'arm-none-eabi-gcc --version',
+      'openocd --version || true',
+    ];
+
+    for (const command of commands) {
+      try {
+        logger.debug({ dockerId, command }, 'Executing STM32 setup command');
+        const result = await dockerService.executeCommand(
+          dockerId,
+          ['bash', '-c', command],
+          { user: 'developer', workingDir: '/workspace' }
+        );
+
+        if (result.exitCode !== 0 && !command.includes('|| true')) {
+          logger.warn(
+            { dockerId, command, exitCode: result.exitCode, stderr: result.stderr },
+            'STM32 setup command returned non-zero exit code'
+          );
+        }
+      } catch (error) {
+        logger.warn({ error, dockerId, command }, 'STM32 setup command failed, continuing');
+      }
+    }
+
+    // Install VS Code extensions for STM32 development
+    const extensions = [
+      'marus25.cortex-debug',           // Cortex-Debug for ARM debugging
+      'ms-vscode.cpptools',             // C/C++ extension
+      'ms-vscode.cmake-tools',          // CMake support
+      'twxs.cmake',                     // CMake language support
+      'dan-c-underwood.arm',            // ARM Assembly syntax
+      'mcu-debug.debug-tracker-vscode', // Debug tracker
+      'mcu-debug.memory-view',          // Memory viewer
+      'mcu-debug.peripheral-viewer',    // Peripheral viewer for STM32
+    ];
+
+    await this.installVSCodeExtensions(dockerId, extensions);
+    logger.info({ dockerId }, 'STM32 development tools installation completed');
+  }
+
+  /**
+   * Install ESP32 development tools with PlatformIO
+   * Includes: PlatformIO CLI and VS Code extension with full ESP-IDF support
+   */
+  private async installESP32Tools(dockerId: string): Promise<void> {
+    logger.info({ dockerId }, 'Installing ESP32 development tools (PlatformIO)...');
+
+    // Commands to install PlatformIO
+    const commands = [
+      // Install Python dependencies and PlatformIO
+      'pip3 install --user platformio',
+      // Add PlatformIO to PATH
+      'echo \'export PATH="$HOME/.local/bin:$PATH"\' >> ~/.zshrc',
+      // Source the updated PATH
+      'export PATH="$HOME/.local/bin:$PATH"',
+      // Initialize PlatformIO (downloads core)
+      'export PATH="$HOME/.local/bin:$PATH" && pio --version',
+      // Pre-install ESP32 platform for faster first project
+      'export PATH="$HOME/.local/bin:$PATH" && pio pkg install -g -p espressif32 || true',
+      // Install ESP-IDF framework
+      'export PATH="$HOME/.local/bin:$PATH" && pio pkg install -g -t framework-espidf || true',
+    ];
+
+    for (const command of commands) {
+      try {
+        logger.debug({ dockerId, command }, 'Executing ESP32 setup command');
+        const result = await dockerService.executeCommand(
+          dockerId,
+          ['bash', '-c', command],
+          { user: 'developer', workingDir: '/workspace' }
+        );
+
+        if (result.exitCode !== 0 && !command.includes('|| true')) {
+          logger.warn(
+            { dockerId, command, exitCode: result.exitCode, stderr: result.stderr },
+            'ESP32 setup command returned non-zero exit code'
+          );
+        }
+      } catch (error) {
+        logger.warn({ error, dockerId, command }, 'ESP32 setup command failed, continuing');
+      }
+    }
+
+    // Install VS Code extensions for ESP32/PlatformIO development
+    const extensions = [
+      'platformio.platformio-ide',      // PlatformIO IDE (full ESP32 support)
+      'ms-vscode.cpptools',             // C/C++ extension
+      'espressif.esp-idf-extension',    // ESP-IDF extension (optional, works with PlatformIO)
+    ];
+
+    await this.installVSCodeExtensions(dockerId, extensions);
+    logger.info({ dockerId }, 'ESP32 development tools (PlatformIO) installation completed');
+  }
+
+  /**
+   * Install embedded development tools based on config
+   */
+  private async installEmbeddedTools(
+    dockerId: string,
+    embeddedDev?: { stm32?: boolean; esp32?: boolean }
+  ): Promise<void> {
+    if (!embeddedDev) return;
+
+    if (embeddedDev.stm32) {
+      await this.installSTM32Tools(dockerId);
+    }
+
+    if (embeddedDev.esp32) {
+      await this.installESP32Tools(dockerId);
+    }
   }
 
   /**

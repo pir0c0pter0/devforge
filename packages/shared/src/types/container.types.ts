@@ -21,6 +21,17 @@ export type ContainerStatus = 'running' | 'stopped' | 'created' | 'error'
 export type RepoType = 'empty' | 'clone'
 
 /**
+ * Embedded development configuration
+ * Enables pre-installation of toolchains for microcontroller development
+ */
+export interface EmbeddedDevConfig {
+  /** Enable STM32 development (arm-none-eabi-gcc, OpenOCD, ST-Link, Cortex-Debug) */
+  stm32?: boolean
+  /** Enable ESP32 development (PlatformIO with full toolchain) */
+  esp32?: boolean
+}
+
+/**
  * Configuration for creating a new container
  */
 export interface ContainerConfig {
@@ -42,6 +53,8 @@ export interface ContainerConfig {
   memoryLimit: string
   /** Disk limit (e.g., '20G' for 20 gigabytes) */
   diskLimit: string
+  /** Embedded development configuration (STM32, ESP32) */
+  embeddedDev?: EmbeddedDevConfig
 }
 
 /**

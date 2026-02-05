@@ -77,6 +77,10 @@ const createContainerSchema = z.object({
     memoryMB: z.number().min(512).max(32768),
     diskGB: z.number().min(1).max(100),
   }),
+  embeddedDev: z.object({
+    stm32: z.boolean().optional(),
+    esp32: z.boolean().optional(),
+  }).optional(),
 })
 
 type FormData = z.infer<typeof createContainerSchema>
@@ -98,6 +102,10 @@ export function CreateContainerForm() {
       cpuCores: 2,
       memoryMB: 2048,
       diskGB: 10,
+    },
+    embeddedDev: {
+      stm32: false,
+      esp32: false,
     },
   })
 
@@ -138,6 +146,7 @@ export function CreateContainerForm() {
         repositoryType: validated.repositoryType,
         repositoryUrl: normalizedUrl,
         limits: validated.limits,
+        embeddedDev: validated.embeddedDev,
       })
 
       if (response.success && response.data?.taskId) {
@@ -405,6 +414,71 @@ export function CreateContainerForm() {
             disabled={isSubmitting}
           />
         </div>
+      </div>
+
+      {/* Embedded Development Options */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold text-terminal-text">
+          <span className="text-terminal-purple">#</span> Embedded Development
+        </h3>
+        <p className="text-sm text-terminal-textMuted mb-3">
+          Pre-install toolchains for microcontroller development (optional)
+        </p>
+
+        <div className="space-y-3">
+          <label className="flex items-center gap-3 p-3 rounded border border-terminal-border bg-terminal-bg hover:border-terminal-purple/50 cursor-pointer transition-all">
+            <input
+              type="checkbox"
+              checked={formData.embeddedDev?.stm32 || false}
+              onChange={(e) => setFormData(prev => ({
+                ...prev,
+                embeddedDev: { ...prev.embeddedDev, stm32: e.target.checked }
+              }))}
+              className="w-5 h-5 accent-terminal-purple rounded"
+              disabled={isSubmitting}
+            />
+            <div className="flex-1">
+              <div className="font-medium text-terminal-text">STM32 Development</div>
+              <div className="text-xs text-terminal-textMuted">
+                ARM GCC, OpenOCD, ST-Link tools, Cortex-Debug extension
+              </div>
+            </div>
+            <svg className="w-6 h-6 text-terminal-purple opacity-70" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+            </svg>
+          </label>
+
+          <label className="flex items-center gap-3 p-3 rounded border border-terminal-border bg-terminal-bg hover:border-terminal-cyan/50 cursor-pointer transition-all">
+            <input
+              type="checkbox"
+              checked={formData.embeddedDev?.esp32 || false}
+              onChange={(e) => setFormData(prev => ({
+                ...prev,
+                embeddedDev: { ...prev.embeddedDev, esp32: e.target.checked }
+              }))}
+              className="w-5 h-5 accent-terminal-cyan rounded"
+              disabled={isSubmitting}
+            />
+            <div className="flex-1">
+              <div className="font-medium text-terminal-text">ESP32 Development</div>
+              <div className="text-xs text-terminal-textMuted">
+                PlatformIO IDE with ESP-IDF framework and full toolchain
+              </div>
+            </div>
+            <svg className="w-6 h-6 text-terminal-cyan opacity-70" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M20.2 5.9l.8-.8C19.6 3.7 17.8 3 16 3s-3.6.7-5 2.1l.8.8C13 4.8 14.5 4.2 16 4.2s3 .6 4.2 1.7zm-.9.8c-.9-.9-2.1-1.4-3.3-1.4s-2.4.5-3.3 1.4l.8.8c.7-.7 1.6-1 2.5-1s1.8.3 2.5 1l.8-.8zM19 13h-2V9h-2v4H5c-1.1 0-2 .9-2 2v4c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-4c0-1.1-.9-2-2-2zM8 18H6v-2h2v2zm3.5 0h-2v-2h2v2zm3.5 0h-2v-2h2v2z"/>
+            </svg>
+          </label>
+        </div>
+
+        {(formData.embeddedDev?.stm32 || formData.embeddedDev?.esp32) && (
+          <p className="text-xs text-terminal-yellow flex items-center gap-2">
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd"/>
+            </svg>
+            Container creation will take longer due to toolchain installation
+          </p>
+        )}
       </div>
 
       <div className="flex gap-4 pt-4">

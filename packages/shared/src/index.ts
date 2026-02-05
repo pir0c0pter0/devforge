@@ -9,6 +9,7 @@ export type {
   ContainerMode,
   ContainerStatus,
   RepoType,
+  EmbeddedDevConfig,
   ContainerConfig,
   Container,
   ContainerWithMetrics,

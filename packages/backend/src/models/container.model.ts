@@ -19,6 +19,15 @@ export const RepoTypeSchema = z.enum(['empty', 'clone']);
 export type RepoType = z.infer<typeof RepoTypeSchema>;
 
 /**
+ * Embedded development configuration for microcontrollers
+ */
+export const EmbeddedDevConfigSchema = z.object({
+  stm32: z.boolean().optional(), // STM32: arm-none-eabi-gcc, OpenOCD, ST-Link, Cortex-Debug
+  esp32: z.boolean().optional(), // ESP32: PlatformIO with full toolchain
+}).optional();
+export type EmbeddedDevConfig = z.infer<typeof EmbeddedDevConfigSchema>;
+
+/**
  * Container status
  */
 export const ContainerStatusSchema = z.enum([
@@ -75,6 +84,8 @@ export const ContainerConfigSchema = z.object({
     .min(1024, 'Disk limit must be at least 1 GB')
     .max(102400, 'Disk limit cannot exceed 100 GB')
     .default(10240), // in MB
+
+  embeddedDev: EmbeddedDevConfigSchema,
 }).refine(
   (data) => {
     // If repoType is 'clone', repoUrl must be provided
@@ -106,6 +117,7 @@ export const ContainerSchema = z.object({
   cpuLimit: z.number(),
   memoryLimit: z.number(),
   diskLimit: z.number(),
+  embeddedDev: EmbeddedDevConfigSchema,
   status: ContainerStatusSchema,
   createdAt: z.date(),
   updatedAt: z.date(),
