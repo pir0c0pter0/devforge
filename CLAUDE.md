@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções Críticas
 
-## Versão Atual: 0.1.10-alpha
+## Versão Atual: 0.1.11-alpha
 
 ## Links
 
@@ -128,6 +128,10 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.11-alpha
+- Fix: Docker logs collection para containers com TTY habilitado
+- Fix: Parser de logs raw (não-multiplexed) para containers interativos
 
 ### v0.1.10-alpha
 - Fix: Inicialização do DockerLogsCollectorService no startup do backend

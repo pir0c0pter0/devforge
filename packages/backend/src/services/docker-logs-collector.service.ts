@@ -380,6 +380,8 @@ class DockerLogsCollectorServiceImpl extends EventEmitter implements DockerLogsC
 
           stream = logStream;
 
+          logger.info({ containerId, dockerId }, 'Successfully attached to Docker log stream');
+
           // Store attachment
           this.attachments.set(containerId, {
             containerId,
@@ -389,10 +391,42 @@ class DockerLogsCollectorServiceImpl extends EventEmitter implements DockerLogsC
           });
 
           logStream.on('data', (chunk: Buffer) => {
+            logger.debug({ containerId, chunkSize: chunk.length, firstBytes: chunk.slice(0, 20).toString('hex') }, 'Received data chunk from Docker log stream');
             buffer = Buffer.concat([buffer, chunk]);
 
             // Process complete frames
             let frame = parseDockerStreamFrame(buffer);
+
+            // If multiplexed parsing fails, try raw text (tty mode)
+            if (frame === null && buffer.length > 0) {
+              // Check if this looks like raw text (starts with printable chars or timestamp)
+              const firstChar = buffer[0];
+              if (firstChar !== undefined && (firstChar === 0x32 || (firstChar >= 0x20 && firstChar <= 0x7e))) {
+                // Treat as raw text - split by newlines
+                const text = buffer.toString('utf8');
+                const lines = text.split('\n');
+
+                // Process complete lines (keep incomplete line in buffer)
+                const lastLine = lines.pop() || '';
+                buffer = Buffer.from(lastLine);
+
+                for (const line of lines) {
+                  if (line.trim()) {
+                    const { timestamp, content } = parseLogTimestamp(line);
+                    const sanitized = sanitizeLogContent(content);
+                    if (sanitized) {
+                      this.addToBuffer({
+                        containerId,
+                        stream: 'stdout', // Assume stdout for tty mode
+                        content: sanitized,
+                        timestamp,
+                      });
+                    }
+                  }
+                }
+                return;
+              }
+            }
             while (frame !== null) {
               const { stream: streamType, payload, remaining } = frame;
               buffer = Buffer.from(remaining);
@@ -504,6 +538,11 @@ class DockerLogsCollectorServiceImpl extends EventEmitter implements DockerLogsC
     this.logBuffer.push(entry);
     this.logsCollectedTotal++;
 
+    // Debug log for first few entries
+    if (this.logsCollectedTotal <= 5) {
+      logger.debug({ containerId: entry.containerId, content: entry.content.substring(0, 100), stream: entry.stream }, 'Log entry added to buffer');
+    }
+
     // Track for rate calculation
     if (this.logsCollectedWindow.length > 0) {
       const lastIndex = this.logsCollectedWindow.length - 1;
@@ -570,7 +609,7 @@ class DockerLogsCollectorServiceImpl extends EventEmitter implements DockerLogsC
         );
       }
 
-      logger.debug({ count: inserted }, 'Flushed logs to database');
+      logger.info({ count: inserted }, 'Flushed Docker logs to database');
     } catch (error) {
       logger.error({ error, count: logsToFlush.length }, 'Failed to insert logs');
       // Put logs back in buffer (limited to prevent memory issues)
