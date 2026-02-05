@@ -45,9 +45,9 @@ main() {
     log_info "Starting Claude Code + VS Code Server container..."
 
     # Check if workspace directory exists
-    if [ ! -d "/home/developer/workspace" ]; then
+    if [ ! -d "/workspace" ]; then
         log_warn "Workspace directory not found, creating..."
-        mkdir -p /home/developer/workspace
+        mkdir -p /workspace
     fi
 
     # Check if .claude directory exists, create if not
@@ -56,13 +56,13 @@ main() {
         mkdir -p /home/developer/.claude/{agents,skills,rules,cache}
     fi
 
-    # Start code-server in the background
+    # Start code-server in the background with workspace folder
     log_info "Starting VS Code Server on port 8080..."
     code-server \
         --bind-addr 0.0.0.0:8080 \
         --auth none \
         --disable-telemetry \
-        /home/developer/workspace &
+        /workspace &
     CODE_SERVER_PID=$!
 
     log_info "VS Code Server started (PID: $CODE_SERVER_PID)"

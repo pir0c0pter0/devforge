@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções Críticas
 
-## Versão Atual: 0.1.23-alpha
+## Versão Atual: 0.1.24-alpha
 
 ## Links
 
@@ -128,6 +128,12 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.24-alpha
+- Fix: VS Code agora abre com o projeto carregado automaticamente (?folder=/workspace)
+- Fix: Tema padrão alterado para "Default Dark Modern" (mais moderno)
+- Fix: Corrigido inconsistência entre /workspace e /home/developer/workspace
+- Fix: startup.sh agora inicia code-server no diretório correto (/workspace)
 
 ### v0.1.23-alpha
 - Feat: Nova aba IDE com VS Code embarcado + Claude Code sidebar

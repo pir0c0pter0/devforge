@@ -1309,9 +1309,10 @@ export class ContainerService {
       }
 
       // Build the URL - use localhost for local access
+      // Include ?folder=/workspace to open the project folder automatically
       const hostname = process.env['VSCODE_HOST'] || 'localhost';
       const protocol = process.env['VSCODE_SECURE'] === 'true' ? 'https' : 'http';
-      const url = `${protocol}://${hostname}:${portInfo.hostPort}`;
+      const url = `${protocol}://${hostname}:${portInfo.hostPort}/?folder=/workspace`;
 
       logger.info(
         { containerId, hostPort: portInfo.hostPort },

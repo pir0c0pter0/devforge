@@ -89,7 +89,7 @@ COPY --chown=developer:developer config.yaml /home/developer/.config/code-server
 # Configure VS Code User settings (dark theme, sensible defaults)
 RUN mkdir -p /home/developer/.local/share/code-server/User \
     && echo '{\n\
-    "workbench.colorTheme": "Default Dark+",\n\
+    "workbench.colorTheme": "Default Dark Modern",\n\
     "workbench.startupEditor": "none",\n\
     "editor.fontSize": 14,\n\
     "editor.tabSize": 2,\n\
@@ -130,13 +130,14 @@ COPY --chown=developer:developer claude-container-rules.md /home/developer/.clau
 USER root
 COPY telegram-send.sh /usr/local/bin/telegram-send
 RUN chmod +x /usr/local/bin/telegram-send
-USER developer
 
-# Create workspace directory
-RUN mkdir -p /home/developer/workspace
+# Create workspace directory (symlink to /workspace for compatibility)
+# The actual workspace is mounted at /workspace by Docker
+RUN mkdir -p /workspace \
+    && chown developer:developer /workspace \
+    && ln -sf /workspace /home/developer/workspace
 
 # Copy startup script
-USER root
 COPY startup.sh /usr/local/bin/startup.sh
 RUN chmod +x /usr/local/bin/startup.sh && chown developer:developer /usr/local/bin/startup.sh
 
@@ -149,7 +150,7 @@ USER developer
 EXPOSE 3000 5173 8080
 
 # Set working directory
-WORKDIR /home/developer/workspace
+WORKDIR /workspace
 
 # Health check (check both code-server and container state)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
