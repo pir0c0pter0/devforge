@@ -11,6 +11,11 @@ import {
 import type { InstructionJobData, InstructionEventData } from '@claude-docker/shared'
 
 /**
+ * Maximum number of pending jobs per container to prevent DoS
+ */
+const MAX_QUEUE_SIZE = 100
+
+/**
  * Estrutura simplificada de informações do job
  */
 export interface JobInfo {
@@ -118,11 +123,11 @@ function getQueue(containerId: string): Queue<InstructionJobData> {
         delay: 5000,
       },
       removeOnComplete: {
-        count: 100, // Manter últimos 100 jobs completos
-        age: 3600, // Ou jobs com menos de 1 hora
+        age: 3600, // Keep completed jobs for 1 hour
+        count: 100, // Keep last 100 completed jobs
       },
       removeOnFail: {
-        count: 50, // Manter últimos 50 jobs com falha
+        age: 86400, // Keep failed jobs for 24 hours for debugging
       },
     },
   })
@@ -162,6 +167,16 @@ export async function queueInstruction(
   const safeInstruction = validateInstruction(instruction)
 
   const queue = getQueue(validated)
+
+  // Check queue size limit to prevent DoS
+  const status = await getQueueStatus(validated)
+  if (status.waiting >= MAX_QUEUE_SIZE) {
+    logger.warn(
+      { containerId: validated, waiting: status.waiting, maxSize: MAX_QUEUE_SIZE },
+      'Queue size limit reached'
+    )
+    throw new Error(`Queue for container ${validated} is full (${MAX_QUEUE_SIZE} pending jobs)`)
+  }
 
   const jobData: InstructionJobData = {
     containerId: validated,

@@ -6,7 +6,7 @@ import { dockerLogger as logger } from '../utils/logger'
 import { containerRepository } from '../repositories'
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { claudeLogsService } from './claude-logs.service'
-import { circuitBreakers, CircuitOpenError } from './circuit-breaker.service'
+import { CircuitOpenError } from './circuit-breaker.service'
 import type {
   DaemonState,
   ClaudeEvent,
@@ -15,6 +15,16 @@ import type {
   ProcessingState,
   ProcessingStage,
 } from '@claude-docker/shared'
+
+/**
+ * Per-container circuit breaker state
+ */
+interface ContainerCircuitBreaker {
+  failures: number
+  lastFailure: Date | null
+  isOpen: boolean
+  recoveryTimer?: NodeJS.Timeout
+}
 
 /**
  * Active session tracking structure
@@ -83,10 +93,17 @@ const daemonStartLocks = new Map<string, Promise<void>>()
  * - Session context is maintained by Claude Code between instructions
  * - No persistent daemon process - each instruction is fire-and-forget
  */
+/**
+ * Circuit breaker configuration
+ */
+const CIRCUIT_BREAKER_THRESHOLD = 3 // failures before opening
+const CIRCUIT_BREAKER_RECOVERY_MS = 30_000 // 30 seconds
+
 class ClaudeDaemonService extends EventEmitter {
   private docker: Docker
   private sessions: Map<string, ActiveSession> = new Map()
   private cleanupInterval: NodeJS.Timeout | null = null
+  private circuitBreakers: Map<string, ContainerCircuitBreaker> = new Map()
 
   constructor() {
     super()
@@ -94,6 +111,91 @@ class ClaudeDaemonService extends EventEmitter {
       socketPath: process.env['DOCKER_SOCKET_PATH'] || '/var/run/docker.sock',
     })
     this.startCleanupTimer()
+  }
+
+  /**
+   * Get or create circuit breaker for a container
+   */
+  private getCircuitBreaker(containerId: string): ContainerCircuitBreaker {
+    if (!this.circuitBreakers.has(containerId)) {
+      this.circuitBreakers.set(containerId, {
+        failures: 0,
+        lastFailure: null,
+        isOpen: false,
+      })
+    }
+    return this.circuitBreakers.get(containerId)!
+  }
+
+  /**
+   * Record a failure for a container's circuit breaker
+   */
+  private recordFailure(containerId: string): void {
+    const cb = this.getCircuitBreaker(containerId)
+    cb.failures++
+    cb.lastFailure = new Date()
+
+    logger.debug(
+      { containerId, failures: cb.failures, threshold: CIRCUIT_BREAKER_THRESHOLD },
+      'Circuit breaker failure recorded'
+    )
+
+    if (cb.failures >= CIRCUIT_BREAKER_THRESHOLD) {
+      cb.isOpen = true
+      logger.warn(
+        { containerId, failures: cb.failures },
+        'Circuit breaker opened for container'
+      )
+
+      // Clear any existing timer
+      if (cb.recoveryTimer) {
+        clearTimeout(cb.recoveryTimer)
+      }
+
+      // Auto-reset after recovery timeout
+      cb.recoveryTimer = setTimeout(() => {
+        cb.isOpen = false
+        cb.failures = 0
+        logger.info(
+          { containerId },
+          'Circuit breaker auto-reset after recovery timeout'
+        )
+      }, CIRCUIT_BREAKER_RECOVERY_MS)
+    }
+  }
+
+  /**
+   * Record a success for a container's circuit breaker
+   */
+  private recordSuccess(containerId: string): void {
+    const cb = this.getCircuitBreaker(containerId)
+    cb.failures = 0
+    cb.isOpen = false
+
+    // Clear recovery timer if it exists
+    if (cb.recoveryTimer) {
+      clearTimeout(cb.recoveryTimer)
+      cb.recoveryTimer = undefined
+    }
+  }
+
+  /**
+   * Check if circuit breaker is open for a container
+   */
+  private isCircuitOpen(containerId: string): boolean {
+    return this.getCircuitBreaker(containerId).isOpen
+  }
+
+  /**
+   * Get circuit breaker stats for a container
+   */
+  getCircuitBreakerStats(containerId: string): { state: string; failures: number; lastFailure?: Date } {
+    const cb = this.getCircuitBreaker(containerId)
+    return {
+      state: cb.isOpen ? 'open' : 'closed',
+      failures: cb.failures,
+      lastFailure: cb.lastFailure ?? undefined,
+    }
   }
 
   /**
@@ -232,6 +334,13 @@ class ClaudeDaemonService extends EventEmitter {
     session.state.status = 'stopped'
     this.sessions.delete(containerId)
 
+    // Clean up circuit breaker for this container
+    const cb = this.circuitBreakers.get(containerId)
+    if (cb?.recoveryTimer) {
+      clearTimeout(cb.recoveryTimer)
+    }
+    this.circuitBreakers.delete(containerId)
+
     logger.info({ containerId }, 'Claude session stopped')
     this.emit('daemon:stopped', { containerId })
   }
@@ -330,11 +439,11 @@ class ClaudeDaemonService extends EventEmitter {
       }
     }
 
-    // Check circuit breaker before processing
-    if (!circuitBreakers.claudeDaemon.canExecute()) {
-      const stats = circuitBreakers.claudeDaemon.getStats()
-      logger.warn({ containerId, circuitState: stats.state }, 'Claude daemon circuit breaker is open')
-      throw new CircuitOpenError('Claude daemon circuit breaker is open', stats.lastStateChange.getTime())
+    // Check per-container circuit breaker before processing
+    if (this.isCircuitOpen(containerId)) {
+      const stats = this.getCircuitBreakerStats(containerId)
+      logger.warn({ containerId, circuitState: stats.state, failures: stats.failures }, 'Circuit breaker open for container')
+      throw new CircuitOpenError(`Circuit breaker open for container ${containerId}. Too many failures.`, CIRCUIT_BREAKER_RECOVERY_MS)
     }
 
     session.isProcessing = true
@@ -366,6 +475,59 @@ class ClaudeDaemonService extends EventEmitter {
     })
 
     return new Promise((resolve, reject) => {
+      // Guard flag to prevent double resolve/reject
+      let hasExited = false
+
+      // Buffer size tracking to prevent OOM
+      const MAX_BUFFER_SIZE = 10 * 1024 * 1024 // 10MB
+      let bufferSize = 0
+
+      // Variables declared here so cleanup() can access them
+      let childProcess: ChildProcess | null = null
+      let timeoutId: NodeJS.Timeout | null = null
+      let stdoutBuffer = ''
+      let stderrBuffer = ''
+
+      // Cleanup function to remove all listeners and clear resources
+      const cleanup = () => {
+        // Clear timeout
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+          timeoutId = null
+        }
+
+        // Remove all listeners from process
+        if (childProcess) {
+          childProcess.stdout?.removeAllListeners('data')
+          childProcess.stderr?.removeAllListeners('data')
+          childProcess.removeAllListeners('exit')
+          childProcess.removeAllListeners('error')
+        }
+
+        // Mark session as not processing
+        session.isProcessing = false
+        session.currentProcess = undefined
+        session.processingState = { isProcessing: false, stage: 'idle' }
+      }
+
+      // Safe resolve wrapper - prevents double resolution
+      const safeResolve = (value: { stdout: string; stderr: string; exitCode: number }) => {
+        if (!hasExited) {
+          hasExited = true
+          cleanup()
+          resolve(value)
+        }
+      }
+
+      // Safe reject wrapper - prevents double rejection
+      const safeReject = (error: Error) => {
+        if (!hasExited) {
+          hasExited = true
+          cleanup()
+          reject(error)
+        }
+      }
+
       try {
         // Build command flags
         // --dangerously-skip-permissions already handles autonomous execution
@@ -392,7 +554,7 @@ class ClaudeDaemonService extends EventEmitter {
         const jsonInput = JSON.stringify(streamInput)
 
         // Spawn docker exec process
-        const childProcess = spawn('docker', [
+        childProcess = spawn('docker', [
           'exec',
           '-i',
           '-w', CONTAINER_WORKSPACE,
@@ -406,17 +568,10 @@ class ClaudeDaemonService extends EventEmitter {
         // Store reference to current process for cancellation
         session.currentProcess = childProcess
 
-        let stdoutBuffer = ''
-        let stderrBuffer = ''
-
-        // Track if process was killed by timeout
-        let killedByTimeout = false
-
         // Hard timeout watchdog - kill process if it runs too long
-        const timeoutId = setTimeout(() => {
+        timeoutId = setTimeout(() => {
           if (childProcess && !childProcess.killed) {
             logger.warn({ containerId, timeout: PROCESS_HARD_TIMEOUT }, 'Process exceeded hard timeout, killing...')
-            killedByTimeout = true
             childProcess.kill('SIGKILL')
 
             // Log timeout
@@ -425,11 +580,30 @@ class ClaudeDaemonService extends EventEmitter {
               jobId,
               timeout: PROCESS_HARD_TIMEOUT,
             })
+
+            // Reject AFTER killing the process (fix: timeout must guarantee rejection)
+            safeReject(new Error(`Timeout: processo excedeu ${PROCESS_HARD_TIMEOUT / 1000}s e foi encerrado`))
           }
         }, PROCESS_HARD_TIMEOUT)
 
         // Handle stdout (JSON streaming)
         childProcess.stdout?.on('data', (chunk: Buffer) => {
+          // Check buffer size limit to prevent OOM
+          bufferSize += chunk.length
+          if (bufferSize > MAX_BUFFER_SIZE) {
+            logger.error({ containerId, bufferSize }, 'Output buffer exceeded 10MB limit')
+            claudeLogsService.addLog(containerId, 'system', 'Processo encerrado: buffer de saida excedeu 10MB', {
+              sessionId: session.sessionId,
+              jobId,
+              bufferSize,
+            })
+            if (childProcess && !childProcess.killed) {
+              childProcess.kill('SIGKILL')
+            }
+            safeReject(new Error('Output buffer exceeded 10MB limit'))
+            return
+          }
+
           const data = chunk.toString('utf-8')
           stdoutBuffer += data
 
@@ -456,6 +630,22 @@ class ClaudeDaemonService extends EventEmitter {
 
         // Handle stderr
         childProcess.stderr?.on('data', (chunk: Buffer) => {
+          // Check buffer size limit for stderr too
+          bufferSize += chunk.length
+          if (bufferSize > MAX_BUFFER_SIZE) {
+            logger.error({ containerId, bufferSize }, 'Output buffer exceeded 10MB limit')
+            claudeLogsService.addLog(containerId, 'system', 'Processo encerrado: buffer de saida excedeu 10MB', {
+              sessionId: session.sessionId,
+              jobId,
+              bufferSize,
+            })
+            if (childProcess && !childProcess.killed) {
+              childProcess.kill('SIGKILL')
+            }
+            safeReject(new Error('Output buffer exceeded 10MB limit'))
+            return
+          }
+
           const errorOutput = chunk.toString('utf-8')
           stderrBuffer += errorOutput
           logger.warn({ containerId, error: errorOutput }, 'Claude stderr')
@@ -481,8 +671,10 @@ class ClaudeDaemonService extends EventEmitter {
 
         // Handle process exit
         childProcess.on('exit', async (code, signal) => {
-          // Clear the hard timeout
-          clearTimeout(timeoutId)
+          // If already exited (e.g., via timeout or buffer overflow), ignore
+          if (hasExited) {
+            return
+          }
 
           const exitCode = code ?? -1
           const duration = Date.now() - startTime
@@ -490,8 +682,8 @@ class ClaudeDaemonService extends EventEmitter {
           if (exitCode === 0) {
             logger.info({ containerId, exitCode, duration }, 'Main instruction process completed')
 
-            // Record success in circuit breaker
-            circuitBreakers.claudeDaemon.recordSuccess()
+            // Record success in per-container circuit breaker
+            this.recordSuccess(containerId)
 
             // Log conclusao com sucesso
             claudeLogsService.addLog(containerId, 'system', `Instrucao concluida com sucesso (exit code: ${exitCode})`, {
@@ -503,8 +695,8 @@ class ClaudeDaemonService extends EventEmitter {
           } else {
             logger.warn({ containerId, exitCode, signal, duration }, 'Instruction process exited with non-zero code')
 
-            // Record failure in circuit breaker
-            circuitBreakers.claudeDaemon.recordFailure(new Error(`Process exited with code ${exitCode}`))
+            // Record failure in per-container circuit breaker
+            this.recordFailure(containerId)
 
             // Log conclusao com erro
             claudeLogsService.addLog(containerId, 'system', `Instrucao falhou (exit code: ${exitCode}, signal: ${signal || 'none'})`, {
@@ -553,14 +745,11 @@ class ClaudeDaemonService extends EventEmitter {
             await this.waitForAgentsToComplete(containerId, session.dockerId)
           }
 
-          // Now mark as complete
-          session.isProcessing = false
-          session.currentProcess = undefined
+          // Update session state (instruction count and last activity)
           session.state.instructionCount++
           session.state.lastActivity = new Date()
 
-          // Reset processing state and emit complete event (fix #9)
-          session.processingState = { isProcessing: false, stage: 'idle' }
+          // Emit complete event (fix #9)
           this.emit('instruction:processing:complete', {
             containerId,
             success: exitCode === 0,
@@ -568,24 +757,17 @@ class ClaudeDaemonService extends EventEmitter {
             timestamp: new Date(),
           })
 
-          // If killed by timeout, reject with timeout error
-          if (killedByTimeout) {
-            logger.error({ containerId, duration }, 'Instruction killed by timeout')
-            reject(new Error(`Timeout: processo excedeu ${PROCESS_HARD_TIMEOUT / 1000}s e foi encerrado`))
-            return
-          }
-
-          // If exit code is non-zero (and not killed by timeout), still reject
+          // If exit code is non-zero, reject
           if (exitCode !== 0) {
             logger.error({ containerId, exitCode, signal, duration }, 'Instruction failed with non-zero exit code')
-            reject(new Error(`Processo falhou com exit code ${exitCode}${signal ? ` (signal: ${signal})` : ''}`))
+            safeReject(new Error(`Processo falhou com exit code ${exitCode}${signal ? ` (signal: ${signal})` : ''}`))
             return
           }
 
           logger.info({ containerId, exitCode }, 'Instruction fully completed (including background agents)')
 
           // Resolve with captured output
-          resolve({
+          safeResolve({
             stdout: stdoutBuffer,
             stderr: stderrBuffer,
             exitCode,
@@ -594,19 +776,18 @@ class ClaudeDaemonService extends EventEmitter {
 
         // Handle process error
         childProcess.on('error', (error) => {
-          // Clear the hard timeout
-          clearTimeout(timeoutId)
+          // If already exited (e.g., via timeout or buffer overflow), ignore
+          if (hasExited) {
+            return
+          }
 
-          // Record failure in circuit breaker
-          circuitBreakers.claudeDaemon.recordFailure(error)
+          // Record failure in per-container circuit breaker
+          this.recordFailure(containerId)
 
-          session.isProcessing = false
-          session.currentProcess = undefined
           const duration = Date.now() - startTime
           logger.error({ containerId, error, duration }, 'Instruction process error')
 
-          // Reset processing state and emit error (fix #9)
-          session.processingState = { isProcessing: false, stage: 'idle' }
+          // Emit error event (fix #9)
           this.emit('instruction:processing:error', {
             containerId,
             error: error.message,
@@ -627,20 +808,17 @@ class ClaudeDaemonService extends EventEmitter {
           }
           this.emit('claude:event', { containerId, event })
 
-          reject(error)
+          safeReject(error)
         })
 
       } catch (error) {
-        session.isProcessing = false
-        session.currentProcess = undefined
-        // Reset processing state on catch (fix #9)
-        session.processingState = { isProcessing: false, stage: 'idle' }
+        // Emit error event (fix #9)
         this.emit('instruction:processing:error', {
           containerId,
           error: error instanceof Error ? error.message : 'Unknown error',
           timestamp: new Date(),
         })
-        reject(error)
+        safeReject(error instanceof Error ? error : new Error(String(error)))
       }
     })
   }
@@ -654,17 +832,13 @@ class ClaudeDaemonService extends EventEmitter {
       return null
     }
 
-    // Get circuit breaker stats
-    const circuitStats = circuitBreakers.claudeDaemon.getStats()
+    // Get per-container circuit breaker stats
+    const circuitStats = this.getCircuitBreakerStats(containerId)
 
     // Return a copy to maintain immutability, including circuit breaker state
     return {
       ...session.state,
-      circuitBreaker: {
-        state: circuitStats.state,
-        failures: circuitStats.failures,
-        lastFailure: circuitStats.lastFailure,
-      },
+      circuitBreaker: circuitStats,
     }
   }
 
@@ -906,6 +1080,15 @@ class ClaudeDaemonService extends EventEmitter {
     )
 
     await Promise.all(stopPromises)
+
+    // Clean up all circuit breaker timers
+    for (const [, cb] of this.circuitBreakers) {
+      if (cb.recoveryTimer) {
+        clearTimeout(cb.recoveryTimer)
+      }
+    }
+    this.circuitBreakers.clear()
+
     this.removeAllListeners()
   }
 }

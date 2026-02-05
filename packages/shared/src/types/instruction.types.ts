@@ -7,15 +7,21 @@ export type InstructionStatus = 'pending' | 'running' | 'completed' | 'failed'
  * Current stage of instruction execution
  */
 export type InstructionStage =
+  | 'queued'
   | 'validating'
   | 'checking_daemon'
   | 'starting_daemon'
   | 'daemon_ready'
+  | 'acquiring_lock'
   | 'sending_instruction'
   | 'processing'
+  | 'waiting_agents'
+  | 'collecting_output'
   | 'finalizing'
+  | 'recording_usage'
   | 'completed'
   | 'failed'
+  | 'timeout'
 
 /**
  * Progress details for instruction execution

@@ -39,6 +39,8 @@ export interface ClaudeLogMetadata {
   instruction?: string
   /** Timeout configurado em ms (para logs de timeout) */
   timeout?: number
+  /** Tamanho do buffer em bytes (para logs de limite de buffer) */
+  bufferSize?: number
 }
 
 /**

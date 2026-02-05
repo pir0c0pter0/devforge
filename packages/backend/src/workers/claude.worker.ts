@@ -122,8 +122,31 @@ export function getOrCreateWorker(containerId: string): Worker {
           await job.updateProgress(progressWaitDaemon)
           emitInstructionProgress({ ...baseEventData, progress: 25, progressDetail: progressWaitDaemon })
 
-          // Wait for daemon to be ready
-          await new Promise(resolve => setTimeout(resolve, 2000))
+          // Wait for daemon to be ready with verification
+          const maxWaitTime = 10000 // 10 seconds max
+          const checkInterval = 500
+          let waited = 0
+
+          while (waited < maxWaitTime) {
+            const daemonStatus = claudeDaemonService.getStatus(containerId)
+            if (daemonStatus?.status === 'running') {
+              break
+            }
+            await new Promise(resolve => setTimeout(resolve, checkInterval))
+            waited += checkInterval
+
+            const progressWaiting = createProgressData(
+              25 + Math.floor((waited / maxWaitTime) * 5),
+              'starting_daemon',
+              `Aguardando daemon... (${Math.floor(waited / 1000)}s)`
+            )
+            await job.updateProgress(progressWaiting)
+            emitInstructionProgress({ ...baseEventData, progress: progressWaiting.percentage, progressDetail: progressWaiting })
+          }
+
+          if (waited >= maxWaitTime) {
+            throw new Error('Daemon failed to start within 10 seconds')
+          }
         }
 
         // Stage 4: Daemon ready
