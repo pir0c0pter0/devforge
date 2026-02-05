@@ -16,11 +16,30 @@ interface IDEViewProps {
   containerStatus: string
 }
 
+const MIN_LOADING_TIME = 8000 // Minimum 8 seconds loading time
+
 export function IDEView({ containerId, vscodeUrl, containerStatus }: IDEViewProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [sidebarWidth, setSidebarWidth] = useState(400)
   const [isResizing, setIsResizing] = useState(false)
   const [isIframeLoading, setIsIframeLoading] = useState(true)
+  const [iframeLoaded, setIframeLoaded] = useState(false)
+  const [minTimeElapsed, setMinTimeElapsed] = useState(false)
+
+  // Minimum loading time to ensure VS Code has time to render
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setMinTimeElapsed(true)
+    }, MIN_LOADING_TIME)
+    return () => clearTimeout(timer)
+  }, [])
+
+  // Hide loading only when both conditions are met
+  useEffect(() => {
+    if (iframeLoaded && minTimeElapsed) {
+      setIsIframeLoading(false)
+    }
+  }, [iframeLoaded, minTimeElapsed])
 
   // Handle resize drag
   useEffect(() => {
@@ -83,7 +102,7 @@ export function IDEView({ containerId, vscodeUrl, containerStatus }: IDEViewProp
           className="w-full h-full border-0"
           title="VS Code"
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
-          onLoad={() => setIsIframeLoading(false)}
+          onLoad={() => setIframeLoaded(true)}
         />
       </div>
 
