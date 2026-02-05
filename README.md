@@ -2,8 +2,6 @@
   <img src="packages/frontend/public/logo-full.png" alt="DevForge Logo" width="280">
 </p>
 
-<h1 align="center">DevForge</h1>
-
 <p align="center">
   <strong>Orquestracao de containers para desenvolvimento com IA - Claude Code + VS Code</strong>
 </p>
