@@ -1778,6 +1778,10 @@ export class ContainerService {
           echo "GEMFILE=$([ -f /workspace/Gemfile ] && echo 1 || echo 0)"
           echo "POM_XML=$([ -f /workspace/pom.xml ] && echo 1 || echo 0)"
           echo "BUILD_GRADLE=$([ -f /workspace/build.gradle ] && echo 1 || echo 0)"
+          echo "CMAKE=$([ -f /workspace/CMakeLists.txt ] && echo 1 || echo 0)"
+          echo "C_FILES=$(find /workspace -maxdepth 2 -name '*.c' 2>/dev/null | head -1 | grep -q . && echo 1 || echo 0)"
+          echo "CPP_FILES=$(find /workspace -maxdepth 2 -name '*.cpp' -o -name '*.cc' -o -name '*.cxx' 2>/dev/null | head -1 | grep -q . && echo 1 || echo 0)"
+          echo "MAKEFILE=$([ -f /workspace/Makefile ] && echo 1 || echo 0)"
         `],
         { user: 'developer', workingDir: '/workspace' }
       );
@@ -1888,6 +1892,26 @@ export class ContainerService {
         recommendedExtensions.push(
           'vscjava.vscode-java-pack',
           'redhat.java'
+        );
+      }
+
+      // C/C++ project
+      if (files['CMAKE'] || files['C_FILES'] || files['CPP_FILES'] || files['MAKEFILE']) {
+        additionalSettings['C_Cpp.default.intelliSenseMode'] = 'linux-gcc-x64';
+        additionalSettings['C_Cpp.default.compilerPath'] = '/usr/bin/gcc';
+        additionalSettings['C_Cpp.clang_format_fallbackStyle'] = 'Google';
+        additionalSettings['[c]'] = {
+          'editor.formatOnSave': true,
+          'editor.defaultFormatter': 'ms-vscode.cpptools'
+        };
+        additionalSettings['[cpp]'] = {
+          'editor.formatOnSave': true,
+          'editor.defaultFormatter': 'ms-vscode.cpptools'
+        };
+        recommendedExtensions.push(
+          'ms-vscode.cpptools',
+          'ms-vscode.cmake-tools',
+          'twxs.cmake'
         );
       }
 
