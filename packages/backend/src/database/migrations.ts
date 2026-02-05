@@ -338,6 +338,27 @@ const dockerLogsLogTypeMigration: Migration = {
 const claudeSessionsMigration: Migration = {
   name: '008_claude_sessions',
   up: (db: Database.Database) => {
+    // First, ensure claude_messages table exists (may not have been created yet)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS claude_messages (
+        id TEXT PRIMARY KEY,
+        container_id TEXT NOT NULL,
+        type TEXT NOT NULL CHECK (type IN ('user', 'assistant', 'tool_use', 'tool_result', 'system', 'error')),
+        content TEXT NOT NULL,
+        tool_name TEXT,
+        tool_input JSON,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (container_id) REFERENCES containers(id) ON DELETE CASCADE
+      )
+    `);
+    logger.debug('Ensured claude_messages table exists');
+
+    // Create indexes for claude_messages if they don't exist
+    db.exec('CREATE INDEX IF NOT EXISTS idx_claude_messages_container_id ON claude_messages(container_id)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_claude_messages_type ON claude_messages(type)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_claude_messages_created_at ON claude_messages(created_at)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_claude_messages_container_created ON claude_messages(container_id, created_at ASC)');
+
     // Create claude_sessions table
     db.exec(`
       CREATE TABLE IF NOT EXISTS claude_sessions (
