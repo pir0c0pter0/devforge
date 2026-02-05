@@ -158,47 +158,53 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
   const handleSelectSession = useCallback(async (sessionId: string, sessionMessages: SessionMessage[]) => {
     setCurrentSessionId(sessionId)
 
-    // First, clear Claude's current context by sending /clear silently
+    // 1. First, clear the UI immediately
+    setMessages(containerId, [])
+
+    // 2. Send /clear to Claude daemon to reset its context
     if (daemonStatus?.status === 'running') {
       sendSilentInstruction('/clear')
     }
 
-    // Convert session messages to ClaudeMessage format
-    const convertedMessages: ClaudeMessage[] = sessionMessages.map((msg) => ({
-      id: msg.id,
-      type: msg.type as ClaudeMessage['type'],
-      content: msg.content,
-      timestamp: new Date(msg.timestamp),
-      toolName: msg.toolName,
-      toolInput: msg.toolInput,
-    }))
+    // 3. Wait a moment for /clear to process, then load session messages
+    setTimeout(() => {
+      // Convert session messages to ClaudeMessage format
+      const convertedMessages: ClaudeMessage[] = sessionMessages.map((msg) => ({
+        id: msg.id,
+        type: msg.type as ClaudeMessage['type'],
+        content: msg.content,
+        timestamp: new Date(msg.timestamp),
+        toolName: msg.toolName,
+        toolInput: msg.toolInput,
+      }))
 
-    // Update the store with session messages (replaces current UI messages)
-    setMessages(containerId, convertedMessages)
+      // Update the store with session messages
+      setMessages(containerId, convertedMessages)
 
-    // Store context for next message (will be prepended when user sends)
-    const contextMessages = sessionMessages.filter(
-      (m) => m.type === 'user' || m.type === 'assistant'
-    )
+      // Store context for next message (will be prepended when user sends)
+      const contextMessages = sessionMessages.filter(
+        (m) => m.type === 'user' || m.type === 'assistant'
+      )
 
-    if (contextMessages.length > 0) {
-      // Build context prompt with conversation history
-      const contextParts = contextMessages.map((m) => {
-        const role = m.type === 'user' ? 'Usuário' : 'Assistente'
-        // Limit content to avoid too long context
-        const content = m.content.length > 500
-          ? m.content.substring(0, 500) + '...'
-          : m.content
-        return `${role}: ${content}`
-      })
+      if (contextMessages.length > 0) {
+        // Build context prompt with conversation history
+        const contextParts = contextMessages.map((m) => {
+          const role = m.type === 'user' ? 'Usuário' : 'Assistente'
+          // Limit content to avoid too long context
+          const content = m.content.length > 500
+            ? m.content.substring(0, 500) + '...'
+            : m.content
+          return `${role}: ${content}`
+        })
 
-      const contextPrompt = `[CONTEXTO DA CONVERSA ANTERIOR]
+        const contextPrompt = `[CONTEXTO DA CONVERSA ANTERIOR]
 ${contextParts.join('\n\n')}
 [FIM DO CONTEXTO]
 
 `
-      setPendingContext(contextPrompt)
-    }
+        setPendingContext(contextPrompt)
+      }
+    }, 500) // Wait 500ms for /clear events to be processed
   }, [containerId, setMessages, daemonStatus, sendSilentInstruction])
 
   const handleNewSession = useCallback(async () => {
