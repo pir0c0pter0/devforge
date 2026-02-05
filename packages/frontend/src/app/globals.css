@@ -8,8 +8,8 @@
 :root {
   --background: #0d1117;
   --foreground: #c9d1d9;
-  --terminal-green: #3fb950;
-  --terminal-cyan: #58a6ff;
+  --terminal-green: #10b981;  /* Emerald (success only) */
+  --terminal-cyan: #22d3ee;   /* Logo flame (primary accent) */
   --terminal-border: #30363d;
   --scale-factor: 0.85;
 }
@@ -55,7 +55,7 @@ body {
 
 /* Selection */
 ::selection {
-  background: rgba(63, 185, 80, 0.3);
+  background: rgba(34, 211, 238, 0.3);
   color: #c9d1d9;
 }
 
@@ -65,7 +65,7 @@ body {
   }
 
   .terminal-glow {
-    text-shadow: 0 0 10px rgba(63, 185, 80, 0.5);
+    text-shadow: 0 0 10px rgba(34, 211, 238, 0.5);
   }
 
   .terminal-cursor {
@@ -80,7 +80,7 @@ body {
   }
 
   .btn-primary:hover {
-    box-shadow: 0 0 10px rgba(63, 185, 80, 0.4);
+    box-shadow: 0 0 10px rgba(34, 211, 238, 0.4);
   }
 
   .btn-secondary {
@@ -88,7 +88,7 @@ body {
   }
 
   .btn-secondary:hover {
-    @apply text-terminal-green border-terminal-green;
+    @apply text-terminal-cyan border-terminal-cyan;
   }
 
   .btn-danger {
@@ -97,7 +97,7 @@ body {
 
   .btn-danger:hover {
     @apply border-terminal-red;
-    box-shadow: 0 0 10px rgba(248, 81, 73, 0.3);
+    box-shadow: 0 0 10px rgba(249, 115, 22, 0.3);
   }
 
   .btn-warning {
@@ -106,7 +106,7 @@ body {
 
   .btn-warning:hover {
     @apply border-terminal-yellow;
-    box-shadow: 0 0 10px rgba(214, 158, 47, 0.3);
+    box-shadow: 0 0 10px rgba(251, 191, 36, 0.3);
   }
 
   .card {
@@ -115,15 +115,15 @@ body {
   }
 
   .card:hover {
-    @apply border-terminal-green/30;
+    @apply border-terminal-cyan/30;
   }
 
   .input {
-    @apply w-full px-2.5 py-1.5 bg-terminal-bg border border-terminal-border rounded focus:outline-none focus:border-terminal-green focus:ring-1 focus:ring-terminal-green/50 text-terminal-text placeholder-terminal-textMuted transition-all text-sm;
+    @apply w-full px-2.5 py-1.5 bg-terminal-bg border border-terminal-border rounded focus:outline-none focus:border-terminal-cyan focus:ring-1 focus:ring-terminal-cyan/50 text-terminal-text placeholder-terminal-textMuted transition-all text-sm;
   }
 
   .input:focus {
-    box-shadow: 0 0 6px rgba(63, 185, 80, 0.2);
+    box-shadow: 0 0 6px rgba(34, 211, 238, 0.2);
   }
 
   .label {
@@ -135,7 +135,7 @@ body {
   }
 
   .badge-success {
-    @apply bg-primary-900/30 text-terminal-green border-primary-700/50;
+    @apply bg-success-900/30 text-success-500 border-success-700/50;
   }
 
   .badge-danger {
@@ -147,7 +147,7 @@ body {
   }
 
   .badge-primary {
-    @apply bg-primary-900/30 text-terminal-green border-primary-700/50;
+    @apply bg-primary-900/30 text-terminal-cyan border-primary-700/50;
   }
 
   .badge-gray {
@@ -161,7 +161,7 @@ body {
   /* Terminal prompt styling */
   .terminal-prompt::before {
     content: '$ ';
-    @apply text-terminal-green;
+    @apply text-terminal-cyan;
   }
 
   /* Code blocks */
@@ -171,16 +171,16 @@ body {
 
   /* Links */
   a {
-    @apply text-terminal-cyan hover:text-terminal-green transition-colors;
+    @apply text-terminal-cyan hover:text-terminal-cyan/80 transition-colors;
   }
 
   /* Nav link active state */
   .nav-link {
-    @apply text-terminal-textMuted hover:text-terminal-green transition-colors px-3 py-2 rounded;
+    @apply text-terminal-textMuted hover:text-terminal-cyan transition-colors px-3 py-2 rounded;
   }
 
   .nav-link-active {
-    @apply text-terminal-green bg-terminal-green/10 border-l-2 border-terminal-green;
+    @apply text-terminal-cyan bg-terminal-cyan/10 border-l-2 border-terminal-cyan;
   }
 
   /* Stats card */
@@ -189,11 +189,11 @@ body {
   }
 
   .stats-card:hover {
-    @apply border-terminal-green/30;
+    @apply border-terminal-cyan/30;
   }
 
   .stats-value {
-    @apply text-xl font-bold text-terminal-green;
+    @apply text-xl font-bold text-terminal-cyan;
   }
 
   .stats-label {
@@ -206,8 +206,8 @@ body {
   }
 
   .status-running {
-    @apply bg-terminal-green;
-    box-shadow: 0 0 8px rgba(63, 185, 80, 0.6);
+    @apply bg-success-500;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
   }
 
   .status-stopped {
@@ -216,7 +216,7 @@ body {
 
   .status-error {
     @apply bg-terminal-red;
-    box-shadow: 0 0 8px rgba(248, 81, 73, 0.6);
+    box-shadow: 0 0 8px rgba(249, 115, 22, 0.6);
   }
 
   .status-creating {

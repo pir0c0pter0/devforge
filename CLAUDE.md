@@ -1,6 +1,6 @@
 # DevForge - Instruções Críticas
 
-## Versão Atual: 0.1.36-alpha
+## Versão Atual: 0.1.37-alpha
 
 ## Links
 
@@ -128,6 +128,16 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.37-alpha
+- Feat: Nova paleta de cores alinhada ao logo DevForge
+- Feat: Ciano (#22d3ee) substitui verde terminal como cor primária (chama do logo)
+- Feat: Emerald (#10b981) agora usado apenas para status success
+- Feat: Warning (#fbbf24) e Danger (#f97316) com WCAG AAA compliance
+- Feat: Violet (#a78bfa) como accent para contexto Claude/IA
+- Refactor: 29+ componentes CSS atualizados para nova paleta
+- UX: Glows, hovers e focus states agora usam ciano da chama do logo
+- A11y: Contraste melhorado para acessibilidade (9.4:1 no ciano)
 
 ### v0.1.36-alpha
 - Feat: Licenca alterada de MIT para PolyForm Noncommercial 1.0.0
