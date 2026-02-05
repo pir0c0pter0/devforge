@@ -24,7 +24,7 @@ class MetricsWebSocketClient {
     this.handlers = handlers
     // Connect to the /metrics namespace
     this.socket = io(`${WS_URL}/metrics`, {
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,

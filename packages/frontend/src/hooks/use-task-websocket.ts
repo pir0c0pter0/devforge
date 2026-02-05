@@ -335,7 +335,7 @@ export function useTaskWebSocket(
     const connectSocket = () => {
       // Connect to WebSocket /tasks namespace
       const socket = io(`${API_URL}/tasks`, {
-        transports: ['websocket', 'polling'],
+        transports: ['polling', 'websocket'],
         reconnection: false, // We handle reconnection manually for exponential backoff
       })
 

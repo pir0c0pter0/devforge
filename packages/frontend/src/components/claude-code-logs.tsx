@@ -347,7 +347,7 @@ export function ClaudeCodeLogs({ containerId, className }: ClaudeCodeLogsProps) 
   // WebSocket connection
   useEffect(() => {
     const socket = io(`${WS_URL}/claude-daemon`, {
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,

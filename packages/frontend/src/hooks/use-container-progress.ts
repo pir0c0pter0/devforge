@@ -36,7 +36,7 @@ export function useContainerProgress(): UseContainerProgressReturn {
 
     // Connect to WebSocket /creation namespace
     const socket = io(`${API_URL}/creation`, {
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,

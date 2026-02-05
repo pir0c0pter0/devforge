@@ -385,7 +385,7 @@ export function ContainerLogs({ containerId, className }: ContainerLogsProps) {
   // WebSocket connection
   useEffect(() => {
     const socket = io(`${WS_URL}/docker-logs`, {
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,

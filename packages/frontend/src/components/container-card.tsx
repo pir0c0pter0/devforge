@@ -45,7 +45,7 @@ export function ContainerCard({ container }: ContainerCardProps) {
     }
 
     const socket = io(`${WS_URL}/queue`, {
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
       reconnection: true,
     })
     queueSocketRef.current = socket

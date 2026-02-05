@@ -353,11 +353,13 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
     console.log('[ClaudeDaemon] Connecting to /claude-daemon namespace for container:', containerId)
 
     const socket = io(`${BACKEND_URL}/claude-daemon`, {
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
+      upgrade: true,
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       reconnectionAttempts: 10,
+      timeout: 10000,
     })
 
     socketRef.current = socket

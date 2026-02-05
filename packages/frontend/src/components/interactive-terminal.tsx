@@ -92,7 +92,7 @@ export function InteractiveTerminal({ containerId, onClose, className }: Interac
 
       // Connect WebSocket
       const socket = io(`${WS_URL}/terminal`, {
-        transports: ['websocket', 'polling'],
+        transports: ['polling', 'websocket'],
         reconnection: true,
         reconnectionAttempts: 3,
         reconnectionDelay: 1000,

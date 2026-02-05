@@ -81,7 +81,7 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
   useEffect(() => {
     // Connect to /queue namespace
     const socket = io(`${WS_URL}/queue`, {
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
       reconnection: true,
     })
     socketRef.current = socket
