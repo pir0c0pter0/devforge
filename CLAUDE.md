@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções Críticas
 
-## Versão Atual: 0.1.15-alpha
+## Versão Atual: 0.1.16-alpha
 
 ## Links
 
@@ -128,6 +128,15 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.16-alpha
+- Feat: Botão de histórico de conversas no Claude Chat
+- Feat: Migration 008 - tabela claude_sessions com agrupamento automático por gap de 30min
+- Feat: SessionSelector dropdown para navegar entre conversas anteriores
+- Feat: API REST: GET/POST /api/claude-daemon/:containerId/sessions
+- Feat: ClaudeSessionsService para gerenciamento de sessões
+- Feat: useClaudeSessions hook no frontend
+- Feat: Tipos compartilhados ClaudeSession, ClaudeSessionMessage
 
 ### v0.1.15-alpha
 - Fix: Gráfico de métricas agora carrega dados históricos corretamente
