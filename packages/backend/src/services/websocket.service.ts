@@ -1,6 +1,7 @@
 import { Server as HttpServer } from 'http'
-import { Server, Socket } from 'socket.io'
+import { Server, Socket, Namespace } from 'socket.io'
 import { createWebSocketRateLimitMiddleware, cleanupSocketRateLimit } from '../middleware/websocket-rate-limit'
+import { authenticateWebSocket } from '../middleware/auth.middleware'
 import type {
   ServerToClientEvents,
   ClientToServerEvents,
@@ -19,6 +20,65 @@ import { config } from '../config'
 import { createChildLogger } from '../utils/logger'
 
 const logger = createChildLogger({ service: 'websocket' })
+
+/**
+ * Extended Socket interface with authenticated user data
+ */
+interface AuthenticatedSocket extends Socket {
+  user?: {
+    id: string
+    email?: string
+    role?: string
+  }
+}
+
+/**
+ * JWT Authentication middleware for WebSocket connections
+ * Validates JWT token from handshake auth or query params
+ * Rejects unauthenticated connections when JWT_SECRET is configured
+ */
+const createWebSocketAuthMiddleware = () => {
+  return (socket: Socket, next: (err?: Error) => void) => {
+    // Extract token from auth object or query params
+    const token = socket.handshake.auth?.['token'] ||
+                  socket.handshake.query?.['token'] as string ||
+                  socket.handshake.headers?.authorization?.replace('Bearer ', '')
+
+    // If no token provided
+    if (!token) {
+      // Check if authentication is required (JWT_SECRET configured)
+      const jwtSecret = process.env['JWT_SECRET']
+      if (jwtSecret) {
+        logger.warn(`[WebSocket] Connection rejected: no token provided (socket: ${socket.id})`)
+        return next(new Error('Authentication required'))
+      }
+      // Auth disabled - allow anonymous connections
+      logger.debug(`[WebSocket] Anonymous connection allowed (JWT_SECRET not configured)`)
+      return next()
+    }
+
+    // Validate token
+    const user = authenticateWebSocket(token)
+
+    if (!user) {
+      logger.warn(`[WebSocket] Connection rejected: invalid token (socket: ${socket.id})`)
+      return next(new Error('Invalid or expired token'))
+    }
+
+    // Attach user data to socket
+    (socket as AuthenticatedSocket).user = user
+    logger.debug({ userId: user.id }, `[WebSocket] Authenticated connection: ${socket.id}`)
+
+    next()
+  }
+}
+
+/**
+ * Apply authentication middleware to a namespace
+ */
+const applyAuthMiddleware = (namespace: Namespace): void => {
+  namespace.use(createWebSocketAuthMiddleware())
+}
 import { metricsService } from './metrics.service'
 import { containerRepository } from '../repositories'
 import { terminalService } from './terminal.service'
@@ -78,10 +138,13 @@ export const initializeWebSocket = (
     pingInterval: 25000,
   })
 
+  // Apply authentication middleware first (validates JWT)
+  io.use(createWebSocketAuthMiddleware())
+
   // Apply rate limiting middleware
   io.use(createWebSocketRateLimitMiddleware())
 
-  // Setup namespaces and event handlers
+  // Setup namespaces and event handlers (auth middleware applied to each)
   setupMetricsNamespace()
   setupQueueNamespace()
   setupLogsNamespace()
@@ -174,7 +237,10 @@ const setupMetricsNamespace = (): void => {
 
   const metricsNamespace = io.of('/metrics')
 
-  metricsNamespace.on('connection', (socket: Socket) => {
+  // Apply authentication middleware to namespace
+  applyAuthMiddleware(metricsNamespace)
+
+  metricsNamespace.on('connection', (socket: AuthenticatedSocket) => {
     logger.debug(`[WebSocket] Client connected to /metrics: ${socket.id}`)
 
     socket.on('subscribe:container', async (containerId: string) => {
@@ -234,7 +300,10 @@ const setupQueueNamespace = (): void => {
 
   const queueNamespace = io.of('/queue')
 
-  queueNamespace.on('connection', (socket: Socket) => {
+  // Apply authentication middleware to namespace
+  applyAuthMiddleware(queueNamespace)
+
+  queueNamespace.on('connection', (socket: AuthenticatedSocket) => {
     logger.debug(`[WebSocket] Client connected to /queue: ${socket.id}`)
 
     socket.on('subscribe:container', (containerId: string) => {
@@ -275,7 +344,10 @@ const setupLogsNamespace = (): void => {
 
   const logsNamespace = io.of('/logs')
 
-  logsNamespace.on('connection', (socket: Socket) => {
+  // Apply authentication middleware to namespace
+  applyAuthMiddleware(logsNamespace)
+
+  logsNamespace.on('connection', (socket: AuthenticatedSocket) => {
     logger.debug(`[WebSocket] Client connected to /logs: ${socket.id}`)
 
     socket.on('subscribe:container', (containerId: string) => {
@@ -358,7 +430,10 @@ const setupDockerLogsNamespace = (): void => {
 
   const dockerLogsNamespace = io.of('/docker-logs')
 
-  dockerLogsNamespace.on('connection', (socket: Socket) => {
+  // Apply authentication middleware to namespace
+  applyAuthMiddleware(dockerLogsNamespace)
+
+  dockerLogsNamespace.on('connection', (socket: AuthenticatedSocket) => {
     logger.debug(`[WebSocket] Client connected to /docker-logs: ${socket.id}`)
 
     let currentContainerId: string | null = null
@@ -432,7 +507,10 @@ const setupCreationNamespace = (): void => {
 
   const creationNamespace = io.of('/creation')
 
-  creationNamespace.on('connection', (socket: Socket) => {
+  // Apply authentication middleware to namespace
+  applyAuthMiddleware(creationNamespace)
+
+  creationNamespace.on('connection', (socket: AuthenticatedSocket) => {
     logger.debug(`[WebSocket] Client connected to /creation: ${socket.id}`)
 
     socket.on('subscribe:task', (taskId: string) => {
@@ -500,7 +578,10 @@ const setupTasksNamespace = (): void => {
 
   const tasksNamespace = io.of('/tasks')
 
-  tasksNamespace.on('connection', (socket: Socket) => {
+  // Apply authentication middleware to namespace
+  applyAuthMiddleware(tasksNamespace)
+
+  tasksNamespace.on('connection', (socket: AuthenticatedSocket) => {
     logger.debug(`[WebSocket] Client connected to /tasks: ${socket.id}`)
 
     socket.on('task:subscribe', (subscription: TaskSubscription) => {
@@ -549,7 +630,10 @@ const setupTerminalNamespace = (): void => {
 
   const terminalNamespace = io.of('/terminal')
 
-  terminalNamespace.on('connection', (socket: Socket) => {
+  // Apply authentication middleware to namespace
+  applyAuthMiddleware(terminalNamespace)
+
+  terminalNamespace.on('connection', (socket: AuthenticatedSocket) => {
     logger.debug(`[WebSocket] Client connected to /terminal: ${socket.id}`)
 
     let currentSessionId: string | null = null
@@ -684,6 +768,9 @@ const setupClaudeDaemonNamespace = (): void => {
 
   const claudeDaemonNamespace = io.of('/claude-daemon')
 
+  // Apply authentication middleware to namespace
+  applyAuthMiddleware(claudeDaemonNamespace)
+
   // Forward events from daemon service to WebSocket clients
   claudeDaemonService.on('claude:event', ({ containerId, event }: { containerId: string; event: ClaudeEvent }) => {
     claudeDaemonNamespace.to(`claude:${containerId}`).emit('claude:output' as any, event)
@@ -734,8 +821,8 @@ const setupClaudeDaemonNamespace = (): void => {
     claudeDaemonNamespace.to(`claude:${containerId}`).emit('daemon:error' as any, { error })
   })
 
-  claudeDaemonNamespace.on('connection', (socket: Socket) => {
-    logger.debug(`[WebSocket] Client connected to /claude-daemon: ${socket.id}`)
+  claudeDaemonNamespace.on('connection', (socket: AuthenticatedSocket) => {
+    logger.debug(`[WebSocket] Client connected to /claude-daemon: ${socket.id} (user: ${socket.user?.id || 'anonymous'})`)
 
     let currentContainerId: string | null = null
 
@@ -759,6 +846,7 @@ const setupClaudeDaemonNamespace = (): void => {
     socket.on('output:unsubscribe', ({ containerId }: { containerId: string }) => {
       socket.leave(`claude:${containerId}`)
       removeClaudeDaemonSubscription(containerId, socket.id)
+      decrementSubscriptionCount(socket.id)
       if (currentContainerId === containerId) {
         currentContainerId = null
       }
@@ -890,9 +978,43 @@ const setupClaudeDaemonNamespace = (): void => {
     socket.on('disconnect', () => {
       cleanupSocketClaudeDaemonSubscriptions(socket.id)
       cleanupSocketRateLimit(socket.id)
+      cleanupSubscriptionCount(socket.id)
       logger.debug(`[WebSocket] Client disconnected from /claude-daemon: ${socket.id}`)
     })
   })
+}
+
+/**
+ * Map of subscription counts per socket (for tracking active subscriptions)
+ */
+const socketSubscriptionCounts = new Map<string, number>()
+
+/**
+ * Increment subscription count for a socket
+ */
+function incrementSubscriptionCount(socketId: string): void {
+  const current = socketSubscriptionCounts.get(socketId) || 0
+  socketSubscriptionCounts.set(socketId, current + 1)
+}
+
+/**
+ * Decrement subscription count for a socket
+ */
+function decrementSubscriptionCount(socketId: string): void {
+  const current = socketSubscriptionCounts.get(socketId) || 0
+  if (current > 0) {
+    socketSubscriptionCounts.set(socketId, current - 1)
+  }
+  if (current <= 1) {
+    socketSubscriptionCounts.delete(socketId)
+  }
+}
+
+/**
+ * Cleanup subscription count for a socket
+ */
+function cleanupSubscriptionCount(socketId: string): void {
+  socketSubscriptionCounts.delete(socketId)
 }
 
 /**
@@ -903,6 +1025,7 @@ const addSubscription = (containerId: string, socketId: string): void => {
     subscriptions.set(containerId, new Set())
   }
   subscriptions.get(containerId)?.add(socketId)
+  incrementSubscriptionCount(socketId)
 }
 
 /**
@@ -912,6 +1035,7 @@ const removeSubscription = (containerId: string, socketId: string): void => {
   const subs = subscriptions.get(containerId)
   if (subs) {
     subs.delete(socketId)
+    decrementSubscriptionCount(socketId)
     if (subs.size === 0) {
       subscriptions.delete(containerId)
     }

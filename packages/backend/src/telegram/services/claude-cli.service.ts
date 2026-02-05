@@ -42,7 +42,7 @@ const CLAUDE_FLAGS_BASE = [
 const TELEGRAM_PROCESS_TIMEOUT = 2 * 60 * 1000
 
 /**
- * System prompt for Telegram assistant (single line to avoid shell escaping issues)
+ * System prompt for Telegram assistant
  */
 const TELEGRAM_SYSTEM_PROMPT = 'Voce eh um assistente pessoal amigavel no Telegram. Responda em portugues brasileiro de forma concisa (max 500 chars). Use emojis ocasionalmente. Nao mencione que eh Claude ou Anthropic.'
 
@@ -102,7 +102,6 @@ class TelegramClaudeService {
     return new Promise((resolve) => {
       const proc = spawn('claude', ['--version'], {
         timeout: 5000,
-        shell: true,
       })
 
       proc.on('close', (code) => {
@@ -144,18 +143,17 @@ class TelegramClaudeService {
       }
 
       // Add the message as positional argument (must be last)
-      // Escape single quotes in message for shell command
-      const escapedMessage = message.replace(/'/g, "'\\''")
-      claudeArgs.push(escapedMessage)
+      // No shell escaping needed - arguments passed directly to spawn
+      claudeArgs.push(message)
 
-      // Build the full command string for script
-      const claudeCommand = `claude ${claudeArgs.map(arg => `'${arg.replace(/'/g, "'\\''")}'`).join(' ')}`
-
-      logger.debug({ command: claudeCommand }, 'Spawning Claude CLI via script')
+      logger.debug({ args: claudeArgs }, 'Spawning Claude CLI via script')
 
       // Use 'script' to emulate a TTY - this fixes stdout buffering issues
-      // script -q -c 'command' /dev/null runs command in a PTY and outputs to stdout
-      const proc = spawn('script', ['-q', '-c', claudeCommand, '/dev/null'], {
+      // script -q /dev/null claude [args] runs command in a PTY and outputs to stdout
+      // Using '--' to separate script options from the command
+      const scriptArgs = ['-q', '/dev/null', '--', 'claude', ...claudeArgs]
+
+      const proc = spawn('script', scriptArgs, {
         cwd: process.env['HOME'] || '/tmp', // Use HOME to avoid scanning large codebases
         env: { ...process.env, HOME: process.env['HOME'] },
       })

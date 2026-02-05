@@ -3,6 +3,7 @@ import { createServer } from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
+import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import { httpLogger, logger } from './utils/logger';
 import { containerService } from './services/container.service';
@@ -22,6 +23,13 @@ import {
   standardRateLimiter,
   rateLimitConfig,
 } from './middleware/rate-limit';
+import {
+  csrfCookieMiddleware,
+  csrfValidationMiddleware,
+  getCsrfToken,
+} from './middleware/csrf.middleware';
+import { authenticateJWT } from './middleware/auth.middleware';
+import healthRouter from './api/routes/health.routes';
 import { destroyAllQueues } from './services/claude-queue.service';
 import { stopAllWorkers } from './workers/claude.worker';
 import { healthMonitorService } from './services/health-monitor.service';
@@ -107,12 +115,13 @@ app.use(cors({
   origin: corsOriginValidator,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token'],
 }));
 
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(cookieParser());
 app.use(httpLogger);
 
 /**
@@ -124,6 +133,23 @@ app.use(standardRateLimiter);
 
 // Log rate limit configuration on startup
 logger.info({ rateLimitConfig }, 'Rate limiting enabled');
+
+/**
+ * CSRF Protection
+ * - csrfCookieMiddleware: Sets CSRF token cookie on all requests
+ * - csrfValidationMiddleware: Validates CSRF token on state-changing requests (POST, PUT, DELETE, PATCH)
+ */
+app.use(csrfCookieMiddleware);
+app.use(csrfValidationMiddleware);
+
+// Log CSRF protection enabled
+logger.info('CSRF protection enabled globally');
+
+/**
+ * CSRF Token endpoint
+ * Clients can call this to retrieve the current CSRF token
+ */
+app.get('/api/csrf-token', getCsrfToken);
 
 /**
  * Health check endpoint
@@ -153,15 +179,31 @@ app.get('/health', async (_req: Request, res: Response) => {
 });
 
 /**
- * API routes
+ * Health routes (no auth required - used for load balancers and k8s probes)
  */
-app.use('/api/containers', containersRouter);
-app.use('/api/templates', templatesRouter);
-app.use('/api/diagnostics', diagnosticsRouter);
-app.use('/api/settings', settingsRouter);
-app.use('/api/tasks', tasksRouter);
-app.use('/api/claude-daemon', claudeDaemonRouter);
+app.use('/api/health', healthRouter);
+
+/**
+ * Telegram routes - no JWT authentication required:
+ * - /webhook: Called by Telegram servers (has its own secret token validation)
+ * - /send-from-container: Called from inside containers (internal)
+ * Note: /status, /send, /broadcast still benefit from rate limiting
+ */
 app.use('/api/telegram', telegramRouter);
+
+/**
+ * Protected API routes - require JWT authentication
+ * (When JWT_SECRET is not configured, auth is skipped for development)
+ */
+app.use('/api/containers', authenticateJWT, containersRouter);
+app.use('/api/templates', authenticateJWT, templatesRouter);
+app.use('/api/diagnostics', authenticateJWT, diagnosticsRouter);
+app.use('/api/settings', authenticateJWT, settingsRouter);
+app.use('/api/tasks', authenticateJWT, tasksRouter);
+app.use('/api/claude-daemon', authenticateJWT, claudeDaemonRouter);
+
+// Log JWT authentication enabled
+logger.info('JWT authentication enabled on protected routes (disabled if JWT_SECRET not set)');
 
 /**
  * Root endpoint
@@ -173,6 +215,7 @@ app.get('/', (_req: Request, res: Response) => {
     description: 'Docker container management API with Claude Code integration',
     endpoints: {
       health: '/health',
+      healthApi: '/api/health',
       containers: '/api/containers',
       templates: '/api/templates',
       diagnostics: '/api/diagnostics',
@@ -207,6 +250,11 @@ app.get('/', (_req: Request, res: Response) => {
       terminal: '/terminal',
       claudeDaemon: '/claude-daemon',
       creation: '/creation',
+    },
+    authentication: {
+      note: 'Most API routes require JWT authentication. Pass Bearer token in Authorization header.',
+      publicRoutes: ['/health', '/api/health/*', '/api/csrf-token', '/api/telegram/webhook', '/api/telegram/send-from-container'],
+      protectedRoutes: ['/api/containers/*', '/api/templates/*', '/api/diagnostics/*', '/api/settings/*', '/api/tasks/*', '/api/claude-daemon/*'],
     },
   });
 });

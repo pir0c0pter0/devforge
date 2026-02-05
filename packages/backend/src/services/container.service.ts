@@ -25,6 +25,7 @@ import { emitContainerCreationProgress } from './websocket.service';
 import { taskService } from './task.service';
 import { containerLifecycleService } from './container-lifecycle.service';
 import { getQueueStatus, getActiveQueues } from './claude-queue.service';
+import { sanitizeRepositoryUrl } from '../validators/repository.validator';
 import * as path from 'path';
 import * as os from 'os';
 
@@ -50,53 +51,6 @@ const entityToContainer = (entity: ContainerEntity): Container => ({
   stoppedAt: entity.stoppedAt,
 });
 
-/**
- * Sanitize and validate repository URL to prevent command injection
- * Only allows GitHub and GitLab HTTPS URLs
- */
-const sanitizeRepositoryUrl = (url: string): string => {
-  if (!url || url.trim() === '') return '';
-
-  const trimmed = url.trim();
-
-  // Check for dangerous shell characters
-  const dangerousChars = /[;&|`$(){}[\]<>\\!#]/;
-  if (dangerousChars.test(trimmed)) {
-    throw new Error('URL contém caracteres inválidos');
-  }
-
-  // Only allow HTTPS URLs from trusted providers
-  const allowedPatterns = [
-    /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+(?:\.git)?$/,
-    /^https:\/\/gitlab\.com\/[\w.-]+\/[\w.-]+(?:\.git)?$/,
-    /^https:\/\/bitbucket\.org\/[\w.-]+\/[\w.-]+(?:\.git)?$/,
-  ];
-
-  // First normalize the URL
-  let normalized = trimmed;
-
-  // Convert git@ to https://
-  const sshMatch = normalized.match(/^git@(github|gitlab|bitbucket)\.(com|org):(.+?)(?:\.git)?$/);
-  if (sshMatch) {
-    normalized = `https://${sshMatch[1]}.${sshMatch[2]}/${sshMatch[3]}`;
-  }
-
-  // Add https:// if missing
-  if (normalized.match(/^(github|gitlab)\.com\//)) {
-    normalized = `https://${normalized}`;
-  }
-
-  // Remove .git suffix for validation
-  const cleanUrl = normalized.replace(/\.git$/, '');
-
-  // Validate against allowed patterns
-  const isValid = allowedPatterns.some(pattern => pattern.test(cleanUrl));
-  if (!isValid) {
-    throw new Error('URL de repositório inválida. Use URLs HTTPS do GitHub, GitLab ou Bitbucket.');
-  }
-
-  return normalized;
-};
 
 /**
  * Sanitize container name to prevent path traversal
@@ -1524,12 +1478,59 @@ export class ContainerService {
   }
 
   /**
-   * Prepare host config with resource limits
+   * Prepare host config with resource limits and security constraints
+   *
+   * Security hardening applied:
+   * 1. CapDrop: ALL - Remove all Linux capabilities (principle of least privilege)
+   * 2. CapAdd: Only minimal required capabilities for development
+   * 3. SecurityOpt: no-new-privileges - Prevent privilege escalation
+   * 4. User: Run as non-root user (developer:1000)
+   * 5. PidsLimit: Prevent fork bombs
+   * 6. Memory/CPU limits: Prevent resource exhaustion (DoS)
+   * 7. Ulimits: Restrict file descriptors and processes
+   *
+   * Note: ReadonlyRootfs not used because Claude Code needs to write to various
+   * system directories during normal operation (npm cache, git operations, etc.)
    */
   private prepareHostConfig(config: ContainerConfig): any {
     return {
+      // Resource limits (DoS prevention)
       Memory: config.memoryLimit * 1024 * 1024, // Convert MB to bytes
+      MemorySwap: config.memoryLimit * 1024 * 1024 * 2, // 2x memory for swap limit
       NanoCpus: config.cpuLimit * 1000000000, // Convert cores to nanocpus
+      PidsLimit: 512, // Prevent fork bombs
+
+      // Security: Drop ALL capabilities and add only what's needed
+      // This follows the principle of least privilege
+      CapDrop: ['ALL'],
+      CapAdd: [
+        'CHOWN',      // Required for npm/git operations to change file ownership
+        'DAC_OVERRIDE', // Required for file operations as developer user
+        'FOWNER',     // Required for npm install operations
+        'SETGID',     // Required for sudo operations
+        'SETUID',     // Required for sudo operations
+        'KILL',       // Required to kill child processes (Claude Code)
+        'NET_BIND_SERVICE', // Required for code-server on port 8080
+      ],
+
+      // Security: Prevent privilege escalation
+      // This blocks setuid binaries and capability escalation
+      SecurityOpt: [
+        'no-new-privileges:true',
+      ],
+
+      // Security: Run as non-root user
+      // The container runs as 'developer' (uid 1000) by default
+      // Note: Some operations require root, handled via sudo in container
+      User: '1000:1000', // developer:developer
+
+      // Security: Restrict ulimits to prevent resource exhaustion
+      Ulimits: [
+        { Name: 'nofile', Soft: 65536, Hard: 65536 },   // Open file descriptors
+        { Name: 'nproc', Soft: 4096, Hard: 8192 },      // Max processes
+        { Name: 'core', Soft: 0, Hard: 0 },              // Disable core dumps (security)
+      ],
+
       RestartPolicy: {
         Name: 'unless-stopped',
       },
