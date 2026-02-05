@@ -1,6 +1,6 @@
 # DevForge - Instruções Críticas
 
-## Versão Atual: 0.1.37-alpha
+## Versão Atual: 0.1.38-alpha
 
 ## Links
 
@@ -128,6 +128,13 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.38-alpha
+- Fix: Dockerfile corrigido para lidar com GID/UID 1000 já existente
+- Fix: Permissões do diretório pnpm global corrigidas no Dockerfile
+- UX: Tela de containers vazios agora mostra logo DevForge em vez de "[ ]"
+- UX: Dashboard vazio agora mostra logo DevForge em vez de ">_"
+- Rebuild: Imagens Docker renomeadas de claude-docker/* para devforge/*
 
 ### v0.1.37-alpha
 - Feat: Nova paleta de cores alinhada ao logo DevForge

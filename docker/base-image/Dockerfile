@@ -120,9 +120,11 @@ RUN curl -fsSL https://code-server.dev/install.sh | sh -s -- --version=${CODE_SE
 COPY --from=builder /tmp/go /usr/local/go
 
 # Create non-root user with sudo privileges
+# Handle case where GID/UID 1000 already exists (node user in base image)
 ARG USER_UID=1000
 ARG USER_GID=1000
-RUN groupadd --gid $USER_GID developer \
+RUN userdel -r node 2>/dev/null || true \
+    && groupadd --gid $USER_GID developer 2>/dev/null || groupmod -n developer $(getent group $USER_GID | cut -d: -f1) 2>/dev/null || true \
     && useradd --uid $USER_UID --gid $USER_GID -m -s /bin/zsh developer \
     && echo "developer ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/developer \
     && chmod 0440 /etc/sudoers.d/developer
@@ -152,9 +154,11 @@ RUN echo 'export PATH="$PNPM_HOME:$GOROOT/bin:$GOPATH/bin:$CARGO_HOME/bin:$PATH"
     && echo '# Use fd-find (Debian names it fdfind)' >> ~/.zshrc \
     && echo 'alias fd="fdfind"' >> ~/.zshrc
 
-# Enable corepack for pnpm
+# Enable corepack for pnpm and create pnpm directory with proper permissions
 USER root
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@latest --activate \
+    && mkdir -p /usr/local/share/pnpm \
+    && chown developer:developer /usr/local/share/pnpm
 
 # Switch back to developer user
 USER developer

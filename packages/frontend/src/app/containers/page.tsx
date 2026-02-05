@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { useContainers } from '@/hooks/use-containers'
 import { useMetrics } from '@/hooks/use-metrics'
 import { ContainerCard } from '@/components/container-card'
@@ -114,9 +115,13 @@ export default function ContainersPage() {
       {filteredContainers.length === 0 ? (
         <div className="card p-12">
           <div className="text-center">
-            <div className="mx-auto h-16 w-16 text-terminal-textMuted mb-4 flex items-center justify-center text-4xl">
-              [ ]
-            </div>
+            <Image
+              src="/logo-icon.png"
+              alt="DevForge"
+              width={64}
+              height={64}
+              className="mx-auto mb-4 opacity-50"
+            />
             <h3 className="text-lg font-semibold text-terminal-text mb-2">
               {t.containersList.noContainersFound}
             </h3>
