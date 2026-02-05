@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useRef, useCallback, KeyboardEvent } from 'react'
 import clsx from 'clsx'
-import { Bot, Play, Square, Send, Loader2, Trash2 } from 'lucide-react'
-import { useClaudeDaemon } from '@/hooks/use-claude-daemon'
+import { Bot, Play, Square, Send, Loader2, Trash2, MessageSquareText, X } from 'lucide-react'
+import { useClaudeDaemon, ClaudeMessage } from '@/hooks/use-claude-daemon'
+import { useClaudeChatStore } from '@/stores/claude-chat.store'
+import type { SessionMessage } from './session-selector'
 import { StatusBadge } from './status-badge'
 import { MessageItem } from './message-item'
 import { ThinkingIndicator } from '@/components/ui/thinking-indicator'
@@ -35,6 +37,8 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
   const [selectedSkillIndex, setSelectedSkillIndex] = useState(0)
   const [filteredSkills, setFilteredSkills] = useState<ClaudeSkill[]>([])
   const [currentSessionId, setCurrentSessionId] = useState<string | undefined>(undefined)
+  const [pendingContext, setPendingContext] = useState<string | null>(null)
+  const { setMessages } = useClaudeChatStore()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const suggestionsRef = useRef<HTMLDivElement>(null)
@@ -80,12 +84,17 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
     const trimmedInput = inputValue.trim()
     if (!trimmedInput || isLoading || daemonStatus?.status !== 'running') return
 
-    // TODO: Pass currentSessionId to sendInstruction when session API is ready
-    // sendInstruction(trimmedInput, { sessionId: currentSessionId })
-    sendInstruction(trimmedInput)
+    // If there's pending context from a selected session, prepend it
+    let instruction = trimmedInput
+    if (pendingContext) {
+      instruction = pendingContext + trimmedInput
+      setPendingContext(null) // Clear context after sending
+    }
+
+    sendInstruction(instruction)
     setInputValue('')
     setShowSkillSuggestions(false)
-  }, [inputValue, isLoading, daemonStatus, sendInstruction])
+  }, [inputValue, isLoading, daemonStatus, sendInstruction, pendingContext])
 
   const handleSelectSkill = useCallback((skill: ClaudeSkill) => {
     setInputValue(skill.name + ' ')
@@ -145,13 +154,46 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
     clearMessages()
   }, [clearMessages])
 
-  const handleSelectSession = useCallback(async (sessionId: string) => {
+  const handleSelectSession = useCallback(async (sessionId: string, sessionMessages: SessionMessage[]) => {
     setCurrentSessionId(sessionId)
-    // TODO: Load messages from session API
-    // const response = await fetch(`/api/sessions/${sessionId}/messages`)
-    // const data = await response.json()
-    // loadMessagesFromSession(data.messages)
-  }, [])
+
+    // Convert session messages to ClaudeMessage format
+    const convertedMessages: ClaudeMessage[] = sessionMessages.map((msg) => ({
+      id: msg.id,
+      type: msg.type as ClaudeMessage['type'],
+      content: msg.content,
+      timestamp: new Date(msg.timestamp),
+      toolName: msg.toolName,
+      toolInput: msg.toolInput,
+    }))
+
+    // Update the store with session messages
+    setMessages(containerId, convertedMessages)
+
+    // Store context for next message (will be prepended when user sends)
+    const contextMessages = sessionMessages.filter(
+      (m) => m.type === 'user' || m.type === 'assistant'
+    )
+
+    if (contextMessages.length > 0) {
+      // Build context prompt with conversation history
+      const contextParts = contextMessages.map((m) => {
+        const role = m.type === 'user' ? 'Usuário' : 'Assistente'
+        // Limit content to avoid too long context
+        const content = m.content.length > 500
+          ? m.content.substring(0, 500) + '...'
+          : m.content
+        return `${role}: ${content}`
+      })
+
+      const contextPrompt = `[CONTEXTO DA CONVERSA ANTERIOR]
+${contextParts.join('\n\n')}
+[FIM DO CONTEXTO]
+
+`
+      setPendingContext(contextPrompt)
+    }
+  }, [containerId, setMessages])
 
   const handleNewSession = useCallback(async () => {
     // Create explicit new session in backend (marks end of current session)
@@ -171,7 +213,8 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
       console.error('[ClaudeChat] Failed to create new session:', error)
     }
 
-    // Clear messages from UI
+    // Clear pending context and messages from UI
+    setPendingContext(null)
     clearMessages()
   }, [containerId, clearMessages])
 
@@ -324,6 +367,23 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
             <div className="px-3 py-1.5 text-xs text-terminal-textMuted border-t border-terminal-border bg-terminal-bg">
               ↑↓ navegar • Enter/Tab selecionar • Esc fechar
             </div>
+          </div>
+        )}
+
+        {/* Context indicator when session history is loaded */}
+        {pendingContext && (
+          <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-terminal-cyan/10 border border-terminal-cyan/30 rounded-lg">
+            <MessageSquareText className="w-4 h-4 text-terminal-cyan flex-shrink-0" />
+            <span className="text-xs text-terminal-cyan flex-1">
+              Contexto da conversa anterior será enviado com sua próxima mensagem
+            </span>
+            <button
+              onClick={() => setPendingContext(null)}
+              className="text-terminal-cyan/70 hover:text-terminal-cyan p-1 rounded"
+              title="Limpar contexto"
+            >
+              <X className="w-3 h-3" />
+            </button>
           </div>
         )}
 

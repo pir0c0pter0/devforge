@@ -7,6 +7,18 @@ import { History, MessageSquare, Clock, Plus, ChevronDown } from 'lucide-react'
 import { apiClient } from '@/lib/api-client'
 
 /**
+ * Message type for session messages
+ */
+export interface SessionMessage {
+  id: string
+  type: string
+  content: string
+  timestamp: string
+  toolName?: string
+  toolInput?: unknown
+}
+
+/**
  * Session interface - groups messages by time gaps
  */
 export interface ChatSession {
@@ -16,6 +28,7 @@ export interface ChatSession {
   endTime: Date
   messageCount: number
   preview: string
+  messages: SessionMessage[]
 }
 
 /**
@@ -24,7 +37,7 @@ export interface ChatSession {
 export interface SessionSelectorProps {
   containerId: string
   currentSessionId?: string
-  onSelectSession: (sessionId: string) => void
+  onSelectSession: (sessionId: string, messages: SessionMessage[]) => void
   onNewSession: () => void
 }
 
@@ -113,7 +126,7 @@ function groupMessagesIntoSessions(messages: Array<{
  * Create session object from message group
  */
 function createSessionFromGroup(group: {
-  messages: Array<{ id: string; type: string; content: string; timestamp: string }>
+  messages: Array<{ id: string; type: string; content: string; timestamp: string; toolName?: string; toolInput?: unknown }>
   startTime: Date
   endTime: Date
 }): ChatSession {
@@ -134,6 +147,7 @@ function createSessionFromGroup(group: {
     endTime: group.endTime,
     messageCount: group.messages.length,
     preview,
+    messages: group.messages,
   }
 }
 
@@ -209,8 +223,8 @@ export function SessionSelector({
     }
   }, [isOpen])
 
-  const handleSelectSession = (sessionId: string) => {
-    onSelectSession(sessionId)
+  const handleSelectSession = (session: ChatSession) => {
+    onSelectSession(session.id, session.messages)
     setIsOpen(false)
   }
 
@@ -300,7 +314,7 @@ export function SessionSelector({
               {sessions.map((session) => (
                 <button
                   key={session.id}
-                  onClick={() => handleSelectSession(session.id)}
+                  onClick={() => handleSelectSession(session)}
                   className={clsx(
                     'w-full flex items-start gap-3 px-4 py-3 transition-colors',
                     'hover:bg-terminal-bg',

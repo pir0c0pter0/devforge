@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções Críticas
 
-## Versão Atual: 0.1.16-alpha
+## Versão Atual: 0.1.17-alpha
 
 ## Links
 
@@ -128,6 +128,12 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.17-alpha
+- Feat: Clicar em conversa histórica agora carrega mensagens na UI
+- Feat: Contexto da conversa anterior é passado para o Claude na próxima mensagem
+- Feat: Indicador visual quando há contexto pendente de sessão anterior
+- Feat: Botão para limpar contexto pendente se usuário não quiser continuar conversa
 
 ### v0.1.16-alpha
 - Feat: Botão de histórico de conversas no Claude Chat
