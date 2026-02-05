@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções Críticas
 
-## Versão Atual: 0.1.26-alpha
+## Versão Atual: 0.1.28-alpha
 
 ## Links
 
@@ -128,6 +128,11 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.28-alpha
+- Fix: Corrigido erros 404 de vsda.js e vsda_bg.wasm no console do VS Code
+- Fix: Criados arquivos stub para Visual Studio Debug Adapter (proprietário MS)
+- Note: Requer rebuild da imagem Docker para aplicar
 
 ### v0.1.26-alpha
 - Feat: Loading indicator enquanto VS Code carrega no iframe

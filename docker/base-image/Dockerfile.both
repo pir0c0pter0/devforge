@@ -49,6 +49,16 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
 # Install code-server
 RUN curl -fsSL https://code-server.dev/install.sh | sh -s -- --version=${CODE_SERVER_VERSION}
 
+# Create stub files for vsda (Visual Studio Debug Adapter)
+# These are proprietary Microsoft files that code-server doesn't include
+# Creating empty stubs prevents 404 errors in browser console
+RUN VSCODE_DIR=$(find /usr/lib/code-server/lib/vscode -maxdepth 0 2>/dev/null || echo "/usr/lib/code-server/lib/vscode") && \
+    if [ -d "$VSCODE_DIR" ]; then \
+        mkdir -p "$VSCODE_DIR/out" && \
+        echo "// vsda stub - proprietary MS debug adapter not available in code-server" > "$VSCODE_DIR/out/vsda.js" && \
+        echo "" | base64 -d > "$VSCODE_DIR/out/vsda_bg.wasm" 2>/dev/null || touch "$VSCODE_DIR/out/vsda_bg.wasm"; \
+    fi
+
 # Create non-root user with sudo privileges
 # Delete existing node user first to avoid UID conflicts
 RUN userdel -r node 2>/dev/null || true \
