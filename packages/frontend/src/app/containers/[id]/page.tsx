@@ -243,6 +243,19 @@ export default function ContainerDetailPage() {
     }
   }
 
+  // Auto-fetch VS Code URL when IDE tab is selected and container is running
+  useEffect(() => {
+    if (activeTab === 'ide' && container?.status === 'running' && !vscodeUrl) {
+      const fetchVSCodeUrl = async () => {
+        const response = await apiClient.openVSCode(container.id)
+        if (response.success && response.data?.url) {
+          setVscodeUrl(response.data.url)
+        }
+      }
+      fetchVSCodeUrl()
+    }
+  }, [activeTab, container?.id, container?.status, vscodeUrl])
+
   // Initialize limits form when container loads or when entering edit mode
   const startEditingLimits = useCallback(() => {
     if (container) {

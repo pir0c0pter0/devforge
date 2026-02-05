@@ -314,16 +314,9 @@ export function ContainerCard({ container }: ContainerCardProps) {
 
   const handleOpenVSCode = async () => {
     const canProceed = await askToStartIfStopped()
-    if (!canProceed) return
-
-    const response = await apiClient.openVSCode(container.id)
-    if (response.success && response.data?.url) {
-      window.open(response.data.url, '_blank')
-    } else {
-      modal.showError(
-        t.container.failedVscode,
-        response.error || 'Erro desconhecido ao abrir VS Code'
-      )
+    if (canProceed) {
+      // Navigate to IDE tab - the tab will fetch the VS Code URL
+      router.push(`/containers/${container.id}?tab=ide`)
     }
   }
 

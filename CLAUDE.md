@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções Críticas
 
-## Versão Atual: 0.1.24-alpha
+## Versão Atual: 0.1.25-alpha
 
 ## Links
 
@@ -128,6 +128,11 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.25-alpha
+- Fix: VS Code agora abre dentro do site (não em nova janela)
+- Fix: Botão VS Code no card do container navega para aba IDE
+- Fix: Aba IDE busca URL do VS Code automaticamente ao ser selecionada
 
 ### v0.1.24-alpha
 - Fix: VS Code agora abre com o projeto carregado automaticamente (?folder=/workspace)
