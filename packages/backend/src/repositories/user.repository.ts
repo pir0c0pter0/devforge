@@ -1,6 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
 import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import { BaseRepository, BaseFilters, PaginatedResult } from './base.repository';
+import { createChildLogger } from '../utils/logger';
+
+const logger = createChildLogger({ service: 'user-repository' });
 
 /**
  * User database row type
@@ -407,8 +410,9 @@ export class UserRepository extends BaseRepository<
     });
 
     // Log the default password (only shown once)
-    console.info(
-      `[UserRepository] Created default admin user. Password: ${defaultPassword}`
+    logger.info(
+      { password: defaultPassword },
+      'Created default admin user'
     );
 
     return admin;

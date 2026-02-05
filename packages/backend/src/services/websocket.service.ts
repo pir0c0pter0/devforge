@@ -16,6 +16,9 @@ import type {
   ClaudeEvent,
 } from '@claude-docker/shared'
 import { config } from '../config'
+import { createChildLogger } from '../utils/logger'
+
+const logger = createChildLogger({ service: 'websocket' })
 import { metricsService } from './metrics.service'
 import { containerRepository } from '../repositories'
 import { terminalService } from './terminal.service'
@@ -91,7 +94,7 @@ export const initializeWebSocket = (
   // Initialize health monitor event emitter
   healthMonitorService.setEventEmitter(emitClaudeEvent)
 
-  console.info('[WebSocket] Server initialized successfully')
+  logger.debug('[WebSocket] Server initialized successfully')
 
   return io
 }
@@ -106,13 +109,13 @@ const startMetricsCollection = async (containerId: string): Promise<void> => {
   // Get container's dockerId from repository
   const container = await containerRepository.findById(containerId)
   if (!container || !container.dockerId) {
-    console.warn(`[WebSocket] Cannot start metrics collection: container ${containerId} not found`)
+    logger.warn(`[WebSocket] Cannot start metrics collection: container ${containerId} not found`)
     return
   }
 
   const dockerId = container.dockerId
 
-  console.info(`[WebSocket] Starting metrics collection for container ${containerId}`)
+  logger.debug(`[WebSocket] Starting metrics collection for container ${containerId}`)
 
   // Collect and emit immediately
   collectAndEmitMetrics(containerId, dockerId, container.diskLimit || 10240)
@@ -133,7 +136,7 @@ const stopMetricsCollection = (containerId: string): void => {
   if (intervalId) {
     clearInterval(intervalId)
     metricsIntervals.delete(containerId)
-    console.info(`[WebSocket] Stopped metrics collection for container ${containerId}`)
+    logger.debug(`[WebSocket] Stopped metrics collection for container ${containerId}`)
   }
 }
 
@@ -159,7 +162,7 @@ const collectAndEmitMetrics = async (
 
     emitContainerMetrics(containerId, metrics)
   } catch (error) {
-    console.error(`[WebSocket] Failed to collect metrics for ${containerId}:`, error)
+    logger.error(`[WebSocket] Failed to collect metrics for ${containerId}:`, error)
   }
 }
 
@@ -172,12 +175,12 @@ const setupMetricsNamespace = (): void => {
   const metricsNamespace = io.of('/metrics')
 
   metricsNamespace.on('connection', (socket: Socket) => {
-    console.info(`[WebSocket] Client connected to /metrics: ${socket.id}`)
+    logger.debug(`[WebSocket] Client connected to /metrics: ${socket.id}`)
 
     socket.on('subscribe:container', async (containerId: string) => {
       socket.join(`container:${containerId}`)
       addSubscription(containerId, socket.id)
-      console.info(`[WebSocket] Client ${socket.id} subscribed to container ${containerId}`)
+      logger.debug(`[WebSocket] Client ${socket.id} subscribed to container ${containerId}`)
 
       // Start metrics collection if this is the first subscriber
       const subscribers = subscriptions.get(containerId)
@@ -189,7 +192,7 @@ const setupMetricsNamespace = (): void => {
     socket.on('unsubscribe:container', (containerId: string) => {
       socket.leave(`container:${containerId}`)
       removeSubscription(containerId, socket.id)
-      console.info(`[WebSocket] Client ${socket.id} unsubscribed from container ${containerId}`)
+      logger.debug(`[WebSocket] Client ${socket.id} unsubscribed from container ${containerId}`)
 
       // Stop metrics collection if no more subscribers
       const subscribers = subscriptions.get(containerId)
@@ -218,7 +221,7 @@ const setupMetricsNamespace = (): void => {
         }
       }
 
-      console.info(`[WebSocket] Client disconnected from /metrics: ${socket.id}`)
+      logger.debug(`[WebSocket] Client disconnected from /metrics: ${socket.id}`)
     })
   })
 }
@@ -232,22 +235,22 @@ const setupQueueNamespace = (): void => {
   const queueNamespace = io.of('/queue')
 
   queueNamespace.on('connection', (socket: Socket) => {
-    console.info(`[WebSocket] Client connected to /queue: ${socket.id}`)
+    logger.debug(`[WebSocket] Client connected to /queue: ${socket.id}`)
 
     socket.on('subscribe:container', (containerId: string) => {
       socket.join(`container:${containerId}`)
       addSubscription(containerId, socket.id)
-      console.info(`[WebSocket] Client ${socket.id} subscribed to queue ${containerId}`)
+      logger.debug(`[WebSocket] Client ${socket.id} subscribed to queue ${containerId}`)
     })
 
     socket.on('unsubscribe:container', (containerId: string) => {
       socket.leave(`container:${containerId}`)
       removeSubscription(containerId, socket.id)
-      console.info(`[WebSocket] Client ${socket.id} unsubscribed from queue ${containerId}`)
+      logger.debug(`[WebSocket] Client ${socket.id} unsubscribed from queue ${containerId}`)
     })
 
     socket.on('instruction:confirm', (instructionId: string, approved: boolean) => {
-      console.info(
+      logger.debug(
         `[WebSocket] Instruction ${instructionId} ${approved ? 'approved' : 'rejected'}`
       )
       // This will be handled by the worker
@@ -259,7 +262,7 @@ const setupQueueNamespace = (): void => {
     socket.on('disconnect', () => {
       cleanupSocketSubscriptions(socket.id)
       cleanupSocketRateLimit(socket.id)
-      console.info(`[WebSocket] Client disconnected from /queue: ${socket.id}`)
+      logger.debug(`[WebSocket] Client disconnected from /queue: ${socket.id}`)
     })
   })
 }
@@ -273,24 +276,24 @@ const setupLogsNamespace = (): void => {
   const logsNamespace = io.of('/logs')
 
   logsNamespace.on('connection', (socket: Socket) => {
-    console.info(`[WebSocket] Client connected to /logs: ${socket.id}`)
+    logger.debug(`[WebSocket] Client connected to /logs: ${socket.id}`)
 
     socket.on('subscribe:container', (containerId: string) => {
       socket.join(`container:${containerId}`)
       addSubscription(containerId, socket.id)
-      console.info(`[WebSocket] Client ${socket.id} subscribed to logs ${containerId}`)
+      logger.debug(`[WebSocket] Client ${socket.id} subscribed to logs ${containerId}`)
     })
 
     socket.on('unsubscribe:container', (containerId: string) => {
       socket.leave(`container:${containerId}`)
       removeSubscription(containerId, socket.id)
-      console.info(`[WebSocket] Client ${socket.id} unsubscribed from logs ${containerId}`)
+      logger.debug(`[WebSocket] Client ${socket.id} unsubscribed from logs ${containerId}`)
     })
 
     socket.on('disconnect', () => {
       cleanupSocketSubscriptions(socket.id)
       cleanupSocketRateLimit(socket.id)
-      console.info(`[WebSocket] Client disconnected from /logs: ${socket.id}`)
+      logger.debug(`[WebSocket] Client disconnected from /logs: ${socket.id}`)
     })
   })
 }
@@ -341,7 +344,7 @@ const cleanupSocketDockerLogsSubscriptions = (socketId: string): void => {
       if (cleanup) {
         cleanup()
         dockerLogStreams.delete(containerId)
-        console.info(`[WebSocket] Stopped Docker log stream for container ${containerId}`)
+        logger.debug(`[WebSocket] Stopped Docker log stream for container ${containerId}`)
       }
     }
   }
@@ -356,7 +359,7 @@ const setupDockerLogsNamespace = (): void => {
   const dockerLogsNamespace = io.of('/docker-logs')
 
   dockerLogsNamespace.on('connection', (socket: Socket) => {
-    console.info(`[WebSocket] Client connected to /docker-logs: ${socket.id}`)
+    logger.debug(`[WebSocket] Client connected to /docker-logs: ${socket.id}`)
 
     let currentContainerId: string | null = null
 
@@ -371,7 +374,7 @@ const setupDockerLogsNamespace = (): void => {
       currentContainerId = containerId
       socket.join(`docker-logs:${containerId}`)
       addDockerLogsSubscription(containerId, socket.id)
-      console.info(`[WebSocket] Client ${socket.id} subscribed to Docker logs ${containerId}`)
+      logger.debug(`[WebSocket] Client ${socket.id} subscribed to Docker logs ${containerId}`)
 
       // Start log stream if this is the first subscriber
       const subscribers = dockerLogsSubscriptions.get(containerId)
@@ -389,7 +392,7 @@ const setupDockerLogsNamespace = (): void => {
           { tail: 100 }
         )
         dockerLogStreams.set(containerId, cleanup)
-        console.info(`[WebSocket] Started Docker log stream for container ${containerId}`)
+        logger.debug(`[WebSocket] Started Docker log stream for container ${containerId}`)
       }
     })
 
@@ -399,7 +402,7 @@ const setupDockerLogsNamespace = (): void => {
       if (currentContainerId === containerId) {
         currentContainerId = null
       }
-      console.info(`[WebSocket] Client ${socket.id} unsubscribed from Docker logs ${containerId}`)
+      logger.debug(`[WebSocket] Client ${socket.id} unsubscribed from Docker logs ${containerId}`)
 
       // Stop stream if no more subscribers
       const subscribers = dockerLogsSubscriptions.get(containerId)
@@ -408,7 +411,7 @@ const setupDockerLogsNamespace = (): void => {
         if (cleanup) {
           cleanup()
           dockerLogStreams.delete(containerId)
-          console.info(`[WebSocket] Stopped Docker log stream for container ${containerId}`)
+          logger.debug(`[WebSocket] Stopped Docker log stream for container ${containerId}`)
         }
       }
     })
@@ -416,7 +419,7 @@ const setupDockerLogsNamespace = (): void => {
     socket.on('disconnect', () => {
       cleanupSocketDockerLogsSubscriptions(socket.id)
       cleanupSocketRateLimit(socket.id)
-      console.info(`[WebSocket] Client disconnected from /docker-logs: ${socket.id}`)
+      logger.debug(`[WebSocket] Client disconnected from /docker-logs: ${socket.id}`)
     })
   })
 }
@@ -430,21 +433,21 @@ const setupCreationNamespace = (): void => {
   const creationNamespace = io.of('/creation')
 
   creationNamespace.on('connection', (socket: Socket) => {
-    console.info(`[WebSocket] Client connected to /creation: ${socket.id}`)
+    logger.debug(`[WebSocket] Client connected to /creation: ${socket.id}`)
 
     socket.on('subscribe:task', (taskId: string) => {
       socket.join(`task:${taskId}`)
-      console.info(`[WebSocket] Client ${socket.id} subscribed to task ${taskId}`)
+      logger.debug(`[WebSocket] Client ${socket.id} subscribed to task ${taskId}`)
     })
 
     socket.on('unsubscribe:task', (taskId: string) => {
       socket.leave(`task:${taskId}`)
-      console.info(`[WebSocket] Client ${socket.id} unsubscribed from task ${taskId}`)
+      logger.debug(`[WebSocket] Client ${socket.id} unsubscribed from task ${taskId}`)
     })
 
     socket.on('disconnect', () => {
       cleanupSocketRateLimit(socket.id)
-      console.info(`[WebSocket] Client disconnected from /creation: ${socket.id}`)
+      logger.debug(`[WebSocket] Client disconnected from /creation: ${socket.id}`)
     })
   })
 }
@@ -498,20 +501,20 @@ const setupTasksNamespace = (): void => {
   const tasksNamespace = io.of('/tasks')
 
   tasksNamespace.on('connection', (socket: Socket) => {
-    console.info(`[WebSocket] Client connected to /tasks: ${socket.id}`)
+    logger.debug(`[WebSocket] Client connected to /tasks: ${socket.id}`)
 
     socket.on('task:subscribe', (subscription: TaskSubscription) => {
       const { taskId } = subscription
       socket.join(`task:${taskId}`)
       addTaskSubscription(taskId, socket.id)
-      console.info(`[WebSocket] Client ${socket.id} subscribed to task ${taskId}`)
+      logger.debug(`[WebSocket] Client ${socket.id} subscribed to task ${taskId}`)
     })
 
     socket.on('task:unsubscribe', (unsubscription: TaskUnsubscription) => {
       const { taskId } = unsubscription
       socket.leave(`task:${taskId}`)
       removeTaskSubscription(taskId, socket.id)
-      console.info(`[WebSocket] Client ${socket.id} unsubscribed from task ${taskId}`)
+      logger.debug(`[WebSocket] Client ${socket.id} unsubscribed from task ${taskId}`)
     })
 
     socket.on('task:subscribe:batch', (subscription: TaskBatchSubscription) => {
@@ -520,7 +523,7 @@ const setupTasksNamespace = (): void => {
         socket.join(`task:${taskId}`)
         addTaskSubscription(taskId, socket.id)
       }
-      console.info(
+      logger.debug(
         `[WebSocket] Client ${socket.id} batch subscribed to ${taskIds.length} tasks`
       )
     })
@@ -528,7 +531,7 @@ const setupTasksNamespace = (): void => {
     socket.on('disconnect', () => {
       cleanupSocketTaskSubscriptions(socket.id)
       cleanupSocketRateLimit(socket.id)
-      console.info(`[WebSocket] Client disconnected from /tasks: ${socket.id}`)
+      logger.debug(`[WebSocket] Client disconnected from /tasks: ${socket.id}`)
     })
   })
 }
@@ -547,7 +550,7 @@ const setupTerminalNamespace = (): void => {
   const terminalNamespace = io.of('/terminal')
 
   terminalNamespace.on('connection', (socket: Socket) => {
-    console.info(`[WebSocket] Client connected to /terminal: ${socket.id}`)
+    logger.debug(`[WebSocket] Client connected to /terminal: ${socket.id}`)
 
     let currentSessionId: string | null = null
 
@@ -575,20 +578,20 @@ const setupTerminalNamespace = (): void => {
         terminalSubscriptions.set(session.sessionId, socket.id)
         socket.join(`terminal:${session.sessionId}`)
 
-        console.info(`[WebSocket] Terminal session ${session.sessionId} created for container ${data.containerId}`)
+        logger.debug(`[WebSocket] Terminal session ${session.sessionId} created for container ${data.containerId}`)
 
         callback({ sessionId: session.sessionId })
         socket.emit('terminal:ready', session)
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-        console.error(`[WebSocket] Failed to create terminal session:`, error)
+        logger.error(`[WebSocket] Failed to create terminal session:`, error)
         callback({ error: errorMessage })
       }
     })
 
     socket.on('terminal:input', (data: { sessionId: string; data: string }) => {
       if (data.sessionId !== currentSessionId) {
-        console.warn(`[WebSocket] Invalid session ID for input: ${data.sessionId}`)
+        logger.warn(`[WebSocket] Invalid session ID for input: ${data.sessionId}`)
         return
       }
       terminalService.write(data.sessionId, data.data)
@@ -606,7 +609,7 @@ const setupTerminalNamespace = (): void => {
         callback?.({ success: true })
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-        console.error(`[WebSocket] Failed to resize terminal:`, error)
+        logger.error(`[WebSocket] Failed to resize terminal:`, error)
         callback?.({ success: false, error: errorMessage })
       }
     })
@@ -617,7 +620,7 @@ const setupTerminalNamespace = (): void => {
         socket.leave(`terminal:${sessionId}`)
         terminalSubscriptions.delete(sessionId)
         currentSessionId = null
-        console.info(`[WebSocket] Terminal session ${sessionId} closed by client`)
+        logger.debug(`[WebSocket] Terminal session ${sessionId} closed by client`)
       }
     })
 
@@ -625,10 +628,10 @@ const setupTerminalNamespace = (): void => {
       if (currentSessionId) {
         terminalService.closeSession(currentSessionId, 143)
         terminalSubscriptions.delete(currentSessionId)
-        console.info(`[WebSocket] Client disconnected, closed terminal session ${currentSessionId}`)
+        logger.debug(`[WebSocket] Client disconnected, closed terminal session ${currentSessionId}`)
       }
       cleanupSocketRateLimit(socket.id)
-      console.info(`[WebSocket] Client disconnected from /terminal: ${socket.id}`)
+      logger.debug(`[WebSocket] Client disconnected from /terminal: ${socket.id}`)
     })
   })
 }
@@ -732,7 +735,7 @@ const setupClaudeDaemonNamespace = (): void => {
   })
 
   claudeDaemonNamespace.on('connection', (socket: Socket) => {
-    console.info(`[WebSocket] Client connected to /claude-daemon: ${socket.id}`)
+    logger.debug(`[WebSocket] Client connected to /claude-daemon: ${socket.id}`)
 
     let currentContainerId: string | null = null
 
@@ -741,7 +744,7 @@ const setupClaudeDaemonNamespace = (): void => {
       currentContainerId = containerId
       socket.join(`claude:${containerId}`)
       addClaudeDaemonSubscription(containerId, socket.id)
-      console.info(`[WebSocket] Client ${socket.id} subscribed to claude daemon ${containerId}`)
+      logger.debug(`[WebSocket] Client ${socket.id} subscribed to claude daemon ${containerId}`)
 
       // Send current status
       const status = claudeDaemonService.getStatus(containerId)
@@ -759,7 +762,7 @@ const setupClaudeDaemonNamespace = (): void => {
       if (currentContainerId === containerId) {
         currentContainerId = null
       }
-      console.info(`[WebSocket] Client ${socket.id} unsubscribed from claude daemon ${containerId}`)
+      logger.debug(`[WebSocket] Client ${socket.id} unsubscribed from claude daemon ${containerId}`)
     })
 
     // Send instruction to daemon
@@ -887,7 +890,7 @@ const setupClaudeDaemonNamespace = (): void => {
     socket.on('disconnect', () => {
       cleanupSocketClaudeDaemonSubscriptions(socket.id)
       cleanupSocketRateLimit(socket.id)
-      console.info(`[WebSocket] Client disconnected from /claude-daemon: ${socket.id}`)
+      logger.debug(`[WebSocket] Client disconnected from /claude-daemon: ${socket.id}`)
     })
   })
 }
@@ -1101,7 +1104,7 @@ export const closeWebSocket = async (): Promise<void> => {
   if (io) {
     await new Promise<void>((resolve) => {
       io?.close(() => {
-        console.info('[WebSocket] Server closed gracefully')
+        logger.debug('[WebSocket] Server closed gracefully')
         resolve()
       })
     })

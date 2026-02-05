@@ -102,13 +102,13 @@ const initializeConfig = (): Config => {
   validateRequiredEnvVars()
   const cfg = loadConfig()
 
-  console.info('[Config] Configuration loaded successfully')
-  console.info(`[Config] Environment: ${cfg.nodeEnv}`)
-  console.info(`[Config] Port: ${cfg.port}`)
-  console.info(`[Config] Redis URL: ${cfg.redisUrl}`)
-  console.info(`[Config] Redis Auth: ${cfg.redisPassword ? 'enabled' : 'disabled'}`)
-  console.info(`[Config] Log Level: ${cfg.logLevel}`)
-  console.info(`[Config] Allowed Origins: ${cfg.allowedOrigins.join(', ')}`)
+  // Only log config in development to avoid polluting terminal
+  if (cfg.nodeEnv === 'development') {
+    // Use stderr to avoid polluting stdout in interactive sessions
+    process.stderr.write(`[Config] Environment: ${cfg.nodeEnv}\n`)
+    process.stderr.write(`[Config] Port: ${cfg.port}\n`)
+    process.stderr.write(`[Config] Log Level: ${cfg.logLevel}\n`)
+  }
 
   return cfg
 }

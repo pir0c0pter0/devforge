@@ -1,5 +1,8 @@
 import { Redis } from 'ioredis'
 import { config } from '../config'
+import { createChildLogger } from './logger'
+
+const logger = createChildLogger({ service: 'redis' })
 
 let redisClient: Redis | null = null
 
@@ -31,23 +34,23 @@ export const getRedisConnection = (): Redis => {
     redisClient = new Redis(config.redisUrl, options)
 
     redisClient.on('connect', () => {
-      console.info('[Redis] Connection established')
+      logger.info('Connection established')
     })
 
     redisClient.on('ready', () => {
-      console.info('[Redis] Client ready')
+      logger.info('Client ready')
     })
 
     redisClient.on('error', (err: Error) => {
-      console.error('[Redis] Connection error:', err.message)
+      logger.error({ error: err.message }, 'Connection error')
     })
 
     redisClient.on('close', () => {
-      console.warn('[Redis] Connection closed')
+      logger.warn('Connection closed')
     })
 
     redisClient.on('reconnecting', () => {
-      console.info('[Redis] Attempting to reconnect...')
+      logger.info('Attempting to reconnect...')
     })
   }
 
@@ -61,7 +64,7 @@ export const closeRedisConnection = async (): Promise<void> => {
   if (redisClient) {
     await redisClient.quit()
     redisClient = null
-    console.info('[Redis] Connection closed gracefully')
+    logger.info('Connection closed gracefully')
   }
 }
 
