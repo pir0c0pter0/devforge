@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções Críticas
 
-## Versão Atual: 0.1.29-alpha
+## Versão Atual: 0.1.30-alpha
 
 ## Links
 
@@ -128,6 +128,12 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.30-alpha
+- Fix: VS Code agora persiste ao trocar de aba (não reinicia mais)
+- Fix: Aumentado tempo de loading de 8s para 30s (tempo real de bootstrap)
+- Feat: Mensagens progressivas durante loading ("Connecting...", "Loading extensions...", etc)
+- Perf: Iframe permanece montado via CSS hidden (mesmo padrão do Terminal)
 
 ### v0.1.29-alpha
 - Fix: Eliminadas conexões WebSocket duplicadas do ClaudeDaemon

@@ -8,19 +8,38 @@ interface IDEViewProps {
   containerStatus: string
 }
 
-const MIN_LOADING_TIME = 8000 // Minimum 8 seconds loading time
+const MIN_LOADING_TIME = 30000 // 30 seconds - VS Code needs full bootstrap time
+
+// Progressive loading messages
+const LOADING_PHASES = [
+  { time: 0, text: 'Connecting to VS Code' },
+  { time: 5000, text: 'Loading editor' },
+  { time: 12000, text: 'Initializing extensions' },
+  { time: 20000, text: 'Preparing workspace' },
+  { time: 27000, text: 'Almost ready' },
+]
 
 export function IDEView({ vscodeUrl, containerStatus }: IDEViewProps) {
   const [isIframeLoading, setIsIframeLoading] = useState(true)
   const [iframeLoaded, setIframeLoaded] = useState(false)
   const [minTimeElapsed, setMinTimeElapsed] = useState(false)
+  const [loadingText, setLoadingText] = useState(LOADING_PHASES[0].text)
 
   // Minimum loading time to ensure VS Code has time to render
   useEffect(() => {
     const timer = setTimeout(() => {
       setMinTimeElapsed(true)
     }, MIN_LOADING_TIME)
-    return () => clearTimeout(timer)
+
+    // Progressive loading messages
+    const phaseTimers = LOADING_PHASES.slice(1).map(phase =>
+      setTimeout(() => setLoadingText(phase.text), phase.time)
+    )
+
+    return () => {
+      clearTimeout(timer)
+      phaseTimers.forEach(t => clearTimeout(t))
+    }
   }, [])
 
   // Hide loading only when both conditions are met
@@ -53,7 +72,7 @@ export function IDEView({ vscodeUrl, containerStatus }: IDEViewProps) {
             <svg className="mx-auto h-16 w-16 text-blue-500 mb-4" viewBox="0 0 24 24" fill="currentColor">
               <path d="M23.15 2.587L18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z" />
             </svg>
-            <AnimatedDots text="Loading VS Code" />
+            <AnimatedDots text={loadingText} />
           </div>
         </div>
       )}
