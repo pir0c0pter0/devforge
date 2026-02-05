@@ -686,6 +686,23 @@ const setupClaudeDaemonNamespace = (): void => {
     claudeDaemonNamespace.to(`claude:${containerId}`).emit('claude:output' as any, event)
   })
 
+  // Forward processing state events (fix #9 - backend as source of truth)
+  claudeDaemonService.on('instruction:processing:start', (data: { containerId: string; timestamp: Date }) => {
+    claudeDaemonNamespace.to(`claude:${data.containerId}`).emit('instruction:processing:start' as any, data)
+  })
+
+  claudeDaemonService.on('instruction:processing:progress', (data: { containerId: string; stage: string; message?: string; timestamp: Date }) => {
+    claudeDaemonNamespace.to(`claude:${data.containerId}`).emit('instruction:processing:progress' as any, data)
+  })
+
+  claudeDaemonService.on('instruction:processing:complete', (data: { containerId: string; success: boolean; durationMs: number; timestamp: Date }) => {
+    claudeDaemonNamespace.to(`claude:${data.containerId}`).emit('instruction:processing:complete' as any, data)
+  })
+
+  claudeDaemonService.on('instruction:processing:error', (data: { containerId: string; error: string; timestamp: Date }) => {
+    claudeDaemonNamespace.to(`claude:${data.containerId}`).emit('instruction:processing:error' as any, data)
+  })
+
   // Forward log events from logs service to WebSocket clients
   claudeLogsService.on('log:new', ({ containerId, entry }: { containerId: string; entry: ClaudeLogEntry }) => {
     claudeDaemonNamespace.to(`claude:${containerId}`).emit('claude:log' as any, entry)

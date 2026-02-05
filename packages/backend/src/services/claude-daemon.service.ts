@@ -12,6 +12,8 @@ import type {
   ClaudeEvent,
   ClaudeEventType,
   ClaudeStreamInput,
+  ProcessingState,
+  ProcessingStage,
 } from '@claude-docker/shared'
 
 /**
@@ -26,6 +28,7 @@ interface ActiveSession {
   isProcessing: boolean
   mode: 'interactive' | 'autonomous'
   currentProcess?: ChildProcess
+  processingState: ProcessingState
 }
 
 /**
@@ -176,6 +179,7 @@ class ClaudeDaemonService extends EventEmitter {
         sessionId,
         isProcessing: false,
         mode: containerMode,
+        processingState: { isProcessing: false, stage: 'idle' },
       }
 
       // Update state to running
@@ -267,6 +271,15 @@ class ClaudeDaemonService extends EventEmitter {
       session.isProcessing = false
       session.currentProcess = undefined
 
+      // Reset processing state on cancellation (fix #9)
+      session.processingState = { isProcessing: false, stage: 'idle' }
+      this.emit('instruction:processing:complete', {
+        containerId,
+        success: false,
+        durationMs: 0,
+        timestamp: new Date(),
+      })
+
       // Log cancellation
       claudeLogsService.addLog(containerId, 'system', 'Instrucao cancelada pelo usuario', {
         sessionId: session.sessionId,
@@ -286,6 +299,8 @@ class ClaudeDaemonService extends EventEmitter {
       logger.error({ containerId, error }, 'Failed to cancel instruction')
       session.isProcessing = false
       session.currentProcess = undefined
+      // Reset processing state on error (fix #9)
+      session.processingState = { isProcessing: false, stage: 'idle' }
       return false
     }
   }
@@ -326,6 +341,20 @@ class ClaudeDaemonService extends EventEmitter {
     session.state.lastActivity = new Date()
 
     const startTime = Date.now()
+
+    // Set processing state FIRST (fix #9 - backend as source of truth)
+    session.processingState = {
+      isProcessing: true,
+      stage: 'starting',
+      startedAt: new Date(),
+      lastActivityAt: new Date(),
+    }
+
+    // Emit processing start event
+    this.emit('instruction:processing:start', {
+      containerId,
+      timestamp: new Date(),
+    })
 
     logger.info({ containerId, instructionLength: instruction.length, sessionId: session.sessionId }, 'Sending instruction to Claude')
 
@@ -410,6 +439,18 @@ class ClaudeDaemonService extends EventEmitter {
             jobId,
           })
 
+          // Update processing state based on output (fix #9)
+          const newStage = this.detectProcessingStage(data)
+          if (session.processingState.stage !== newStage) {
+            session.processingState.stage = newStage
+            session.processingState.lastActivityAt = new Date()
+            this.emit('instruction:processing:progress', {
+              containerId,
+              stage: newStage,
+              timestamp: new Date(),
+            })
+          }
+
           this.handleOutput(containerId, data)
         })
 
@@ -491,6 +532,15 @@ class ClaudeDaemonService extends EventEmitter {
           if (hasBackgroundAgents && exitCode === 0) {
             logger.info({ containerId }, 'Background agents detected, waiting for completion...')
 
+            // Update processing state to waiting_agents (fix #9)
+            session.processingState.stage = 'waiting_agents'
+            this.emit('instruction:processing:progress', {
+              containerId,
+              stage: 'waiting_agents',
+              message: 'Aguardando agentes finalizarem...',
+              timestamp: new Date(),
+            })
+
             // Emit event to inform frontend
             const waitEvent: ClaudeEvent = {
               type: 'system',
@@ -508,6 +558,15 @@ class ClaudeDaemonService extends EventEmitter {
           session.currentProcess = undefined
           session.state.instructionCount++
           session.state.lastActivity = new Date()
+
+          // Reset processing state and emit complete event (fix #9)
+          session.processingState = { isProcessing: false, stage: 'idle' }
+          this.emit('instruction:processing:complete', {
+            containerId,
+            success: exitCode === 0,
+            durationMs: duration,
+            timestamp: new Date(),
+          })
 
           // If killed by timeout, reject with timeout error
           if (killedByTimeout) {
@@ -546,6 +605,14 @@ class ClaudeDaemonService extends EventEmitter {
           const duration = Date.now() - startTime
           logger.error({ containerId, error, duration }, 'Instruction process error')
 
+          // Reset processing state and emit error (fix #9)
+          session.processingState = { isProcessing: false, stage: 'idle' }
+          this.emit('instruction:processing:error', {
+            containerId,
+            error: error.message,
+            timestamp: new Date(),
+          })
+
           // Log erro do processo
           claudeLogsService.addLog(containerId, 'system', `Erro no processo: ${error.message}`, {
             sessionId: session.sessionId,
@@ -566,6 +633,13 @@ class ClaudeDaemonService extends EventEmitter {
       } catch (error) {
         session.isProcessing = false
         session.currentProcess = undefined
+        // Reset processing state on catch (fix #9)
+        session.processingState = { isProcessing: false, stage: 'idle' }
+        this.emit('instruction:processing:error', {
+          containerId,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          timestamp: new Date(),
+        })
         reject(error)
       }
     })
@@ -681,6 +755,30 @@ class ClaudeDaemonService extends EventEmitter {
       default:
         return 'system'
     }
+  }
+
+  /**
+   * Detect processing stage based on output content (fix #9)
+   * Used to provide granular progress updates to frontend
+   */
+  private detectProcessingStage(data: string): ProcessingStage {
+    // Check for tool usage (processing stage)
+    if (data.includes('"type":"tool_use"') || data.includes('"name":"Task"')) {
+      return 'processing'
+    }
+
+    // Check for streaming assistant response
+    if (data.includes('"type":"assistant"')) {
+      return 'streaming'
+    }
+
+    // Check for final result
+    if (data.includes('"type":"result"')) {
+      return 'finalizing'
+    }
+
+    // Default to streaming if we have any output
+    return 'streaming'
   }
 
   /**

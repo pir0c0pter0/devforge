@@ -13,6 +13,27 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:800
 export type DaemonStatus = 'starting' | 'running' | 'stopping' | 'stopped' | 'error'
 
 /**
+ * Processing stage for tracking Claude Code execution state (fix #9)
+ */
+export type ProcessingStage =
+  | 'idle'
+  | 'starting'
+  | 'streaming'
+  | 'processing'
+  | 'waiting_agents'
+  | 'finalizing'
+
+/**
+ * Processing state received from backend (fix #9)
+ */
+export interface ProcessingState {
+  isProcessing: boolean
+  stage: ProcessingStage
+  startedAt?: Date
+  lastActivityAt?: Date
+}
+
+/**
  * Estado do daemon Claude Code em um container
  */
 export interface DaemonState {
@@ -87,8 +108,10 @@ export interface UseClaudeDaemonReturn {
   daemonStatus: DaemonState | null
   /** All messages received from Claude */
   messages: ClaudeMessage[]
-  /** Whether waiting for instruction response */
+  /** Whether waiting for instruction response (derived from processingState) */
   isLoading: boolean
+  /** Current processing state from backend (fix #9 - source of truth) */
+  processingState: ProcessingState
   /** Send an instruction to Claude (auto-cancels if busy) */
   sendInstruction: (instruction: string) => void
   /** Cancel the current instruction */
@@ -231,11 +254,25 @@ function parseClaudeEventToMessage(event: ClaudeEvent, messageId: string): Claud
  *
  * Messages are persisted in SQLite via backend and loaded on initialization.
  */
+/**
+ * Safety timeout for processing state (5 minutes)
+ * If backend doesn't send complete event, reset to idle
+ */
+const PROCESSING_SAFETY_TIMEOUT = 5 * 60 * 1000
+
 export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemonReturn {
   const { containerId, onMessage, onStatusChange, onError } = options
 
   const [isConnected, setIsConnected] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
+
+  // Processing state from backend (fix #9 - single source of truth)
+  const [processingState, setProcessingState] = useState<ProcessingState>({
+    isProcessing: false,
+    stage: 'idle',
+  })
+
+  // Derive isLoading from processingState (fix #9)
+  const isLoading = processingState.isProcessing
 
   // Use Zustand store for state management
   const {
@@ -377,13 +414,42 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
         }).catch((err) => console.error('[ClaudeDaemon] Failed to save message:', err))
       }
 
-      // These events mean Claude has responded - stop loading indicator
-      // 'result' = final result, 'assistant' = Claude's response, 'error' = something went wrong
+      // Fix #9: Removed setIsLoading(false) here - now derived from backend processingState
+      // Processing state is managed by instruction:processing:* events
       if (event.type === 'result' || event.type === 'assistant' || event.type === 'error') {
-        setIsLoading(false)
         // Reset retry count on successful response
         retryCountRef.current = 0
       }
+    })
+
+    // Fix #9: Listen to processing state events from backend (source of truth)
+    socket.on('instruction:processing:start', ({ timestamp }: { timestamp: string }) => {
+      console.log('[ClaudeDaemon] Processing started')
+      setProcessingState({
+        isProcessing: true,
+        stage: 'starting',
+        startedAt: new Date(timestamp),
+        lastActivityAt: new Date(timestamp),
+      })
+    })
+
+    socket.on('instruction:processing:progress', ({ stage, timestamp }: { stage: ProcessingStage; timestamp: string }) => {
+      console.log('[ClaudeDaemon] Processing progress:', stage)
+      setProcessingState(prev => ({
+        ...prev,
+        stage,
+        lastActivityAt: new Date(timestamp),
+      }))
+    })
+
+    socket.on('instruction:processing:complete', () => {
+      console.log('[ClaudeDaemon] Processing complete')
+      setProcessingState({ isProcessing: false, stage: 'idle' })
+    })
+
+    socket.on('instruction:processing:error', () => {
+      console.log('[ClaudeDaemon] Processing error')
+      setProcessingState({ isProcessing: false, stage: 'idle' })
     })
 
     // Handle instruction received confirmation
@@ -397,7 +463,7 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
     socket.on('instruction:cancelled', ({ cancelled }: { containerId: string; cancelled: boolean }) => {
       console.log('[ClaudeDaemon] Instruction cancelled:', cancelled)
       if (cancelled) {
-        setIsLoading(false)
+        // Fix #9: processingState will be updated via instruction:processing:complete event
         // Add system message to inform user
         const messageId = getNextMessageId(containerId)
         const cancelMessage: ClaudeMessage = {
@@ -440,7 +506,7 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
         }, 1500)
       } else {
         onErrorRef.current?.(data.message)
-        setIsLoading(false)
+        // Fix #9: processingState will be updated via instruction:processing:error event
         retryCountRef.current = 0
       }
     })
@@ -472,7 +538,7 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
         }, 1500)
       } else {
         onErrorRef.current?.(data.error)
-        setIsLoading(false)
+        // Fix #9: processingState will be updated via instruction:processing:error event
         retryCountRef.current = 0
       }
     })
@@ -502,7 +568,13 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
       }
 
       console.log('[ClaudeDaemon] Sending instruction:', instruction)
-      setIsLoading(true)
+      // Fix #9: Set optimistic processing state (will be confirmed by backend event)
+      setProcessingState({
+        isProcessing: true,
+        stage: 'starting',
+        startedAt: new Date(),
+        lastActivityAt: new Date(),
+      })
 
       // Store last instruction for potential retry (skip if it's a /rewind command)
       if (!instruction.startsWith('/rewind')) {
@@ -548,7 +620,7 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
 
     console.log('[ClaudeDaemon] Cancelling current instruction for container:', containerId)
     socketRef.current.emit('instruction:cancel', { containerId })
-    setIsLoading(false)
+    // Fix #9: processingState will be updated via instruction:processing:complete event from backend
   }, [containerId])
 
   // Start the daemon
@@ -584,11 +656,24 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
       .catch((err) => console.error('[ClaudeDaemon] Failed to clear messages from backend:', err))
   }, [containerId, storeClearMessages])
 
+  // Fix #9: Safety timeout - if backend doesn't send complete event, reset to idle
+  useEffect(() => {
+    if (!processingState.isProcessing) return
+
+    const timeoutId = setTimeout(() => {
+      console.warn('[ClaudeDaemon] Safety timeout reached (5 min), resetting processing state')
+      setProcessingState({ isProcessing: false, stage: 'idle' })
+    }, PROCESSING_SAFETY_TIMEOUT)
+
+    return () => clearTimeout(timeoutId)
+  }, [processingState.isProcessing])
+
   return {
     isConnected,
     daemonStatus,
     messages,
     isLoading,
+    processingState,
     sendInstruction,
     cancelInstruction,
     startDaemon,

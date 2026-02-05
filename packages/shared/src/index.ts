@@ -134,6 +134,13 @@ export type {
   DaemonState,
   DaemonSession,
   DaemonStatusResponse,
+  // Processing State (fix #9)
+  ProcessingStage,
+  ProcessingState,
+  ProcessingStartEvent,
+  ProcessingProgressEvent,
+  ProcessingCompleteEvent,
+  ProcessingErrorEvent,
   // Events
   ClaudeEventType,
   BaseClaudeEvent,

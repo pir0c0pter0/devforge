@@ -21,9 +21,11 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
     daemonStatus,
     isConnected,
     isLoading,
+    processingState,
     startDaemon,
     stopDaemon,
     sendInstruction,
+    cancelInstruction,
     clearMessages,
   } = useClaudeDaemon({ containerId })
 
@@ -222,12 +224,15 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
           </>
         )}
 
-        {/* Minimal thinking indicator - fixed bottom left */}
+        {/* Enhanced thinking indicator with stage, timer and cancel (fix #9) */}
         {isLoading && (
           <div className="sticky bottom-0 left-0 pt-2 pb-1">
             <ThinkingIndicator
               text={t.claudeChat.thinkingShort}
-              variant="minimal"
+              variant="enhanced"
+              stage={processingState.stage}
+              startedAt={processingState.startedAt}
+              onCancel={cancelInstruction}
             />
           </div>
         )}

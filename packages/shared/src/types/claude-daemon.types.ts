@@ -404,3 +404,67 @@ export interface ClaudeAssistantMessage {
     content: string
   }
 }
+
+// ============================================
+// Processing State Types (fix #9)
+// ============================================
+
+/**
+ * Processing stage for tracking Claude Code execution state
+ * Used by backend as source of truth for processing state
+ */
+export type ProcessingStage =
+  | 'idle'
+  | 'starting'
+  | 'streaming'
+  | 'processing'
+  | 'waiting_agents'
+  | 'finalizing'
+
+/**
+ * Processing state for a container's Claude session
+ */
+export interface ProcessingState {
+  isProcessing: boolean
+  stage: ProcessingStage
+  startedAt?: Date
+  lastActivityAt?: Date
+}
+
+/**
+ * Event emitted when processing starts
+ */
+export interface ProcessingStartEvent {
+  containerId: string
+  instructionId?: string
+  timestamp: Date
+}
+
+/**
+ * Event emitted during processing to update stage
+ */
+export interface ProcessingProgressEvent {
+  containerId: string
+  stage: ProcessingStage
+  message?: string
+  timestamp: Date
+}
+
+/**
+ * Event emitted when processing completes
+ */
+export interface ProcessingCompleteEvent {
+  containerId: string
+  success: boolean
+  durationMs: number
+  timestamp: Date
+}
+
+/**
+ * Event emitted when processing fails
+ */
+export interface ProcessingErrorEvent {
+  containerId: string
+  error: string
+  timestamp: Date
+}

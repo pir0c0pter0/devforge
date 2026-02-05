@@ -269,6 +269,14 @@ export const translations = {
       placeholder: 'Digite sua instrução...',
       placeholderDisabled: 'Inicie o Claude Code primeiro',
       pressEnter: 'Pressione Enter para enviar',
+      // Processing stages (fix #9)
+      processingStages: {
+        starting: 'Iniciando processamento...',
+        streaming: 'Recebendo resposta...',
+        processing: 'Claude está pensando...',
+        waitingAgents: 'Aguardando agentes finalizarem...',
+        finalizing: 'Finalizando...',
+      },
     },
 
     // Templates Page
@@ -922,6 +930,14 @@ export const translations = {
       placeholder: 'Type your instruction...',
       placeholderDisabled: 'Start Claude Code first',
       pressEnter: 'Press Enter to send',
+      // Processing stages (fix #9)
+      processingStages: {
+        starting: 'Starting processing...',
+        streaming: 'Receiving response...',
+        processing: 'Claude is thinking...',
+        waitingAgents: 'Waiting for agents to finish...',
+        finalizing: 'Finalizing...',
+      },
     },
 
     // Templates Page
