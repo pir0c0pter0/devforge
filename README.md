@@ -1,26 +1,17 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-0.1.31--alpha-22c55e?style=for-the-badge" alt="Version">
+  <img src="packages/frontend/public/logo-full.png" alt="DevForge Logo" width="280">
+</p>
+
+<p align="center">
+  <strong>Orquestracao de containers para desenvolvimento com IA - Claude Code + VS Code</strong>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Version-0.1.36--alpha-22c55e?style=for-the-badge" alt="Version">
   <img src="https://img.shields.io/badge/License-PolyForm%20NC-22c55e?style=for-the-badge" alt="License">
   <img src="https://img.shields.io/badge/Next.js-15-0d1117?style=for-the-badge&logo=next.js&logoColor=white" alt="Next.js">
   <img src="https://img.shields.io/badge/Docker-Required-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker">
   <img src="https://img.shields.io/badge/TypeScript-5.0-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript">
-</p>
-
-```
-  _____              ______
- |  __ \            |  ____|
- | |  | | _____   __| |__ ___  _ __ __ _  ___
- | |  | |/ _ \ \ / /  __/ _ \| '__/ _` |/ _ \
- | |__| |  __/\ V /| | | (_) | | | (_| |  __/
- |_____/ \___| \_/ |_|  \___/|_|  \__, |\___|
-                                    __/ |
-                                   |___/
-
-  >_ DevForge - Orquestração de containers para desenvolvimento com IA
-```
-
-<p align="center">
-  <strong>Orquestração de containers para desenvolvimento com IA - Claude Code + VS Code</strong>
 </p>
 
 ---
@@ -622,35 +613,47 @@ journalctl --user -u devforge-frontend -f
 
 ## Changelog
 
-### v0.1.31-alpha (Latest)
-- **Feat**: Opcoes de Embedded Development na criacao de containers
-- **Feat**: Suporte STM32 (ARM GCC, OpenOCD, ST-Link, Cortex-Debug)
-- **Feat**: Suporte ESP32 (PlatformIO IDE completo com ESP-IDF)
-- **Feat**: Extensoes VS Code pre-instaladas para desenvolvimento embarcado
+### v0.1.36-alpha (Latest)
+- **Feat**: Licenca alterada de MIT para PolyForm Noncommercial 1.0.0
+- **Feat**: COMMERCIAL-LICENSE.md com tiers Starter ($19), Pro ($99) e Enterprise
+- **Feat**: CONTRIBUTING.md com CLA para dual licensing
+- **Feat**: Novo logo e identidade visual
+
+### v0.1.35-alpha
+- Feat: VSCodeHealthService extraido para servico dedicado
+- Feat: Health check real do VS Code (reduz loading de 30s para 3-15s)
+- Security: VS Code requer autenticacao por senha
+
+### v0.1.34-alpha
+- Feat: Container so mostra 100% quando VS Code esta pronto
+- Feat: Progress bar mostra status de inicializacao do VS Code
+
+### v0.1.33-alpha
+- Feat: Notificacao quando Claude termina processamento em background
+
+### v0.1.32-alpha
+- Fix: Claude Code tab persiste estado ao trocar de aba
+
+### v0.1.31-alpha
+- Feat: Opcoes de Embedded Development (STM32, ESP32)
+- Feat: Extensoes VS Code pre-instaladas para desenvolvimento embarcado
 
 ### v0.1.30-alpha
-- Fix: VS Code persiste ao trocar de aba (nao reinicia mais)
-- Fix: Tempo de loading aumentado para 30s (bootstrap real)
+- Fix: VS Code persiste ao trocar de aba
 - Feat: Mensagens progressivas durante loading do VS Code
 
 ### v0.1.29-alpha
 - Fix: Conexoes WebSocket duplicadas eliminadas
-- Fix: Headers de seguranca adicionados
-- Perf: Deduplicacao de sockets com ref-counting
-
-### v0.1.28-alpha
-- Fix: Erros 404 vsda.js/vsda_bg.wasm corrigidos
+- Feat: Headers de seguranca adicionados
 
 ### v0.1.25-alpha
 - Feat: VS Code embarcado no site (aba IDE)
 
 ### v0.1.22-alpha
 - Feat: Auto-deteccao de linguagem do projeto
-- Feat: Extensoes recomendadas automaticas
 
 ### v0.1.16-alpha
 - Feat: Historico de sessoes Claude
-- Feat: Continuar conversas anteriores
 
 ### v0.1.9-alpha
 - Feat: Logs Docker persistentes (24h)
