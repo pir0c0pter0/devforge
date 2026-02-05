@@ -14,7 +14,7 @@
 export const VERSION = {
   major: 0,
   minor: 1,
-  patch: 15,
+  patch: 16,
   stage: 'alpha', // 'alpha' | 'beta' | 'rc' | ''
 } as const
 

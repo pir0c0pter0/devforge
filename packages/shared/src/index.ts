@@ -209,3 +209,16 @@ export type {
   DockerLogsUnsubscribe,
   DockerLogsRequestHistory,
 } from './types/docker-logs.types'
+
+// Export all Claude Sessions types
+export type {
+  ClaudeSessionSource,
+  ClaudeSession,
+  ClaudeSessionMessage,
+  ClaudeSessionListResponse,
+  ClaudeSessionWithMessages,
+  ClaudeSessionFilter,
+  CreateClaudeSessionRequest,
+  UpdateClaudeSessionRequest,
+  ClaudeSessionStats,
+} from './types/claude-sessions.types'

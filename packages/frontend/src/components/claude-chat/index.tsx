@@ -9,6 +9,7 @@ import { MessageItem } from './message-item'
 import { ThinkingIndicator } from '@/components/ui/thinking-indicator'
 import { useI18n } from '@/lib/i18n'
 import { SKILL_CATEGORIES, filterSkills, type ClaudeSkill } from '@/lib/claude-skills'
+import { SessionSelector } from './session-selector'
 
 export interface ClaudeChatProps {
   containerId: string
@@ -33,6 +34,7 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
   const [showSkillSuggestions, setShowSkillSuggestions] = useState(false)
   const [selectedSkillIndex, setSelectedSkillIndex] = useState(0)
   const [filteredSkills, setFilteredSkills] = useState<ClaudeSkill[]>([])
+  const [currentSessionId, setCurrentSessionId] = useState<string | undefined>(undefined)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const suggestionsRef = useRef<HTMLDivElement>(null)
@@ -78,6 +80,8 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
     const trimmedInput = inputValue.trim()
     if (!trimmedInput || isLoading || daemonStatus?.status !== 'running') return
 
+    // TODO: Pass currentSessionId to sendInstruction when session API is ready
+    // sendInstruction(trimmedInput, { sessionId: currentSessionId })
     sendInstruction(trimmedInput)
     setInputValue('')
     setShowSkillSuggestions(false)
@@ -141,6 +145,19 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
     clearMessages()
   }, [clearMessages])
 
+  const handleSelectSession = useCallback(async (sessionId: string) => {
+    setCurrentSessionId(sessionId)
+    // TODO: Load messages from session API
+    // const response = await fetch(`/api/sessions/${sessionId}/messages`)
+    // const data = await response.json()
+    // loadMessagesFromSession(data.messages)
+  }, [])
+
+  const handleNewSession = useCallback(() => {
+    setCurrentSessionId(undefined)
+    clearMessages()
+  }, [clearMessages])
+
   const isDaemonRunning = daemonStatus?.status === 'running'
   const isDaemonTransitioning = daemonStatus?.status === 'starting' || daemonStatus?.status === 'stopping'
   const canSend = isDaemonRunning && !isLoading && inputValue.trim().length > 0
@@ -160,6 +177,14 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Session Selector */}
+          <SessionSelector
+            containerId={containerId}
+            currentSessionId={currentSessionId}
+            onSelectSession={handleSelectSession}
+            onNewSession={handleNewSession}
+          />
+
           {/* Clear button */}
           {messages.length > 0 && (
             <button

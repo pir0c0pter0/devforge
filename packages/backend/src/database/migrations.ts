@@ -332,10 +332,160 @@ const dockerLogsLogTypeMigration: Migration = {
 };
 
 /**
+ * Migration 008 - Add claude_sessions table and session_id to claude_messages
+ * Enables conversation session management with automatic grouping of messages
+ */
+const claudeSessionsMigration: Migration = {
+  name: '008_claude_sessions',
+  up: (db: Database.Database) => {
+    // Create claude_sessions table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS claude_sessions (
+        id TEXT PRIMARY KEY,
+        container_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        source TEXT NOT NULL CHECK (source IN ('telegram', 'container', 'api')),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        message_count INTEGER DEFAULT 0,
+        FOREIGN KEY (container_id) REFERENCES containers(id) ON DELETE CASCADE
+      )
+    `);
+    logger.debug('Created claude_sessions table');
+
+    // Add session_id column to claude_messages if it doesn't exist
+    const columns = db.prepare('PRAGMA table_info(claude_messages)').all() as Array<{ name: string }>;
+    const hasSessionId = columns.some((c) => c.name === 'session_id');
+
+    if (!hasSessionId) {
+      db.exec('ALTER TABLE claude_messages ADD COLUMN session_id TEXT');
+      logger.debug('Added session_id column to claude_messages');
+
+      // Add foreign key constraint via index (SQLite limitation)
+      db.exec(
+        'CREATE INDEX IF NOT EXISTS idx_claude_messages_session_id ON claude_messages(session_id)'
+      );
+      logger.debug('Created session_id index on claude_messages');
+    } else {
+      logger.debug('session_id column already exists');
+    }
+
+    // Create indexes for claude_sessions
+    db.exec(
+      'CREATE INDEX IF NOT EXISTS idx_claude_sessions_container_id ON claude_sessions(container_id)'
+    );
+    db.exec(
+      'CREATE INDEX IF NOT EXISTS idx_claude_sessions_updated_at ON claude_sessions(updated_at DESC)'
+    );
+    db.exec(
+      'CREATE INDEX IF NOT EXISTS idx_claude_sessions_container_updated ON claude_sessions(container_id, updated_at DESC)'
+    );
+    db.exec(
+      'CREATE INDEX IF NOT EXISTS idx_claude_sessions_source ON claude_sessions(source)'
+    );
+    logger.debug('Created claude_sessions indexes');
+
+    // Create trigger for auto-updating updated_at
+    db.exec(`
+      CREATE TRIGGER IF NOT EXISTS trigger_claude_sessions_updated_at
+      AFTER UPDATE ON claude_sessions
+      BEGIN
+        UPDATE claude_sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+      END
+    `);
+    logger.debug('Created claude_sessions trigger');
+
+    // Migrate existing messages into sessions grouped by 30-minute gaps
+    const GAP_MINUTES = 30;
+
+    // Get all existing messages ordered by container and time
+    const messages = db
+      .prepare(
+        `
+      SELECT id, container_id, created_at
+      FROM claude_messages
+      WHERE session_id IS NULL
+      ORDER BY container_id, created_at ASC
+    `
+      )
+      .all() as Array<{ id: string; container_id: string; created_at: string }>;
+
+    if (messages.length > 0) {
+      let currentSessionId: string | null = null;
+      let currentContainerId: string | null = null;
+      let lastMessageTime: Date | null = null;
+      let messageCount = 0;
+
+      const insertSession = db.prepare(
+        `
+        INSERT INTO claude_sessions (id, container_id, title, source, message_count)
+        VALUES (?, ?, ?, 'container', ?)
+      `
+      );
+
+      const updateMessage = db.prepare(
+        'UPDATE claude_messages SET session_id = ? WHERE id = ?'
+      );
+
+      const updateSessionCount = db.prepare(
+        'UPDATE claude_sessions SET message_count = ? WHERE id = ?'
+      );
+
+      for (const msg of messages) {
+        const messageTime = new Date(msg.created_at);
+
+        // Start new session if:
+        // 1. Different container
+        // 2. Gap > 30 minutes from last message
+        // 3. First message
+        const shouldStartNewSession =
+          !currentSessionId ||
+          currentContainerId !== msg.container_id ||
+          !lastMessageTime ||
+          (messageTime.getTime() - lastMessageTime.getTime()) / 60000 > GAP_MINUTES;
+
+        if (shouldStartNewSession) {
+          // Save message count for previous session
+          if (currentSessionId && messageCount > 0) {
+            updateSessionCount.run(messageCount, currentSessionId);
+          }
+
+          // Create new session
+          currentSessionId = `session_${msg.container_id}_${Date.now()}_${Math.random()
+            .toString(36)
+            .substring(7)}`;
+          currentContainerId = msg.container_id;
+          messageCount = 0;
+
+          const sessionTitle = `Session ${messageTime.toISOString().replace('T', ' ').substring(0, 19)}`;
+          insertSession.run(currentSessionId, msg.container_id, sessionTitle, 0);
+        }
+
+        // Assign message to current session
+        updateMessage.run(currentSessionId, msg.id);
+        messageCount++;
+        lastMessageTime = messageTime;
+      }
+
+      // Update count for last session
+      if (currentSessionId && messageCount > 0) {
+        updateSessionCount.run(messageCount, currentSessionId);
+      }
+
+      logger.debug({ count: messages.length }, 'Migrated existing messages to sessions');
+    }
+  },
+  down: (db: Database.Database) => {
+    db.exec('DROP TABLE IF EXISTS claude_sessions');
+    // Note: session_id column remains in claude_messages (SQLite limitation)
+  },
+};
+
+/**
  * All migrations in order
  * Add new migrations here as the schema evolves
  */
-const migrations: readonly Migration[] = [initialMigration, usageTrackingMigration, claudeLogsMigration, ownerTelegramIdMigration, telegramConversationsMigration, dockerLogsMigration, dockerLogsLogTypeMigration];
+const migrations: readonly Migration[] = [initialMigration, usageTrackingMigration, claudeLogsMigration, ownerTelegramIdMigration, telegramConversationsMigration, dockerLogsMigration, dockerLogsLogTypeMigration, claudeSessionsMigration];
 
 /**
  * Check if a migration has been applied

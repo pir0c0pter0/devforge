@@ -952,4 +952,407 @@ router.delete(
   }
 );
 
+// ============================================
+// Claude Conversation Sessions Endpoints
+// ============================================
+
+/**
+ * GET /api/claude-daemon/:containerId/sessions
+ * List all conversation sessions for a container
+ *
+ * Groups messages by time windows (30min gaps = new session)
+ * Returns sessions with first/last message timestamps and message count
+ */
+router.get(
+  '/:containerId/sessions',
+  validateParams(ContainerIdParamsSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const containerId = req.params['containerId'] as string;
+      const limit = Math.min(parseInt(req.query['limit'] as string) || 50, 100);
+
+      logger.debug({ containerId, limit }, 'Listing conversation sessions');
+
+      // Get all messages for container ordered by time
+      const allMessages = claudeMessagesRepository.findAll({
+        containerId,
+        orderBy: 'created_at',
+        orderDirection: 'ASC',
+      });
+
+      // Group messages into sessions (30min gap = new session)
+      const SESSION_GAP_MS = 30 * 60 * 1000; // 30 minutes
+      const sessions: Array<{
+        id: string;
+        containerId: string;
+        startedAt: Date;
+        lastMessageAt: Date;
+        messageCount: number;
+        firstMessage?: string;
+      }> = [];
+
+      let currentSession: typeof sessions[0] | null = null;
+      let sessionCounter = 1;
+
+      for (const message of allMessages) {
+        const messageTime = message.timestamp.getTime();
+
+        // Check if we need to start a new session
+        if (
+          !currentSession ||
+          messageTime - currentSession.lastMessageAt.getTime() > SESSION_GAP_MS
+        ) {
+          // Save previous session
+          if (currentSession) {
+            sessions.push(currentSession);
+          }
+
+          // Start new session
+          const sessionId = `session-${containerId.substring(0, 8)}-${sessionCounter}`;
+          sessionCounter++;
+
+          currentSession = {
+            id: sessionId,
+            containerId,
+            startedAt: message.timestamp,
+            lastMessageAt: message.timestamp,
+            messageCount: 1,
+            firstMessage: message.type === 'user' ? message.content.substring(0, 100) : undefined,
+          };
+        } else {
+          // Add to current session
+          currentSession.lastMessageAt = message.timestamp;
+          currentSession.messageCount++;
+
+          // Set firstMessage if not set and this is a user message
+          if (!currentSession.firstMessage && message.type === 'user') {
+            currentSession.firstMessage = message.content.substring(0, 100);
+          }
+        }
+      }
+
+      // Don't forget the last session
+      if (currentSession) {
+        sessions.push(currentSession);
+      }
+
+      // Reverse to get most recent first, then apply limit
+      const limitedSessions = sessions.reverse().slice(0, limit);
+
+      logger.info({ containerId, totalSessions: sessions.length, returned: limitedSessions.length }, 'Sessions listed');
+
+      res.json(successResponse({
+        containerId,
+        sessions: limitedSessions,
+        total: sessions.length,
+      }));
+    } catch (error) {
+      logger.error({ error, containerId: req.params['containerId'] }, 'Failed to list sessions');
+
+      res.status(500).json(
+        errorResponse(
+          error instanceof Error ? error.message : 'Failed to list sessions',
+          500
+        )
+      );
+    }
+  }
+);
+
+/**
+ * GET /api/claude-daemon/:containerId/sessions/current
+ * Get or create current conversation session
+ *
+ * Returns the most recent active session (last message within 30min)
+ * or creates a new one if none exists
+ */
+router.get(
+  '/:containerId/sessions/current',
+  validateParams(ContainerIdParamsSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const containerId = req.params['containerId'] as string;
+
+      logger.debug({ containerId }, 'Getting current session');
+
+      // Get most recent messages
+      const recentMessages = claudeMessagesRepository.findAll({
+        containerId,
+        orderBy: 'created_at',
+        orderDirection: 'DESC',
+        limit: 100,
+      });
+
+      if (recentMessages.length === 0) {
+        // No messages yet - create new session
+        const sessionId = `session-${containerId.substring(0, 8)}-1`;
+        const session = {
+          id: sessionId,
+          containerId,
+          startedAt: new Date(),
+          lastMessageAt: new Date(),
+          messageCount: 0,
+          messages: [],
+        };
+
+        logger.info({ containerId, sessionId }, 'Created new empty session');
+        res.json(successResponse(session));
+        return;
+      }
+
+      // Check if most recent message is within session window (30min)
+      const SESSION_GAP_MS = 30 * 60 * 1000;
+      const mostRecent = recentMessages[0];
+      if (!mostRecent) {
+        res.status(500).json(errorResponse('Unexpected error: no messages found', 500));
+        return;
+      }
+
+      const timeSinceLastMessage = Date.now() - mostRecent.timestamp.getTime();
+
+      if (timeSinceLastMessage > SESSION_GAP_MS) {
+        // Last session is stale, create new one
+        const sessionCounter = Math.floor(Date.now() / 1000); // Use timestamp for uniqueness
+        const sessionId = `session-${containerId.substring(0, 8)}-${sessionCounter}`;
+        const session = {
+          id: sessionId,
+          containerId,
+          startedAt: new Date(),
+          lastMessageAt: new Date(),
+          messageCount: 0,
+          messages: [],
+        };
+
+        logger.info({ containerId, sessionId, timeSinceLastMessage }, 'Last session stale, created new session');
+        res.json(successResponse(session));
+        return;
+      }
+
+      // Find all messages in current session (reverse chronologically until gap > 30min)
+      const sessionMessages = [...recentMessages]; // Create mutable copy
+      const filteredMessages = [];
+      let previousTime = mostRecent.timestamp.getTime();
+
+      for (const msg of sessionMessages) {
+        const msgTime = msg.timestamp.getTime();
+        const gap = previousTime - msgTime;
+
+        if (gap > SESSION_GAP_MS) {
+          break; // Session boundary found
+        }
+
+        filteredMessages.push(msg);
+        previousTime = msgTime;
+      }
+
+      // Reverse to get chronological order
+      const chronologicalMessages = filteredMessages.reverse();
+
+      if (chronologicalMessages.length === 0) {
+        res.status(500).json(errorResponse('Unexpected error: no messages in session', 500));
+        return;
+      }
+
+      // Create session object
+      const sessionId = `session-${containerId.substring(0, 8)}-current`;
+      const firstMsg = chronologicalMessages[0];
+      const lastMsg = chronologicalMessages[chronologicalMessages.length - 1];
+
+      if (!firstMsg || !lastMsg) {
+        res.status(500).json(errorResponse('Unexpected error: invalid session messages', 500));
+        return;
+      }
+
+      const session = {
+        id: sessionId,
+        containerId,
+        startedAt: firstMsg.timestamp,
+        lastMessageAt: lastMsg.timestamp,
+        messageCount: chronologicalMessages.length,
+        messages: chronologicalMessages.map(msg => ({
+          id: msg.id,
+          type: msg.type,
+          content: msg.content,
+          timestamp: msg.timestamp.toISOString(),
+          toolName: msg.toolName,
+          toolInput: msg.toolInput,
+        })),
+      };
+
+      logger.info({ containerId, sessionId, messageCount: session.messageCount }, 'Returned current session');
+
+      res.json(successResponse(session));
+    } catch (error) {
+      logger.error({ error, containerId: req.params['containerId'] }, 'Failed to get current session');
+
+      res.status(500).json(
+        errorResponse(
+          error instanceof Error ? error.message : 'Failed to get current session',
+          500
+        )
+      );
+    }
+  }
+);
+
+/**
+ * GET /api/claude-daemon/:containerId/sessions/:sessionId
+ * Get a specific conversation session with messages
+ *
+ * Note: Since sessions are computed dynamically from messages,
+ * this endpoint reconstructs the session based on the session ID pattern
+ */
+router.get(
+  '/:containerId/sessions/:sessionId',
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const containerId = req.params['containerId'] as string;
+      const sessionId = req.params['sessionId'] as string;
+
+      logger.debug({ containerId, sessionId }, 'Getting session details');
+
+      // For 'current' session, delegate to /sessions/current endpoint logic
+      if (sessionId === 'current') {
+        // Re-use the current session logic
+        const recentMessages = claudeMessagesRepository.findAll({
+          containerId,
+          orderBy: 'created_at',
+          orderDirection: 'DESC',
+          limit: 100,
+        });
+
+        if (recentMessages.length === 0) {
+          res.status(404).json(errorResponse('No messages found for this container', 404));
+          return;
+        }
+
+        const SESSION_GAP_MS = 30 * 60 * 1000;
+        const filteredMessages = [];
+        const mostRecent = recentMessages[0];
+        if (!mostRecent) {
+          res.status(404).json(errorResponse('No messages found', 404));
+          return;
+        }
+
+        let previousTime = mostRecent.timestamp.getTime();
+
+        for (const msg of recentMessages) {
+          const msgTime = msg.timestamp.getTime();
+          const gap = previousTime - msgTime;
+
+          if (gap > SESSION_GAP_MS) break;
+
+          filteredMessages.push(msg);
+          previousTime = msgTime;
+        }
+
+        const chronologicalMessages = filteredMessages.reverse();
+        const firstMsg = chronologicalMessages[0];
+        const lastMsg = chronologicalMessages[chronologicalMessages.length - 1];
+
+        if (!firstMsg || !lastMsg) {
+          res.status(404).json(errorResponse('No messages in session', 404));
+          return;
+        }
+
+        const session = {
+          id: sessionId,
+          containerId,
+          startedAt: firstMsg.timestamp,
+          lastMessageAt: lastMsg.timestamp,
+          messageCount: chronologicalMessages.length,
+          messages: chronologicalMessages.map(msg => ({
+            id: msg.id,
+            type: msg.type,
+            content: msg.content,
+            timestamp: msg.timestamp.toISOString(),
+            toolName: msg.toolName,
+            toolInput: msg.toolInput,
+          })),
+        };
+
+        res.json(successResponse(session));
+        return;
+      }
+
+      // For historical sessions, we need to reconstruct based on all messages
+      // This is a simplified implementation - in production you might want to cache session boundaries
+      res.status(501).json(
+        errorResponse(
+          'Historical session retrieval not yet implemented. Use GET /sessions to list all sessions or GET /sessions/current for the active session.',
+          501
+        )
+      );
+    } catch (error) {
+      logger.error({ error, containerId: req.params['containerId'], sessionId: req.params['sessionId'] }, 'Failed to get session');
+
+      res.status(500).json(
+        errorResponse(
+          error instanceof Error ? error.message : 'Failed to get session',
+          500
+        )
+      );
+    }
+  }
+);
+
+/**
+ * POST /api/claude-daemon/:containerId/sessions
+ * Create a new conversation session (marks session boundary)
+ *
+ * This is optional - sessions are created automatically based on time gaps
+ * This endpoint allows explicit session creation/boundary marking
+ */
+router.post(
+  '/:containerId/sessions',
+  strictRateLimiter,
+  validateParams(ContainerIdParamsSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const containerId = req.params['containerId'] as string;
+
+      logger.info({ containerId }, 'Creating new session boundary');
+
+      // Verify container exists
+      const container = await containerService.getById(containerId);
+      if (!container) {
+        res.status(404).json(errorResponse('Container not found', 404));
+        return;
+      }
+
+      // Create session marker (a system message that marks session boundary)
+      const sessionId = `session-${containerId.substring(0, 8)}-${Date.now()}`;
+      const systemMessage = claudeMessagesRepository.create({
+        id: `${sessionId}-marker`,
+        containerId,
+        type: 'system',
+        content: '--- New conversation session started ---',
+        timestamp: new Date(),
+      });
+
+      const session = {
+        id: sessionId,
+        containerId,
+        startedAt: systemMessage.timestamp,
+        lastMessageAt: systemMessage.timestamp,
+        messageCount: 0,
+        createdExplicitly: true,
+      };
+
+      logger.info({ containerId, sessionId }, 'Session boundary created');
+
+      res.status(201).json(successResponse(session, 'New session created'));
+    } catch (error) {
+      logger.error({ error, containerId: req.params['containerId'] }, 'Failed to create session');
+
+      res.status(500).json(
+        errorResponse(
+          error instanceof Error ? error.message : 'Failed to create session',
+          500
+        )
+      );
+    }
+  }
+);
+
 export default router;
