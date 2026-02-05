@@ -20,6 +20,7 @@ export function IDEView({ containerId, vscodeUrl, containerStatus }: IDEViewProp
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [sidebarWidth, setSidebarWidth] = useState(400)
   const [isResizing, setIsResizing] = useState(false)
+  const [isIframeLoading, setIsIframeLoading] = useState(true)
 
   // Handle resize drag
   useEffect(() => {
@@ -63,14 +64,26 @@ export function IDEView({ containerId, vscodeUrl, containerStatus }: IDEViewProp
     <div className="h-full flex relative bg-terminal-bg">
       {/* VS Code iframe - Main area */}
       <div
-        className="flex-1 h-full transition-all duration-200"
+        className="flex-1 h-full transition-all duration-200 relative"
         style={{ marginRight: isSidebarOpen ? sidebarWidth : 0 }}
       >
+        {/* Loading overlay */}
+        {isIframeLoading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-terminal-bg z-10">
+            <div className="text-center">
+              <svg className="mx-auto h-16 w-16 text-blue-500 mb-4" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M23.15 2.587L18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z" />
+              </svg>
+              <AnimatedDots text="Carregando VS Code" />
+            </div>
+          </div>
+        )}
         <iframe
           src={vscodeUrl}
           className="w-full h-full border-0"
           title="VS Code"
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+          onLoad={() => setIsIframeLoading(false)}
         />
       </div>
 

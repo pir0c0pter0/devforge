@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções Críticas
 
-## Versão Atual: 0.1.25-alpha
+## Versão Atual: 0.1.26-alpha
 
 ## Links
 
@@ -128,6 +128,10 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.26-alpha
+- Feat: Loading indicator enquanto VS Code carrega no iframe
+- UX: Ícone do VS Code + "Carregando VS Code..." durante inicialização
 
 ### v0.1.25-alpha
 - Fix: VS Code agora abre dentro do site (não em nova janela)
