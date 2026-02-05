@@ -49,9 +49,9 @@ export const goTemplate: ContainerTemplate = {
     ],
     workingDir: '/workspace',
     ports: {
-      8080: 8080,
-      9090: 9090,
-      3000: 3000,
+      8080: 0,  // code-server - dynamic port allocation
+      9090: 0,  // gRPC - dynamic port allocation
+      3000: 0,  // dev server - dynamic port allocation
     },
     resources: {
       cpuLimit: 2,

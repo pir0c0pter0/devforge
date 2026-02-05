@@ -172,6 +172,11 @@ export class ContainerService {
         AttachStdin: true,
         AttachStdout: true,
         AttachStderr: true,
+        ExposedPorts: {
+          '8080/tcp': {},  // code-server
+          '3000/tcp': {},  // dev server
+          '5173/tcp': {},  // vite
+        },
         HostConfig: {
           ...hostConfig,
           Binds: volumes,
@@ -433,6 +438,11 @@ export class ContainerService {
         AttachStdin: true,
         AttachStdout: true,
         AttachStderr: true,
+        ExposedPorts: {
+          '8080/tcp': {},  // code-server
+          '3000/tcp': {},  // dev server
+          '5173/tcp': {},  // vite
+        },
         HostConfig: {
           ...hostConfig,
           Binds: volumes,
@@ -1292,7 +1302,10 @@ export class ContainerService {
       const portInfo = await dockerService.getContainerPort(container.dockerId, 8080);
 
       if (!portInfo) {
-        throw new Error('VS Code port (8080) is not mapped for this container');
+        throw new Error(
+          'VS Code port (8080) is not mapped. This container was created before port mapping was implemented. ' +
+          'Please delete and recreate the container to enable VS Code access.'
+        );
       }
 
       // Build the URL - use localhost for local access

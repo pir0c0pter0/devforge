@@ -48,8 +48,8 @@ export const rustTemplate: ContainerTemplate = {
     ],
     workingDir: '/workspace',
     ports: {
-      8080: 8080,
-      3000: 3000,
+      8080: 0,  // code-server - dynamic port allocation
+      3000: 0,  // dev server - dynamic port allocation
     },
     resources: {
       cpuLimit: 4,

@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções Críticas
 
-## Versão Atual: 0.1.20-alpha
+## Versão Atual: 0.1.21-alpha
 
 ## Links
 
@@ -128,6 +128,12 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.21-alpha
+- Fix: Adicionado ExposedPorts no ContainerCreateOptions (Docker API best practice)
+- Fix: Mensagem de erro melhorada para containers antigos sem mapeamento de porta VS Code
+- Fix: Templates rust e go agora usam alocação dinâmica de portas (0) em vez de estáticas
+- Fix: Containers criados antes do port mapping agora mostram instrução clara de recrear
 
 ### v0.1.20-alpha
 - Fix: CPU e memória agora zeram na lista de containers ao parar container
