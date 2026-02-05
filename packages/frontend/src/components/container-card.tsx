@@ -198,7 +198,11 @@ export function ContainerCard({ container }: ContainerCardProps) {
   }
 
   const handleStop = async () => {
-    updateContainer(container.id, { status: 'stopped' })
+    // Optimistically update status and zero out metrics
+    updateContainer(container.id, {
+      status: 'stopped',
+      metrics: { cpu: 0, memory: 0, disk: container.metrics?.disk ?? 0 },
+    })
     const response = await apiClient.stopContainer(container.id)
 
     if (!response.success) {

@@ -1086,10 +1086,12 @@ export class ContainerService {
               }, 'WARNING: Container disk usage above 80% (soft limit)');
             }
 
+            // Return disk in GB (same format as WebSocket for consistency)
+            // Frontend expects: cpu=%, memory=MB, disk=GB
             simpleMetrics = {
               cpu: fullMetrics.cpu.usage,
-              memory: fullMetrics.memory.percentage,
-              disk: Number(diskPercentage.toFixed(2)),
+              memory: fullMetrics.memory.usage, // MB (not percentage)
+              disk: Number((diskUsageMB / 1024).toFixed(2)), // GB (not percentage)
             };
             activeAgentsCount = fullMetrics.activeAgents?.length ?? 0;
           } catch (error) {
@@ -1196,10 +1198,12 @@ export class ContainerService {
           }, 'WARNING: Container disk usage above 80% (soft limit)');
         }
 
+        // Return disk in GB (same format as WebSocket for consistency)
+        // Frontend expects: cpu=%, memory=MB, disk=GB
         simpleMetrics = {
           cpu: fullMetrics.cpu.usage,
-          memory: fullMetrics.memory.percentage,
-          disk: Number(diskPercentage.toFixed(2)),
+          memory: fullMetrics.memory.usage, // MB (not percentage)
+          disk: Number((diskUsageMB / 1024).toFixed(2)), // GB (not percentage)
         };
         activeAgentsCount = fullMetrics.activeAgents?.length ?? 0;
       } catch (error) {

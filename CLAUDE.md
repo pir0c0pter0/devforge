@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções Críticas
 
-## Versão Atual: 0.1.19-alpha
+## Versão Atual: 0.1.20-alpha
 
 ## Links
 
@@ -128,6 +128,12 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.20-alpha
+- Fix: CPU e memória agora zeram na lista de containers ao parar container
+- Fix: Uso do disco não mostra mais valor errado brevemente ao carregar página
+- Fix: Backend retornava disk como percentual (API), mas frontend esperava GB
+- Fix: Formato de métricas agora consistente entre API REST e WebSocket
 
 ### v0.1.19-alpha
 - Fix: Histórico de sessões agora mostra TODAS as conversas (não apenas a última)
