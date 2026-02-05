@@ -114,6 +114,8 @@ export interface UseClaudeDaemonReturn {
   processingState: ProcessingState
   /** Send an instruction to Claude (auto-cancels if busy) */
   sendInstruction: (instruction: string) => void
+  /** Send a silent instruction (doesn't add to UI or save to backend) */
+  sendSilentInstruction: (instruction: string) => void
   /** Cancel the current instruction */
   cancelInstruction: () => void
   /** Start the Claude daemon */
@@ -601,6 +603,31 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
     [containerId, addMessage, getNextMessageId]
   )
 
+  // Send silent instruction to Claude (doesn't add to UI or save to backend)
+  const sendSilentInstruction = useCallback(
+    (instruction: string) => {
+      if (!socketRef.current?.connected) {
+        console.warn('[ClaudeDaemon] Cannot send silent instruction: not connected')
+        return
+      }
+
+      if (!instruction.trim()) {
+        console.warn('[ClaudeDaemon] Cannot send empty instruction')
+        return
+      }
+
+      console.log('[ClaudeDaemon] Sending silent instruction:', instruction)
+
+      // Send without adding to UI or saving to backend
+      socketRef.current.emit('instruction:send', {
+        containerId,
+        instruction,
+        cancelIfBusy: true,
+      })
+    },
+    [containerId]
+  )
+
   // Cancel current instruction
   const cancelInstruction = useCallback(() => {
     if (!socketRef.current?.connected) {
@@ -665,6 +692,7 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
     isLoading,
     processingState,
     sendInstruction,
+    sendSilentInstruction,
     cancelInstruction,
     startDaemon,
     stopDaemon,

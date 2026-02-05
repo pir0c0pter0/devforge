@@ -28,6 +28,7 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
     startDaemon,
     stopDaemon,
     sendInstruction,
+    sendSilentInstruction,
     cancelInstruction,
     clearMessages,
   } = useClaudeDaemon({ containerId })
@@ -157,6 +158,11 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
   const handleSelectSession = useCallback(async (sessionId: string, sessionMessages: SessionMessage[]) => {
     setCurrentSessionId(sessionId)
 
+    // First, clear Claude's current context by sending /clear silently
+    if (daemonStatus?.status === 'running') {
+      sendSilentInstruction('/clear')
+    }
+
     // Convert session messages to ClaudeMessage format
     const convertedMessages: ClaudeMessage[] = sessionMessages.map((msg) => ({
       id: msg.id,
@@ -167,7 +173,7 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
       toolInput: msg.toolInput,
     }))
 
-    // Update the store with session messages
+    // Update the store with session messages (replaces current UI messages)
     setMessages(containerId, convertedMessages)
 
     // Store context for next message (will be prepended when user sends)
@@ -193,7 +199,7 @@ ${contextParts.join('\n\n')}
 `
       setPendingContext(contextPrompt)
     }
-  }, [containerId, setMessages])
+  }, [containerId, setMessages, daemonStatus, sendSilentInstruction])
 
   const handleNewSession = useCallback(async () => {
     // Create explicit new session in backend (marks end of current session)
