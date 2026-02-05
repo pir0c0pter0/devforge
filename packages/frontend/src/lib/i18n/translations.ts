@@ -156,6 +156,7 @@ export const translations = {
         instructions: 'Instruções',
         logs: 'Logs',
         terminal: 'Terminal',
+        claudeCode: 'Claude Code',
         settings: 'Configurações',
       },
       // Sub-tabs
@@ -817,6 +818,7 @@ export const translations = {
         instructions: 'Instructions',
         logs: 'Logs',
         terminal: 'Terminal',
+        claudeCode: 'Claude Code',
         settings: 'Settings',
       },
       // Sub-tabs

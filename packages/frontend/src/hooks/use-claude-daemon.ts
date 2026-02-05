@@ -213,19 +213,9 @@ function parseClaudeEventToMessage(event: ClaudeEvent, messageId: string): Claud
     }
 
     case 'system': {
-      // Skip system init/hook events, only show meaningful messages
-      const systemData = data as { subtype?: string; message?: string; raw?: string; stderr?: string }
-      if (systemData?.subtype === 'init' || systemData?.subtype?.startsWith('hook')) {
-        return null
-      }
-      const content = systemData?.message || systemData?.raw || systemData?.stderr || ''
-      if (!content) return null
-      return {
-        id: messageId,
-        type: 'system',
-        content,
-        timestamp: new Date(timestamp),
-      }
+      // Never show system messages in the chat UI
+      // User requested: "não quero ver NENHUM retorno do sistema nessa janela"
+      return null
     }
 
     case 'result': {
