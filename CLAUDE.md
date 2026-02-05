@@ -1,6 +1,6 @@
 # Claude Docker Web - Instruções Críticas
 
-## Versão Atual: 0.1.30-alpha
+## Versão Atual: 0.1.31-alpha
 
 ## Links
 
@@ -128,6 +128,14 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.31-alpha
+- Feat: Opções de Embedded Development na criação de containers
+- Feat: Suporte STM32 (ARM GCC, OpenOCD, ST-Link, Cortex-Debug)
+- Feat: Suporte ESP32 (PlatformIO IDE completo com ESP-IDF)
+- Feat: Extensões VS Code pré-instaladas para desenvolvimento embarcado
+- Feat: Checkboxes no formulário de criação para STM32/ESP32
+- Feat: Aviso de tempo de criação maior quando opções embarcadas selecionadas
 
 ### v0.1.30-alpha
 - Fix: VS Code agora persiste ao trocar de aba (não reinicia mais)
