@@ -3,15 +3,11 @@ import jwt, { JwtPayload } from 'jsonwebtoken'
 import { logger } from '../utils/logger'
 
 /**
- * Get JWT_SECRET from environment (validated at startup in config/index.ts)
- * This function ensures runtime access to the secret
+ * Get JWT_SECRET from environment
+ * Returns null if not configured (auth disabled for development)
  */
-const getJwtSecret = (): string => {
-  const secret = process.env['JWT_SECRET']
-  if (!secret) {
-    throw new Error('FATAL: JWT_SECRET is not configured. Server cannot start without JWT_SECRET.')
-  }
-  return secret
+const getJwtSecret = (): string | null => {
+  return process.env['JWT_SECRET'] || null
 }
 
 export interface AuthenticatedRequest extends Request {
@@ -38,6 +34,13 @@ export const authenticateJWT = (
   next: NextFunction
 ): void => {
   const jwtSecret = getJwtSecret()
+
+  // If JWT_SECRET is not configured, allow anonymous access (development mode)
+  if (!jwtSecret) {
+    logger.debug('[Auth] JWT_SECRET not configured, allowing anonymous access')
+    next()
+    return
+  }
 
   const authHeader = req.headers['authorization']
 
@@ -71,7 +74,7 @@ export const authenticateJWT = (
   }
 
   try {
-    const decoded = jwt.verify(token, jwtSecret) as TokenPayload
+    const decoded = jwt.verify(token, jwtSecret!) as TokenPayload
 
     req.user = {
       id: decoded.id,
@@ -132,7 +135,7 @@ export const optionalAuth = (
     const token = parts[1]
     if (token) {
       try {
-        const decoded = jwt.verify(token, jwtSecret) as TokenPayload
+        const decoded = jwt.verify(token, jwtSecret!) as TokenPayload
         req.user = {
           id: decoded.id,
           email: decoded.email,
@@ -176,6 +179,7 @@ export const requireRole = (role: string) => {
 
 /**
  * Gera um token JWT (útil para testes e setup inicial)
+ * Throws error if JWT_SECRET is not configured
  */
 export const generateToken = (
   payload: {
@@ -186,6 +190,9 @@ export const generateToken = (
   expiresIn: string = '24h'
 ): string => {
   const jwtSecret = getJwtSecret()
+  if (!jwtSecret) {
+    throw new Error('Cannot generate token: JWT_SECRET is not configured')
+  }
   return jwt.sign(payload, jwtSecret, { expiresIn } as jwt.SignOptions)
 }
 
@@ -197,6 +204,11 @@ export const authenticateWebSocket = (
   token: string
 ): { id: string; email?: string; role?: string } | null => {
   const jwtSecret = getJwtSecret()
+
+  // If JWT_SECRET is not configured, return null (auth disabled)
+  if (!jwtSecret) {
+    return null
+  }
 
   try {
     const decoded = jwt.verify(token, jwtSecret) as TokenPayload
