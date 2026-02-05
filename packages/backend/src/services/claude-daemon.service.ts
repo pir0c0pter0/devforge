@@ -749,7 +749,11 @@ class ClaudeDaemonService extends EventEmitter {
           session.state.instructionCount++
           session.state.lastActivity = new Date()
 
+          // Reset processing state (fix #9)
+          session.processingState = { isProcessing: false, stage: 'idle' }
+
           // Emit complete event (fix #9)
+          logger.info({ containerId, exitCode, duration }, 'Emitting instruction:processing:complete')
           this.emit('instruction:processing:complete', {
             containerId,
             success: exitCode === 0,

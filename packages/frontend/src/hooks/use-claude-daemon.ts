@@ -353,15 +353,21 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
     stage: 'idle' as ProcessingStage,
   }
 
-  // Wrapper to update processing state in store
+  // Use ref to always have latest processing state for callbacks
+  const processingStateRef = useRef(processingState)
+  useEffect(() => {
+    processingStateRef.current = processingState
+  }, [processingState])
+
+  // Stable wrapper to update processing state in store (doesn't recreate on state change)
   const setProcessingState = useCallback((state: ProcessingState | ((prev: ProcessingState) => ProcessingState)) => {
     if (typeof state === 'function') {
-      const currentState = processingStateByContainer[containerId] || { isProcessing: false, stage: 'idle' as ProcessingStage }
+      const currentState = processingStateRef.current
       storeSetProcessingState(containerId, state(currentState))
     } else {
       storeSetProcessingState(containerId, state)
     }
-  }, [containerId, processingStateByContainer, storeSetProcessingState])
+  }, [containerId, storeSetProcessingState])
 
   // Derive isLoading from processingState (fix #9)
   const isLoading = processingState.isProcessing
