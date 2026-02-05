@@ -121,6 +121,30 @@ const CLASSIFICATION_PATTERNS: readonly ClassificationPattern[] = [
       /\bDone in\s+\d+/,
       /\bFinished in\s+\d+/,
       /\bCompleted in\s+\d+/,
+      // Configuration/initialization dumps (i18next, etc.)
+      /^\s*\w+:\s*\{$/, // Object property opening: "resources: {"
+      /^\s*\w+:\s*\[$/, // Array property opening: "items: ["
+      /^\s*[}\]],?\s*$/, // Closing braces: "}" or "]" or "},"
+      /^\s*\w+:\s*(true|false|null),?\s*$/, // Boolean/null properties
+      /^\s*\w+:\s*\d+,?\s*$/, // Number properties: "maxReplaces: 1000,"
+      /^\s*\w+:\s*'[^']*',?\s*$/, // String properties: "lng: 'en',"
+      /^\s*\w+:\s*"[^"]*",?\s*$/, // String properties (double quotes)
+      /\[Function[:\s]/, // Function references: "[Function: bound format]"
+      /\[Object\]/, // Object references: "{ translation: [Object] }"
+      /\[Array\]/, // Array references
+      /\bi18n(ext)?\b/i, // i18n/i18next
+      /\btranslation\b/i, // translation configs
+      /\binterpolation\b/i, // interpolation config
+      /\bnamespace\b/i, // namespace configs
+      /\bresources\b/i, // resources config
+      /\bfallback\b/i, // fallback configs
+      /\bdetection\b/i, // language detection
+      /\bbackend\b/i, // backend configs
+      /\bnesting\b/i, // nesting configs
+      /\bpluralization\b/i, // plural configs
+      /\bformatSeparator\b/, // i18next specific
+      /\bescapeValue\b/, // i18next specific
+      /\boverloadTranslationOptionHandler\b/, // i18next specific
     ],
   },
   {
