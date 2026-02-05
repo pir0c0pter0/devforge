@@ -28,7 +28,7 @@ export interface ChatSession {
   endTime: Date
   messageCount: number
   preview: string
-  messages: SessionMessage[]
+  messages: SessionMessage[] | null // null when not yet loaded
 }
 
 /**
@@ -60,98 +60,6 @@ function formatRelativeTime(date: Date): string {
 }
 
 /**
- * Group messages into sessions based on time gaps
- * New session starts if gap > 2 hours between messages
- */
-function groupMessagesIntoSessions(messages: Array<{
-  id: string
-  type: string
-  content: string
-  timestamp: string
-}>): ChatSession[] {
-  if (messages.length === 0) return []
-
-  const SESSION_GAP_MS = 2 * 60 * 60 * 1000 // 2 hours
-  const sessions: ChatSession[] = []
-  let currentSession: {
-    messages: typeof messages
-    startTime: Date
-    endTime: Date
-  } | null = null
-
-  // Process messages in chronological order
-  const sortedMessages = [...messages].sort((a, b) =>
-    new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-  )
-
-  sortedMessages.forEach((msg) => {
-    const msgTime = new Date(msg.timestamp)
-
-    if (!currentSession) {
-      // Start first session
-      currentSession = {
-        messages: [msg],
-        startTime: msgTime,
-        endTime: msgTime,
-      }
-    } else {
-      const gap = msgTime.getTime() - currentSession.endTime.getTime()
-
-      if (gap > SESSION_GAP_MS) {
-        // Save current session and start new one
-        sessions.push(createSessionFromGroup(currentSession))
-        currentSession = {
-          messages: [msg],
-          startTime: msgTime,
-          endTime: msgTime,
-        }
-      } else {
-        // Add to current session
-        currentSession.messages.push(msg)
-        currentSession.endTime = msgTime
-      }
-    }
-  })
-
-  // Save last session
-  if (currentSession) {
-    sessions.push(createSessionFromGroup(currentSession))
-  }
-
-  // Return in reverse chronological order (newest first)
-  return sessions.reverse()
-}
-
-/**
- * Create session object from message group
- */
-function createSessionFromGroup(group: {
-  messages: Array<{ id: string; type: string; content: string; timestamp: string; toolName?: string; toolInput?: unknown }>
-  startTime: Date
-  endTime: Date
-}): ChatSession {
-  // Generate title from first user message or use generic title
-  const firstUserMsg = group.messages.find(m => m.type === 'user')
-  const title = firstUserMsg
-    ? firstUserMsg.content.substring(0, 40) + (firstUserMsg.content.length > 40 ? '...' : '')
-    : 'Conversa'
-
-  // Get preview from last message
-  const lastMsg = group.messages[group.messages.length - 1]
-  const preview = lastMsg.content.substring(0, 60) + (lastMsg.content.length > 60 ? '...' : '')
-
-  return {
-    id: `session-${group.startTime.getTime()}`,
-    title,
-    startTime: group.startTime,
-    endTime: group.endTime,
-    messageCount: group.messages.length,
-    preview,
-    messages: group.messages,
-  }
-}
-
-/**
  * Session Selector Component
  * Dropdown to select previous chat sessions
  */
@@ -180,18 +88,29 @@ export function SessionSelector({
     }
   }, [isOpen])
 
-  // Load sessions from backend
+  // Load sessions from backend using the dedicated sessions API
   const loadSessions = useCallback(async () => {
     if (!containerId) return
 
     setIsLoading(true)
     try {
-      const response = await apiClient.getChatMessages(containerId, { limit: 500 })
+      const response = await apiClient.getClaudeSessions(containerId, { limit: 100 })
 
-      if (response.success && response.data?.messages) {
-        const grouped = groupMessagesIntoSessions(response.data.messages)
-        setSessions(grouped)
-        setHasMore(response.data.hasMore)
+      if (response.success && response.data?.sessions) {
+        // Convert API sessions to ChatSession format
+        const chatSessions: ChatSession[] = response.data.sessions.map(session => ({
+          id: session.id,
+          title: session.firstMessage
+            ? session.firstMessage.substring(0, 40) + (session.firstMessage.length > 40 ? '...' : '')
+            : 'Conversa',
+          startTime: new Date(session.startedAt),
+          endTime: new Date(session.lastMessageAt),
+          messageCount: session.messageCount,
+          preview: session.firstMessage || '',
+          messages: null, // Messages loaded on-demand when session is selected
+        }))
+        setSessions(chatSessions)
+        setHasMore(response.data.total > response.data.sessions.length)
       }
     } catch (error) {
       console.error('[SessionSelector] Failed to load sessions:', error)
@@ -223,9 +142,40 @@ export function SessionSelector({
     }
   }, [isOpen])
 
-  const handleSelectSession = (session: ChatSession) => {
-    onSelectSession(session.id, session.messages)
+  const handleSelectSession = async (session: ChatSession) => {
     setIsOpen(false)
+
+    // If messages already loaded, use them
+    if (session.messages) {
+      onSelectSession(session.id, session.messages)
+      return
+    }
+
+    // Otherwise, fetch messages from backend
+    try {
+      const response = await apiClient.getClaudeSessionMessages(containerId, session.id)
+
+      if (response.success && response.data?.messages) {
+        const messages: SessionMessage[] = response.data.messages.map(msg => ({
+          id: msg.id,
+          type: msg.type,
+          content: msg.content,
+          timestamp: msg.timestamp,
+          toolName: msg.toolName,
+          toolInput: msg.toolInput,
+        }))
+        onSelectSession(session.id, messages)
+
+        // Cache messages in session
+        setSessions(prev => prev.map(s =>
+          s.id === session.id ? { ...s, messages } : s
+        ))
+      } else {
+        console.error('[SessionSelector] Failed to load session messages:', response.error)
+      }
+    } catch (error) {
+      console.error('[SessionSelector] Failed to fetch session messages:', error)
+    }
   }
 
   const handleNewSession = () => {

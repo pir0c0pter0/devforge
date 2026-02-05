@@ -1275,14 +1275,92 @@ router.get(
         return;
       }
 
-      // For historical sessions, we need to reconstruct based on all messages
-      // This is a simplified implementation - in production you might want to cache session boundaries
-      res.status(501).json(
-        errorResponse(
-          'Historical session retrieval not yet implemented. Use GET /sessions to list all sessions or GET /sessions/current for the active session.',
-          501
-        )
-      );
+      // For historical sessions, reconstruct based on all messages using same logic as /sessions
+      const allMessages = claudeMessagesRepository.findAll({
+        containerId,
+        orderBy: 'created_at',
+        orderDirection: 'ASC',
+      });
+
+      if (allMessages.length === 0) {
+        res.status(404).json(errorResponse('No messages found for this container', 404));
+        return;
+      }
+
+      // Group messages into sessions (30min gap = new session)
+      const SESSION_GAP_MS = 30 * 60 * 1000;
+      type MessageType = typeof allMessages[number];
+      const sessions: Array<{
+        id: string;
+        containerId: string;
+        startedAt: Date;
+        lastMessageAt: Date;
+        messageCount: number;
+        messages: MessageType[];
+      }> = [];
+
+      let currentSession: typeof sessions[0] | null = null;
+      let sessionCounter = 1;
+
+      for (const message of allMessages) {
+        const messageTime = message.timestamp.getTime();
+
+        if (
+          !currentSession ||
+          messageTime - currentSession.lastMessageAt.getTime() > SESSION_GAP_MS
+        ) {
+          if (currentSession) {
+            sessions.push(currentSession);
+          }
+
+          const currentSessionId = `session-${containerId.substring(0, 8)}-${sessionCounter}`;
+          sessionCounter++;
+
+          currentSession = {
+            id: currentSessionId,
+            containerId,
+            startedAt: message.timestamp,
+            lastMessageAt: message.timestamp,
+            messageCount: 1,
+            messages: [message],
+          };
+        } else {
+          currentSession.lastMessageAt = message.timestamp;
+          currentSession.messageCount++;
+          currentSession.messages.push(message);
+        }
+      }
+
+      if (currentSession) {
+        sessions.push(currentSession);
+      }
+
+      // Find the requested session
+      const requestedSession = sessions.find(s => s.id === sessionId);
+
+      if (!requestedSession) {
+        res.status(404).json(errorResponse(`Session ${sessionId} not found`, 404));
+        return;
+      }
+
+      const session = {
+        id: requestedSession.id,
+        containerId,
+        startedAt: requestedSession.startedAt.toISOString(),
+        lastMessageAt: requestedSession.lastMessageAt.toISOString(),
+        messageCount: requestedSession.messageCount,
+        messages: requestedSession.messages.map(msg => ({
+          id: msg.id,
+          type: msg.type,
+          content: msg.content,
+          timestamp: msg.timestamp.toISOString(),
+          toolName: msg.toolName,
+          toolInput: msg.toolInput,
+        })),
+      };
+
+      logger.info({ containerId, sessionId, messageCount: session.messageCount }, 'Historical session retrieved');
+      res.json(successResponse(session));
     } catch (error) {
       logger.error({ error, containerId: req.params['containerId'], sessionId: req.params['sessionId'] }, 'Failed to get session');
 

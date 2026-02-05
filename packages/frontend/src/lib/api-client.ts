@@ -307,6 +307,43 @@ class ApiClient {
       method: 'DELETE',
     })
   }
+
+  // Claude Sessions (grouped conversations)
+  async getClaudeSessions(containerId: string, options?: { limit?: number }): Promise<ApiResponse<{
+    containerId: string
+    sessions: Array<{
+      id: string
+      containerId: string
+      startedAt: string
+      lastMessageAt: string
+      messageCount: number
+      firstMessage?: string
+    }>
+    total: number
+  }>> {
+    const params = new URLSearchParams()
+    if (options?.limit) params.set('limit', options.limit.toString())
+    const query = params.toString()
+    return this.request(`/api/claude-daemon/${containerId}/sessions${query ? `?${query}` : ''}`)
+  }
+
+  async getClaudeSessionMessages(containerId: string, sessionId: string): Promise<ApiResponse<{
+    id: string
+    containerId: string
+    startedAt: string
+    lastMessageAt: string
+    messageCount: number
+    messages: Array<{
+      id: string
+      type: string
+      content: string
+      timestamp: string
+      toolName?: string
+      toolInput?: unknown
+    }>
+  }>> {
+    return this.request(`/api/claude-daemon/${containerId}/sessions/${sessionId}`)
+  }
 }
 
 export const apiClient = new ApiClient()
