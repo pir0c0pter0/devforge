@@ -116,6 +116,8 @@ export interface UseClaudeDaemonReturn {
   sendInstruction: (instruction: string) => void
   /** Send a silent instruction (doesn't add to UI or save to backend) */
   sendSilentInstruction: (instruction: string) => void
+  /** Block/unblock message updates (used during session switch) */
+  setBlockMessageUpdates: (block: boolean) => void
   /** Cancel the current instruction */
   cancelInstruction: () => void
   /** Start the Claude daemon */
@@ -286,6 +288,8 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
   const lastInstructionRef = useRef<string | null>(null)
   const retryCountRef = useRef(0)
   const MAX_RETRIES = 2
+  // Flag to temporarily block message updates (used when manually loading session history)
+  const blockMessageUpdatesRef = useRef(false)
 
   // Store callbacks in refs to avoid recreating socket handlers
   const onMessageRef = useRef(onMessage)
@@ -338,7 +342,8 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
     }
 
     loadHistory()
-  }, [containerId, setMessages])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [containerId]) // Only re-run when containerId changes, not setMessages
 
   // Initialize WebSocket connection
   useEffect(() => {
@@ -388,6 +393,12 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
 
     // Handle Claude output events
     socket.on('claude:output', (event: ClaudeEvent) => {
+      // Skip if message updates are temporarily blocked (during session switch)
+      if (blockMessageUpdatesRef.current) {
+        console.log('[ClaudeDaemon] Blocking message update during session switch:', event.type)
+        return
+      }
+
       console.log('[ClaudeDaemon] Claude output:', event)
       const messageId = getNextMessageId(containerId)
       const message = parseClaudeEventToMessage(event, messageId)
@@ -628,6 +639,12 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
     [containerId]
   )
 
+  // Block/unblock message updates (used during session switch)
+  const setBlockMessageUpdates = useCallback((block: boolean) => {
+    console.log('[ClaudeDaemon] Setting blockMessageUpdates:', block)
+    blockMessageUpdatesRef.current = block
+  }, [])
+
   // Cancel current instruction
   const cancelInstruction = useCallback(() => {
     if (!socketRef.current?.connected) {
@@ -693,6 +710,7 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
     processingState,
     sendInstruction,
     sendSilentInstruction,
+    setBlockMessageUpdates,
     cancelInstruction,
     startDaemon,
     stopDaemon,

@@ -29,6 +29,7 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
     stopDaemon,
     sendInstruction,
     sendSilentInstruction,
+    setBlockMessageUpdates,
     cancelInstruction,
     clearMessages,
   } = useClaudeDaemon({ containerId })
@@ -158,26 +159,29 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
   const handleSelectSession = useCallback(async (sessionId: string, sessionMessages: SessionMessage[]) => {
     setCurrentSessionId(sessionId)
 
-    // 1. First, clear the UI immediately
+    // 1. Block message updates to prevent WebSocket events from interfering
+    setBlockMessageUpdates(true)
+
+    // 2. Clear the UI immediately
     setMessages(containerId, [])
 
-    // 2. Send /clear to Claude daemon to reset its context
+    // 3. Send /clear to Claude daemon to reset its context
     if (daemonStatus?.status === 'running') {
       sendSilentInstruction('/clear')
     }
 
-    // 3. Wait a moment for /clear to process, then load session messages
-    setTimeout(() => {
-      // Convert session messages to ClaudeMessage format
-      const convertedMessages: ClaudeMessage[] = sessionMessages.map((msg) => ({
-        id: msg.id,
-        type: msg.type as ClaudeMessage['type'],
-        content: msg.content,
-        timestamp: new Date(msg.timestamp),
-        toolName: msg.toolName,
-        toolInput: msg.toolInput,
-      }))
+    // 4. Convert session messages to ClaudeMessage format
+    const convertedMessages: ClaudeMessage[] = sessionMessages.map((msg) => ({
+      id: msg.id,
+      type: msg.type as ClaudeMessage['type'],
+      content: msg.content,
+      timestamp: new Date(msg.timestamp),
+      toolName: msg.toolName,
+      toolInput: msg.toolInput,
+    }))
 
+    // 5. Wait a moment for /clear to process, then load session messages
+    setTimeout(() => {
       // Update the store with session messages
       setMessages(containerId, convertedMessages)
 
@@ -204,8 +208,11 @@ ${contextParts.join('\n\n')}
 `
         setPendingContext(contextPrompt)
       }
-    }, 500) // Wait 500ms for /clear events to be processed
-  }, [containerId, setMessages, daemonStatus, sendSilentInstruction])
+
+      // 6. Unblock message updates after session is loaded
+      setBlockMessageUpdates(false)
+    }, 800) // Wait 800ms for /clear events to be processed
+  }, [containerId, setMessages, daemonStatus, sendSilentInstruction, setBlockMessageUpdates])
 
   const handleNewSession = useCallback(async () => {
     // Create explicit new session in backend (marks end of current session)
