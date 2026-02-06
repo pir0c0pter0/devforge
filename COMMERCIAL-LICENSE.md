@@ -2,60 +2,47 @@
 
 ## DevForge - Commercial Licensing
 
-DevForge is available under the [PolyForm Noncommercial License 1.0.0](LICENSE) for free, noncommercial use. If you want to use DevForge for commercial purposes, you need a commercial license.
+DevForge is available under the [PolyForm Noncommercial License 1.0.0](LICENSE) for free, noncommercial use. Commercial use requires a separate commercial license agreement.
 
-O DevForge esta disponivel sob a [PolyForm Noncommercial License 1.0.0](LICENSE) para uso nao-comercial gratuito. Se voce deseja usar o DevForge para fins comerciais, precisa de uma licenca comercial.
-
----
-
-## Pricing Tiers / Planos
-
-### Starter - $19/month (USD)
-
-**For freelancers and individual consultants / Para freelancers e consultores individuais**
-
-- 1 user / 1 usuario
-- Commercial use for individual work / Uso comercial para trabalho individual
-- Email support / Suporte por email
-- All features included / Todas as funcionalidades incluidas
-
-**Ideal for / Ideal para:**
-- Freelance developers / Desenvolvedores freelancers
-- Individual consultants / Consultores individuais
-- Solo entrepreneurs / Empreendedores solo
+O DevForge esta disponivel sob a [PolyForm Noncommercial License 1.0.0](LICENSE) para uso nao-comercial gratuito. Uso comercial requer um acordo de licenca comercial separado.
 
 ---
 
-### Pro - $99/month (USD)
+## What is Commercial Use? / O que e Uso Comercial?
 
-**For companies up to 50 employees / Para empresas com ate 50 funcionarios**
+**EN:** Commercial use includes, but is not limited to:
 
-- Up to 50 users / Ate 50 usuarios
-- Commercial use for the entire team / Uso comercial para toda a equipe
-- Priority email support / Suporte prioritario por email
-- All features included / Todas as funcionalidades incluidas
+- Using DevForge within a for-profit company or organization
+- Using DevForge as part of paid work (freelancing, consulting)
+- Offering DevForge as a service (SaaS) to paying customers
+- Integrating DevForge into a commercial product or service
+- Using DevForge to generate revenue, directly or indirectly
 
-**Ideal for / Ideal para:**
-- Startups and small businesses / Startups e pequenas empresas
-- Development teams / Equipes de desenvolvimento
-- Agencies / Agencias
+**PT-BR:** Uso comercial inclui, mas nao se limita a:
+
+- Usar o DevForge dentro de uma empresa com fins lucrativos
+- Usar o DevForge como parte de trabalho remunerado (freelancing, consultoria)
+- Oferecer o DevForge como servico (SaaS) para clientes pagantes
+- Integrar o DevForge em um produto ou servico comercial
+- Usar o DevForge para gerar receita, direta ou indiretamente
 
 ---
 
-### Enterprise - Custom Pricing
+## How to Get a Commercial License / Como Obter uma Licenca Comercial
 
-**For companies with 50+ employees / Para empresas com 50+ funcionarios**
+Commercial licenses are available with terms tailored to your needs. Contact us to discuss your use case and receive a proposal.
 
-- Unlimited users / Usuarios ilimitados
-- Commercial use organization-wide / Uso comercial em toda a organizacao
-- Dedicated support / Suporte dedicado
-- Custom SLA / SLA personalizado
-- On-premise deployment assistance / Assistencia para deploy on-premise
+Licencas comerciais estao disponiveis com termos adaptados as suas necessidades. Entre em contato para discutir seu caso de uso e receber uma proposta.
 
-**Ideal for / Ideal para:**
-- Large enterprises / Grandes empresas
-- Organizations with custom requirements / Organizacoes com requisitos especificos
-- Companies needing SLA guarantees / Empresas que precisam de garantias de SLA
+**Contact / Contato:**
+- **Email:** mariostjr@gmail.com
+- **GitHub Issues:** https://github.com/pir0c0pter0/devforge/issues
+
+When reaching out, please include:
+- Your name or company name / Seu nome ou nome da empresa
+- Brief description of your use case / Breve descricao do seu caso de uso
+- Expected number of users / Numero esperado de usuarios
+- Any specific requirements / Requisitos especificos
 
 ---
 
@@ -63,33 +50,9 @@ O DevForge esta disponivel sob a [PolyForm Noncommercial License 1.0.0](LICENSE)
 
 ### Do I need a commercial license? / Preciso de uma licenca comercial?
 
-**EN:** You need a commercial license if you use DevForge for any commercial purpose, including:
-- Using it as part of your paid work (freelancing, consulting)
-- Using it within a for-profit company
-- Offering it as a service to paying customers
-- Integrating it into a commercial product
+**EN:** You need a commercial license if you use DevForge for any commercial purpose (see definition above). If you are unsure whether your use case qualifies, contact us and we will help clarify.
 
-**PT-BR:** Voce precisa de uma licenca comercial se usar o DevForge para qualquer finalidade comercial, incluindo:
-- Usar como parte do seu trabalho remunerado (freelancing, consultoria)
-- Usar dentro de uma empresa com fins lucrativos
-- Oferecer como servico para clientes pagantes
-- Integrar em um produto comercial
-
----
-
-### I'm a freelancer. Which plan do I need? / Sou freelancer. Qual plano preciso?
-
-**EN:** The **Starter** plan ($19/month) covers individual freelancers and consultants.
-
-**PT-BR:** O plano **Starter** ($19/mes) cobre freelancers e consultores individuais.
-
----
-
-### My startup has 10 developers. Which plan? / Minha startup tem 10 devs. Qual plano?
-
-**EN:** The **Pro** plan ($99/month) covers teams of up to 50 employees.
-
-**PT-BR:** O plano **Pro** ($99/mes) cobre equipes de ate 50 funcionarios.
+**PT-BR:** Voce precisa de uma licenca comercial se usar o DevForge para qualquer finalidade comercial (veja definicao acima). Se nao tem certeza se o seu caso se enquadra, entre em contato e ajudaremos a esclarecer.
 
 ---
 
@@ -109,7 +72,7 @@ O DevForge esta disponivel sob a [PolyForm Noncommercial License 1.0.0](LICENSE)
 
 ---
 
-### Can I try it before buying? / Posso experimentar antes de comprar?
+### Can I try it before getting a commercial license? / Posso experimentar antes de obter uma licenca comercial?
 
 **EN:** Yes. You can use DevForge freely for evaluation, testing, and noncommercial purposes. A commercial license is only required when you start using it commercially.
 
@@ -117,23 +80,11 @@ O DevForge esta disponivel sob a [PolyForm Noncommercial License 1.0.0](LICENSE)
 
 ---
 
-### What payment methods do you accept? / Quais formas de pagamento aceitam?
+### Can I contribute to DevForge and use it commercially? / Posso contribuir com o DevForge e usa-lo comercialmente?
 
-**EN:** Contact us for payment arrangements. We can accommodate various payment methods including credit cards, bank transfers, and invoicing.
+**EN:** Contributing to DevForge does not grant you a commercial license. Contributors are welcome and appreciated, but commercial use still requires a separate license. See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
 
-**PT-BR:** Entre em contato para combinar o pagamento. Aceitamos diversas formas de pagamento, incluindo cartoes de credito, transferencias bancarias e faturamento.
-
----
-
-## Contact / Contato
-
-- **Email:** mariostjr@gmail.com
-- **GitHub Issues:** https://github.com/pir0c0pter0/devforge/issues
-
-For Enterprise inquiries, please include:
-- Company name and size / Nome e tamanho da empresa
-- Expected number of users / Numero esperado de usuarios
-- Any specific requirements / Requisitos especificos
+**PT-BR:** Contribuir com o DevForge nao concede uma licenca comercial. Contribuidores sao bem-vindos e valorizados, mas o uso comercial ainda requer uma licenca separada. Veja [CONTRIBUTING.md](CONTRIBUTING.md) para diretrizes de contribuicao.
 
 ---
 

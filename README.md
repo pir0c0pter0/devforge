@@ -615,7 +615,7 @@ journalctl --user -u devforge-frontend -f
 
 ### v0.1.36-alpha (Latest)
 - **Feat**: Licenca alterada de MIT para PolyForm Noncommercial 1.0.0
-- **Feat**: COMMERCIAL-LICENSE.md com tiers Starter ($19), Pro ($99) e Enterprise
+- **Feat**: COMMERCIAL-LICENSE.md para licenciamento comercial
 - **Feat**: CONTRIBUTING.md com CLA para dual licensing
 - **Feat**: Novo logo e identidade visual
 
@@ -672,7 +672,7 @@ Ver historico completo em [CLAUDE.md](CLAUDE.md)
 | Pessoal, hobby, estudo | Sim |
 | Educacao e pesquisa | Sim |
 | ONGs e governo | Sim |
-| Comercial (empresas, freelancers) | Requer licenca paga |
+| Comercial (empresas, freelancers) | Requer licenca comercial ([contato](mailto:mariostjr@gmail.com)) |
 
 - Licenca completa: [LICENSE](LICENSE)
 - Licenca comercial: [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md)

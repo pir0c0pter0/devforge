@@ -154,7 +154,7 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 
 ### v0.1.36-alpha
 - Feat: Licenca alterada de MIT para PolyForm Noncommercial 1.0.0
-- Feat: COMMERCIAL-LICENSE.md com tiers Starter ($19), Pro ($99) e Enterprise
+- Feat: COMMERCIAL-LICENSE.md para licenciamento comercial
 - Feat: CONTRIBUTING.md com CLA para dual licensing
 - Feat: README atualizado com badge e secao de licenca
 - Feat: FAQ bilingue (EN/PT-BR) no COMMERCIAL-LICENSE.md
