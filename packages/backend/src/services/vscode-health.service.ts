@@ -1,5 +1,6 @@
 import { logger } from '../utils/logger';
 import { dockerService } from './docker.service';
+import { VSCodeConfig } from '../config/vscode.config';
 
 export interface VSCodeHealthStatus {
   ready: boolean;
@@ -62,18 +63,28 @@ class VSCodeHealthService {
         const isHealthy = await this.checkHealth(dockerId);
 
         if (isHealthy) {
-          const status: VSCodeHealthStatus = {
-            ready: true,
-            containerId,
-            dockerId,
-            lastCheck: new Date(),
-            uptime: Date.now() - startTime
-          };
+          // Stabilization: wait and verify again to ensure VS Code is truly ready
+          const stabilizationMs = VSCodeConfig.STABILIZATION_DELAY_MS;
+          logger.debug({ dockerId, stabilizationMs }, 'First health check passed, waiting for stabilization...');
+          await this.sleep(stabilizationMs);
 
-          this.statusCache.set(containerId, status);
-          logger.info({ containerId, dockerId, elapsed: Date.now() - startTime }, 'VS Code is ready');
+          const confirmHealthy = await this.checkHealth(dockerId);
+          if (confirmHealthy) {
+            const status: VSCodeHealthStatus = {
+              ready: true,
+              containerId,
+              dockerId,
+              lastCheck: new Date(),
+              uptime: Date.now() - startTime
+            };
 
-          return status;
+            this.statusCache.set(containerId, status);
+            logger.info({ containerId, dockerId, elapsed: Date.now() - startTime }, 'VS Code is ready (confirmed after stabilization)');
+
+            return status;
+          }
+
+          logger.debug({ dockerId }, 'VS Code health check passed but stabilization confirmation failed, continuing polling');
         }
       } catch (error) {
         lastError = error as Error;

@@ -926,11 +926,17 @@ export class ContainerService {
           timeoutMs: VSCodeConfig.STARTUP_TIMEOUT_MS,
           onProgress: (elapsed, total) => {
             const progressRange = vscodeEndProgress - vscodeStartProgress;
-            const currentProgress = vscodeStartProgress + Math.floor((elapsed / total) * progressRange);
+            const ratio = Math.min(1, Math.max(0, elapsed / total));
+            const currentProgress = vscodeStartProgress + Math.floor(ratio * progressRange);
 
-            let message = 'Aguardando VS Code...';
-            if (elapsed > 15000) message = 'VS Code ainda inicializando...';
-            if (elapsed > 25000) message = 'Quase pronto...';
+            let message = 'Aguardando VS Code iniciar...';
+            if (elapsed > 5000) message = 'VS Code carregando servidor...';
+            if (elapsed > 10000) message = 'Iniciando editor de código...';
+            if (elapsed > 15000) message = 'Carregando extensões...';
+            if (elapsed > 20000) message = 'Configurando workspace...';
+            if (elapsed > 30000) message = 'VS Code ainda inicializando (projeto grande?)...';
+            if (elapsed > 40000) message = 'Aguardando resposta do editor...';
+            if (elapsed > 50000) message = 'Quase pronto, verificando estabilidade...';
 
             taskService.setProgress(taskId, currentProgress, message);
           }
@@ -938,11 +944,14 @@ export class ContainerService {
       );
 
       if (!vscodeStatus.ready) {
-        logger.warn({ containerId, taskId }, 'VS Code readiness timeout, continuing anyway');
-        taskService.setProgress(taskId, vscodeEndProgress, 'VS Code pode estar instável...');
-      } else {
-        taskService.setProgress(taskId, vscodeEndProgress, 'VS Code pronto!');
+        const timeoutSec = VSCodeConfig.STARTUP_TIMEOUT_MS / 1000;
+        const timeoutError = `VS Code não ficou pronto em ${timeoutSec}s. Tente reiniciar o container.`;
+        logger.error({ containerId, taskId, elapsed: vscodeStatus.uptime, error: vscodeStatus.error }, timeoutError);
+        taskService.fail(taskId, timeoutError);
+        throw new Error(timeoutError);
       }
+
+      taskService.setProgress(taskId, vscodeEndProgress, 'VS Code pronto!');
 
       // Step 5: Auto-start Claude environment
       taskService.setProgress(taskId, 65, 'Iniciando ambiente Claude Code...');
@@ -1010,6 +1019,9 @@ export class ContainerService {
       }
 
       await dockerService.stopContainer(container.dockerId);
+
+      // Invalidate VS Code health cache
+      vscodeHealthService.clearStatus(containerId);
 
       // Update status in database
       const updatedEntity = containerRepository.updateStatus(containerId, 'stopped');

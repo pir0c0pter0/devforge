@@ -1,9 +1,12 @@
 export const VSCodeConfig = {
   /** Timeout para aguardar VS Code ficar pronto (ms) */
-  STARTUP_TIMEOUT_MS: 30_000,
+  STARTUP_TIMEOUT_MS: 60_000,
 
   /** Timeout reduzido para restart de container existente (ms) */
-  RESTART_TIMEOUT_MS: 20_000,
+  RESTART_TIMEOUT_MS: 30_000,
+
+  /** Delay de estabilização após primeiro health check positivo (ms) */
+  STABILIZATION_DELAY_MS: 3_000,
 
   /** Intervalo entre health checks (ms) */
   POLL_INTERVAL_MS: 1_000,
