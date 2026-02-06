@@ -472,6 +472,57 @@ export class DockerService {
   }
 
   /**
+   * Update container restart policy
+   */
+  async updateRestartPolicy(containerId: string, policy: string): Promise<void> {
+    try {
+      logger.info({ containerId, policy }, 'Updating container restart policy');
+
+      const container = this.docker.getContainer(containerId);
+      await container.update({ RestartPolicy: { Name: policy, MaximumRetryCount: 0 } });
+
+      logger.info({ containerId, policy }, 'Container restart policy updated');
+    } catch (error) {
+      logger.error({ error, containerId }, 'Failed to update restart policy');
+      throw new Error(`Failed to update restart policy: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Wait for container to reach 'running' state (not 'restarting')
+   */
+  async waitForRunning(containerId: string, timeoutMs: number = 15000): Promise<void> {
+    const startTime = Date.now();
+    const pollInterval = 500;
+
+    while (Date.now() - startTime < timeoutMs) {
+      try {
+        const container = this.docker.getContainer(containerId);
+        const info = await container.inspect();
+        const state = info.State.Status;
+
+        if (state === 'running') {
+          return;
+        }
+
+        if (state === 'exited' || state === 'dead') {
+          throw new Error(`Container exited unexpectedly (status: ${state}, exit code: ${info.State.ExitCode})`);
+        }
+
+        logger.debug({ containerId, state }, 'Waiting for container to be running...');
+      } catch (error) {
+        if (error instanceof Error && (error.message.includes('exited unexpectedly') || error.message.includes('No such container'))) {
+          throw error;
+        }
+      }
+
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+
+    throw new Error(`Container did not reach running state within ${timeoutMs}ms`);
+  }
+
+  /**
    * Delete a Docker volume
    * Used to clean up workspace volumes when containers are deleted
    */

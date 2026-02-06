@@ -1,6 +1,6 @@
 # DevForge - Instruções Críticas
 
-## Versão Atual: 0.1.38-alpha
+## Versão Atual: 0.1.39-alpha
 
 ## Links
 
@@ -128,6 +128,12 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.39-alpha
+- Fix: Container creation failing with "Container is restarting" during git clone
+- Fix: RestartPolicy now set to 'no' during setup, changed to 'unless-stopped' after
+- Fix: Added waitForRunning() to ensure container is ready before docker exec
+- Fix: Prevents restart loop when code-server crashes during setup phase
 
 ### v0.1.38-alpha
 - Fix: Dockerfile corrigido para lidar com GID/UID 1000 já existente

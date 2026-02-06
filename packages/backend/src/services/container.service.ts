@@ -235,8 +235,8 @@ export class ContainerService {
         logger.info({ dockerId: dockerContainer.id }, 'Starting container for setup...');
         await dockerService.startContainer(dockerContainer.id);
 
-        // Wait for container to be ready
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Wait for container to actually be in 'running' state (not 'restarting')
+        await dockerService.waitForRunning(dockerContainer.id, 15000);
       }
 
       // Clone repository if specified (before copying configs)
@@ -308,6 +308,13 @@ export class ContainerService {
         // Stop container after setup (user will start it when ready)
         logger.info({ dockerId: dockerContainer.id }, 'Stopping container after setup...');
         await dockerService.stopContainer(dockerContainer.id);
+
+        // Now set the restart policy to 'unless-stopped' for normal operation
+        await dockerService.updateRestartPolicy(dockerContainer.id, 'unless-stopped');
+        logger.info({ dockerId: dockerContainer.id }, 'Restart policy set to unless-stopped');
+      } else {
+        // No setup needed, but still set restart policy for normal operation
+        await dockerService.updateRestartPolicy(dockerContainer.id, 'unless-stopped');
       }
 
       // Update task progress - saving/finalizing
@@ -1748,8 +1755,11 @@ export class ContainerService {
         { Name: 'core', Soft: 0, Hard: 0 },              // Disable core dumps (security)
       ],
 
+      // Start with no restart policy during setup to prevent restart loops
+      // that block docker exec (e.g., if code-server crashes during git clone).
+      // Updated to 'unless-stopped' after setup completes.
       RestartPolicy: {
-        Name: 'unless-stopped',
+        Name: 'no',
       },
       StorageOpt: {
         size: `${config.diskLimit}m`,
