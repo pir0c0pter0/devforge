@@ -1,8 +1,7 @@
 #!/bin/bash
 # Startup script for combined Claude Code + VS Code Server container
 # Handles graceful startup and shutdown of multiple services
-
-set -e
+# NOTE: No 'set -e' - container must stay alive even if code-server fails
 
 # Colors for output
 RED='\033[0;31m'
@@ -23,12 +22,14 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+CODE_SERVER_PID=""
+
 # Trap signals for graceful shutdown
 cleanup() {
     log_info "Received shutdown signal, cleaning up..."
 
     # Kill code-server if running
-    if [ ! -z "$CODE_SERVER_PID" ]; then
+    if [ -n "$CODE_SERVER_PID" ]; then
         log_info "Stopping code-server (PID: $CODE_SERVER_PID)..."
         kill -TERM "$CODE_SERVER_PID" 2>/dev/null || true
         wait "$CODE_SERVER_PID" 2>/dev/null || true
@@ -40,34 +41,7 @@ cleanup() {
 
 trap cleanup SIGTERM SIGINT SIGQUIT
 
-# Main startup sequence
-main() {
-    log_info "Starting Claude Code + VS Code Server container..."
-
-    # Check if workspace directory exists
-    if [ ! -d "/workspace" ]; then
-        log_warn "Workspace directory not found, creating..."
-        mkdir -p /workspace
-    fi
-
-    # Check if .claude directory exists, create if not
-    if [ ! -d "/home/developer/.claude" ]; then
-        log_warn ".claude directory not found, creating..."
-        mkdir -p /home/developer/.claude/{agents,skills,rules,cache}
-    fi
-
-    # Generate random VS Code password if not set
-    if [ -z "$PASSWORD" ]; then
-        export PASSWORD=$(openssl rand -base64 16 | tr -d '/+=' | head -c 16)
-        # Remove old credentials file if exists
-        rm -f /workspace/.vscode-credentials
-        # Save to file for reference (password NOT logged for security)
-        echo "VSCODE_PASSWORD=$PASSWORD" > /workspace/.vscode-credentials
-        chmod 600 /workspace/.vscode-credentials
-        log_info "VS Code password generated and saved to /workspace/.vscode-credentials"
-    fi
-
-    # Start code-server in the background with workspace folder
+start_code_server() {
     log_info "Starting VS Code Server on port 8080..."
     code-server \
         --bind-addr 0.0.0.0:8080 \
@@ -75,25 +49,53 @@ main() {
         --disable-telemetry \
         /workspace &
     CODE_SERVER_PID=$!
-
     log_info "VS Code Server started (PID: $CODE_SERVER_PID)"
+}
 
-    # Wait a moment for code-server to start
-    sleep 2
+# Main startup sequence
+main() {
+    log_info "Starting Claude Code + VS Code Server container..."
 
-    # Verify code-server is running
-    if ! kill -0 "$CODE_SERVER_PID" 2>/dev/null; then
-        log_error "VS Code Server failed to start"
-        exit 1
+    # Ensure workspace directory exists (use sudo if needed)
+    if [ ! -d "/workspace" ]; then
+        log_warn "Workspace directory not found, creating..."
+        sudo mkdir -p /workspace 2>/dev/null || mkdir -p /workspace 2>/dev/null || true
+        sudo chown developer:developer /workspace 2>/dev/null || true
     fi
+
+    # Check if .claude directory exists, create if not
+    if [ ! -d "/home/developer/.claude" ]; then
+        log_warn ".claude directory not found, creating..."
+        mkdir -p /home/developer/.claude/{agents,skills,rules,cache} 2>/dev/null || true
+    fi
+
+    # Generate random VS Code password if not set
+    if [ -z "$PASSWORD" ]; then
+        export PASSWORD=$(openssl rand -base64 16 | tr -d '/+=' | head -c 16)
+        # Save to file for reference (password NOT logged for security)
+        rm -f /workspace/.vscode-credentials 2>/dev/null || true
+        echo "VSCODE_PASSWORD=$PASSWORD" > /workspace/.vscode-credentials 2>/dev/null || true
+        chmod 600 /workspace/.vscode-credentials 2>/dev/null || true
+        log_info "VS Code password generated and saved to /workspace/.vscode-credentials"
+    fi
+
+    # Start code-server
+    start_code_server
 
     log_info "All services started successfully"
     log_info "VS Code Server: http://localhost:8080"
-    log_info "Claude Code: Run 'npx @anthropic-ai/claude-code' in terminal"
+    log_info "Claude Code: Run 'claude' in terminal"
 
-    # Keep the container running and wait for signals
-    log_info "Container ready, waiting for shutdown signal..."
-    wait "$CODE_SERVER_PID"
+    # Keep the container alive - restart code-server if it crashes
+    log_info "Container ready, monitoring services..."
+    while true; do
+        if [ -n "$CODE_SERVER_PID" ] && ! kill -0 "$CODE_SERVER_PID" 2>/dev/null; then
+            log_warn "code-server exited, restarting in 5s..."
+            sleep 5
+            start_code_server
+        fi
+        sleep 5
+    done
 }
 
 # Run main function
