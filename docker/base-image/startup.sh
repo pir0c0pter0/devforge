@@ -45,7 +45,7 @@ start_code_server() {
     log_info "Starting VS Code Server on port 8080..."
     code-server \
         --bind-addr 0.0.0.0:8080 \
-        --auth password \
+        --auth none \
         --disable-telemetry \
         /workspace &
     CODE_SERVER_PID=$!
@@ -67,16 +67,6 @@ main() {
     if [ ! -d "/home/developer/.claude" ]; then
         log_warn ".claude directory not found, creating..."
         mkdir -p /home/developer/.claude/{agents,skills,rules,cache} 2>/dev/null || true
-    fi
-
-    # Generate random VS Code password if not set
-    if [ -z "$PASSWORD" ]; then
-        export PASSWORD=$(openssl rand -base64 16 | tr -d '/+=' | head -c 16)
-        # Save to file for reference (password NOT logged for security)
-        rm -f /workspace/.vscode-credentials 2>/dev/null || true
-        echo "VSCODE_PASSWORD=$PASSWORD" > /workspace/.vscode-credentials 2>/dev/null || true
-        chmod 600 /workspace/.vscode-credentials 2>/dev/null || true
-        log_info "VS Code password generated and saved to /workspace/.vscode-credentials"
     fi
 
     # Start code-server

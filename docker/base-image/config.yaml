@@ -2,9 +2,8 @@
 # Passwordless access configuration for development containers
 
 bind-addr: 0.0.0.0:8080
-auth: password
-# Enable password authentication for security
-# Password set via PASSWORD or HASHED_PASSWORD environment variable
+auth: none
+# No authentication - containers accessed via DevForge iframe
 
 cert: false
 # No HTTPS - use reverse proxy if needed in production
