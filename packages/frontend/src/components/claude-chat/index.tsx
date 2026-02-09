@@ -5,6 +5,7 @@ import clsx from 'clsx'
 import { Bot, Play, Square, Send, Loader2, Trash2, MessageSquareText, X } from 'lucide-react'
 import { useClaudeDaemon, ClaudeMessage } from '@/hooks/use-claude-daemon'
 import { useClaudeChatStore } from '@/stores/claude-chat.store'
+import { apiClient } from '@/lib/api-client'
 import type { SessionMessage } from './session-selector'
 import { StatusBadge } from './status-badge'
 import { MessageItem } from './message-item'
@@ -40,10 +41,22 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
   const [filteredSkills, setFilteredSkills] = useState<ClaudeSkill[]>([])
   const [currentSessionId, setCurrentSessionId] = useState<string | undefined>(undefined)
   const [pendingContext, setPendingContext] = useState<string | null>(null)
+  const [ralphLoop, setRalphLoop] = useState(false)
   const { setMessages } = useClaudeChatStore()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const suggestionsRef = useRef<HTMLDivElement>(null)
+
+  // Sync Ralph Loop state from container config
+  useEffect(() => {
+    const syncRalphLoop = async () => {
+      const response = await apiClient.getContainer(containerId)
+      if (response.success && response.data) {
+        setRalphLoop(response.data.ralphLoop === true)
+      }
+    }
+    syncRalphLoop()
+  }, [containerId])
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -451,10 +464,27 @@ ${contextParts.join('\n\n')}
           </button>
         </div>
 
-        {/* Helper text */}
-        <p className="text-xs text-terminal-textMuted mt-1.5">
-          {t.claudeChat.pressEnter} • Digite <span className="font-mono text-terminal-cyan">/</span> para skills
-        </p>
+        {/* Helper text + Ralph Loop toggle */}
+        <div className="flex items-center justify-between mt-1.5">
+          <p className="text-xs text-terminal-textMuted">
+            {t.claudeChat.pressEnter} • Digite <span className="font-mono text-terminal-cyan">/</span> para skills
+          </p>
+          <label className="flex items-center gap-1.5 cursor-pointer select-none group">
+            <input
+              type="checkbox"
+              checked={ralphLoop}
+              onChange={async (e) => {
+                const enabled = e.target.checked
+                setRalphLoop(enabled)
+                await apiClient.updateRalphLoop(containerId, enabled)
+              }}
+              className="w-3.5 h-3.5 rounded border-terminal-border bg-terminal-bgLight text-terminal-cyan focus:ring-terminal-cyan focus:ring-offset-0 accent-cyan-500"
+            />
+            <span className={clsx('text-xs font-medium transition-colors', ralphLoop ? 'text-terminal-cyan' : 'text-terminal-textMuted group-hover:text-terminal-text')}>
+              {t.containerDetail.ralphLoop}
+            </span>
+          </label>
+        </div>
       </div>
     </div>
   )

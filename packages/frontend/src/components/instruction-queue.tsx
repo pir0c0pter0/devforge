@@ -53,9 +53,21 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedJob, setSelectedJob] = useState<JobDetails | null>(null)
   const [isLoadingDetails, setIsLoadingDetails] = useState(false)
+  const [ralphLoop, setRalphLoop] = useState(false)
   const socketRef = useRef<Socket | null>(null)
   const modal = useModal()
   const toast = useToast()
+
+  // Sync Ralph Loop state from container config
+  useEffect(() => {
+    const syncRalphLoop = async () => {
+      const response = await apiClient.getContainer(containerId)
+      if (response.success && response.data) {
+        setRalphLoop(response.data.ralphLoop === true)
+      }
+    }
+    syncRalphLoop()
+  }, [containerId])
 
   // Real-time progress tracking per job with stage and message
   const [jobProgress, setJobProgress] = useState<Record<string, JobProgressState>>({})
@@ -454,6 +466,27 @@ export function InstructionQueue({ containerId }: InstructionQueueProps) {
             {isSubmitting ? <AnimatedDots text={t.instructionQueue.adding} /> : t.instructionQueue.add}
           </button>
         </form>
+
+        <div className="flex items-center gap-2 mt-2">
+          <label className="flex items-center gap-2 cursor-pointer select-none group">
+            <input
+              type="checkbox"
+              checked={ralphLoop}
+              onChange={async (e) => {
+                const enabled = e.target.checked
+                setRalphLoop(enabled)
+                await apiClient.updateRalphLoop(containerId, enabled)
+              }}
+              className="w-4 h-4 rounded border-terminal-border bg-terminal-bgLight text-terminal-cyan focus:ring-terminal-cyan focus:ring-offset-0 accent-cyan-500"
+            />
+            <span className="text-xs text-terminal-textMuted group-hover:text-terminal-text transition-colors">
+              {t.containerDetail.ralphLoop}
+            </span>
+            <span className="text-xs text-terminal-textMuted/60">
+              — {t.containerDetail.ralphLoopDescription}
+            </span>
+          </label>
+        </div>
 
         {error && (
           <p className="mt-2 text-sm text-terminal-red">{error}</p>

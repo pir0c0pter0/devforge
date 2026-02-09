@@ -1378,6 +1378,12 @@ export class ContainerService {
           ? buildVscodeUrl(entity.vscodePort)
           : undefined;
 
+        const claudeModel = entity.config?.['claudeModel']
+          ? String(entity.config['claudeModel'])
+          : undefined;
+
+        const ralphLoop = entity.config?.['ralphLoop'] === true;
+
         items.push({
           id: container.id,
           dockerId: container.dockerId,
@@ -1392,6 +1398,8 @@ export class ContainerService {
           queueLength,
           taskId,
           vscodeUrl,
+          claudeModel,
+          ralphLoop,
         });
       }
 
@@ -1494,6 +1502,12 @@ export class ContainerService {
       ? buildVscodeUrl(entity.vscodePort)
       : undefined;
 
+    const claudeModel = entity.config?.['claudeModel']
+      ? String(entity.config['claudeModel'])
+      : undefined;
+
+    const ralphLoop = entity.config?.['ralphLoop'] === true;
+
     return {
       id: container.id,
       dockerId: container.dockerId,
@@ -1508,7 +1522,55 @@ export class ContainerService {
       queueLength,
       taskId,
       vscodeUrl,
+      claudeModel,
+      ralphLoop,
     };
+  }
+
+  /**
+   * Update the Ralph Loop setting for a container
+   */
+  async updateRalphLoop(containerId: string, enabled: boolean): Promise<ContainerListItem> {
+    const entity = containerRepository.findById(containerId);
+    if (!entity) {
+      throw new Error(`Container não encontrado: ${containerId}`);
+    }
+
+    const existingConfig = entity.config || {};
+    const updatedConfig = { ...existingConfig, ralphLoop: enabled };
+
+    const updatedEntity = containerRepository.update(containerId, { config: updatedConfig });
+    if (!updatedEntity) {
+      throw new Error('Falha ao atualizar Ralph Loop');
+    }
+
+    const container = entityToContainer(updatedEntity);
+    this.containers.set(containerId, container);
+
+    return await this.getById(containerId) as ContainerListItem;
+  }
+
+  /**
+   * Update the Claude model for a container
+   */
+  async updateClaudeModel(containerId: string, model: string): Promise<ContainerListItem> {
+    const entity = containerRepository.findById(containerId);
+    if (!entity) {
+      throw new Error(`Container não encontrado: ${containerId}`);
+    }
+
+    const existingConfig = entity.config || {};
+    const updatedConfig = { ...existingConfig, claudeModel: model };
+
+    const updatedEntity = containerRepository.update(containerId, { config: updatedConfig });
+    if (!updatedEntity) {
+      throw new Error('Falha ao atualizar modelo Claude');
+    }
+
+    const container = entityToContainer(updatedEntity);
+    this.containers.set(containerId, container);
+
+    return await this.getById(containerId) as ContainerListItem;
   }
 
   /**

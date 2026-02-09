@@ -240,6 +240,14 @@ export const translations = {
       memoryMb: 'Memória (MB)',
       diskGb: 'Disco (GB)',
       cannotModifyRunning: 'Limites de recursos não podem ser modificados enquanto o container está rodando.',
+      // Ralph Loop
+      ralphLoop: 'Ralph Loop',
+      ralphLoopDescription: 'Claude trabalha sem parar até completar a tarefa',
+      // Claude Model
+      claudeModel: 'Modelo Claude',
+      claudeModelDescription: 'Modelo usado pelo Claude Code neste container',
+      claudeModelUpdated: 'Modelo atualizado com sucesso',
+      claudeModelUpdateFailed: 'Falha ao atualizar modelo',
       // Danger zone
       dangerZone: 'Zona de Perigo',
       dangerZoneWarning: 'Uma vez que você excluir um container, não há como voltar atrás. Por favor, tenha certeza.',
@@ -915,6 +923,14 @@ export const translations = {
       memoryMb: 'Memory (MB)',
       diskGb: 'Disk (GB)',
       cannotModifyRunning: 'Resource limits cannot be modified while the container is running.',
+      // Ralph Loop
+      ralphLoop: 'Ralph Loop',
+      ralphLoopDescription: 'Claude works non-stop until the task is complete',
+      // Claude Model
+      claudeModel: 'Claude Model',
+      claudeModelDescription: 'Model used by Claude Code in this container',
+      claudeModelUpdated: 'Model updated successfully',
+      claudeModelUpdateFailed: 'Failed to update model',
       // Danger zone
       dangerZone: 'Danger Zone',
       dangerZoneWarning: 'Once you delete a container, there is no going back. Please be certain.',

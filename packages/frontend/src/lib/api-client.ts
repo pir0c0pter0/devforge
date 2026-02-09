@@ -223,6 +223,22 @@ class ApiClient {
     })
   }
 
+  // Ralph Loop
+  async updateRalphLoop(id: string, enabled: boolean): Promise<ApiResponse<Container>> {
+    return this.request<Container>(`/api/containers/${id}/ralph-loop`, {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
+    })
+  }
+
+  // Claude Model
+  async updateClaudeModel(id: string, model: string): Promise<ApiResponse<Container>> {
+    return this.request<Container>(`/api/containers/${id}/claude-model`, {
+      method: 'PUT',
+      body: JSON.stringify({ model }),
+    })
+  }
+
   // Disk metrics
   async getDiskMetrics(id: string): Promise<ApiResponse<{
     usage: number

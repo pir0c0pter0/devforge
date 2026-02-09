@@ -867,4 +867,86 @@ router.get(
   }
 );
 
+/**
+ * Update Ralph Loop schema
+ */
+const UpdateRalphLoopSchema = z.object({
+  enabled: z.boolean(),
+});
+
+/**
+ * PUT /api/containers/:id/ralph-loop
+ * Enable or disable Ralph Loop mode for this container
+ */
+router.put(
+  '/:id/ralph-loop',
+  strictRateLimiter,
+  validateParams(ContainerIdParamsSchema),
+  validateBody(UpdateRalphLoopSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const id = req.params['id'] as string;
+      const { enabled } = req.body;
+
+      logger.info({ containerId: id, enabled }, 'Updating Ralph Loop setting');
+
+      const updatedContainer = await containerService.updateRalphLoop(id, enabled);
+
+      logger.info({ containerId: id, enabled }, 'Ralph Loop setting updated');
+
+      res.json(successResponse(updatedContainer, 'Ralph Loop updated'));
+    } catch (error) {
+      logger.error({ error, containerId: req.params['id'] }, 'Failed to update Ralph Loop');
+
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update Ralph Loop';
+      const statusCode = errorMessage.includes('não encontrado') ? 404 : 500;
+
+      res.status(statusCode).json(errorResponse(errorMessage, statusCode));
+    }
+  }
+);
+
+/**
+ * Update Claude model schema
+ */
+const UpdateClaudeModelSchema = z.object({
+  model: z.enum([
+    'claude-opus-4-6',
+    'claude-sonnet-4-5-20250929',
+    'claude-haiku-4-5-20251001',
+  ]),
+});
+
+/**
+ * PUT /api/containers/:id/claude-model
+ * Update the Claude model used by this container
+ */
+router.put(
+  '/:id/claude-model',
+  strictRateLimiter,
+  validateParams(ContainerIdParamsSchema),
+  validateBody(UpdateClaudeModelSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const id = req.params['id'] as string;
+      const { model } = req.body;
+
+      logger.info({ containerId: id, model }, 'Updating Claude model');
+
+      const updatedContainer = await containerService.updateClaudeModel(id, model);
+
+      logger.info({ containerId: id, model }, 'Claude model updated successfully');
+
+      res.json(successResponse(updatedContainer, 'Claude model updated successfully'));
+    } catch (error) {
+      logger.error({ error, containerId: req.params['id'] }, 'Failed to update Claude model');
+
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update Claude model';
+      const statusCode = errorMessage.includes('não encontrado') ? 404 : 500;
+
+      res.status(statusCode).json(errorResponse(errorMessage, statusCode));
+    }
+  }
+);
+
 export default router;

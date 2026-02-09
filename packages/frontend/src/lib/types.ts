@@ -35,6 +35,8 @@ export interface Container {
   queueLength: number
   taskId?: string // Task ID for tracking creation progress
   vscodeUrl?: string // Pre-resolved VS Code URL for instant IDE loading
+  claudeModel?: string // Claude model ID for this container
+  ralphLoop?: boolean // Ralph Loop mode enabled
 }
 
 export interface CreateContainerRequest {

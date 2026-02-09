@@ -177,6 +177,10 @@ export default function ContainerDetailPage() {
   const [limitsError, setLimitsError] = useState<string | null>(null)
   const [limitsSuccess, setLimitsSuccess] = useState<string | null>(null)
 
+  // Claude model selector state
+  const [claudeModel, setClaudeModel] = useState<string>('claude-opus-4-6')
+  const [claudeModelFeedback, setClaudeModelFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
   // Get real-time metrics from store (updated via WebSocket)
   const storeContainer = useMemo(() => {
     return containers.find(c => c.id === containerId)
@@ -223,6 +227,10 @@ export default function ContainerDetailPage() {
         // Auto-set VS Code URL if available from backend (pre-loaded during container start)
         if (response.data.vscodeUrl && !vscodeUrl) {
           setVscodeUrl(response.data.vscodeUrl)
+        }
+        // Sync Claude model from container config
+        if (response.data.claudeModel) {
+          setClaudeModel(response.data.claudeModel)
         }
       } else {
         setError(response.error || t.containerDetail.containerNotFound)
@@ -798,6 +806,38 @@ export default function ContainerDetailPage() {
               <div>
                 <label className="label">{t.containerDetail.mode}</label>
                 <input type="text" className="input" value={container.mode} readOnly disabled />
+              </div>
+              <div>
+                <label className="label">{t.containerDetail.claudeModel}</label>
+                <p className="text-xs text-terminal-textMuted mb-2">{t.containerDetail.claudeModelDescription}</p>
+                <select
+                  className="input"
+                  value={claudeModel}
+                  onChange={async (e) => {
+                    const newModel = e.target.value
+                    setClaudeModel(newModel)
+                    setClaudeModelFeedback(null)
+                    const response = await apiClient.updateClaudeModel(container.id, newModel)
+                    if (response.success) {
+                      setClaudeModelFeedback({ type: 'success', message: t.containerDetail.claudeModelUpdated })
+                    } else {
+                      setClaudeModelFeedback({ type: 'error', message: response.error || t.containerDetail.claudeModelUpdateFailed })
+                    }
+                    setTimeout(() => setClaudeModelFeedback(null), 3000)
+                  }}
+                >
+                  <option value="claude-opus-4-6">Claude Opus 4.6</option>
+                  <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
+                  <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+                </select>
+                {claudeModelFeedback && (
+                  <p className={clsx(
+                    'text-xs mt-1',
+                    claudeModelFeedback.type === 'success' ? 'text-emerald-400' : 'text-red-400'
+                  )}>
+                    {claudeModelFeedback.message}
+                  </p>
+                )}
               </div>
             </div>
           </div>

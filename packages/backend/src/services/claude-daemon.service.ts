@@ -535,6 +535,23 @@ class ClaudeDaemonService extends EventEmitter {
 
         logger.debug({ containerId, mode: session.mode }, 'Building command flags')
 
+        // Add --model flag if configured for this container
+        const containerEntity = containerRepository.findById(containerId)
+        const claudeModel = containerEntity?.config?.['claudeModel'] as string | undefined
+        if (claudeModel) {
+          flags.push('--model', claudeModel)
+          logger.debug({ containerId, model: claudeModel }, 'Using configured Claude model')
+        }
+
+        // Ralph Loop: wrap instruction if enabled
+        const ralphLoopEnabled = containerEntity?.config?.['ralphLoop'] === true
+        const finalInstruction = ralphLoopEnabled
+          ? `[RALPH MODE] You MUST work iteratively and autonomously until the task is FULLY complete. Do NOT stop to ask questions or for confirmation. Keep coding, testing, fixing, and improving until EVERYTHING is done and verified. Do not give partial answers - finish the entire task.\n\n${instruction}`
+          : instruction
+        if (ralphLoopEnabled) {
+          logger.debug({ containerId }, 'Ralph Loop enabled - instruction wrapped')
+        }
+
         // First instruction uses --session-id, subsequent use --resume
         if (session.state.instructionCount === 0) {
           flags.push('--session-id', session.sessionId)
@@ -547,7 +564,7 @@ class ClaudeDaemonService extends EventEmitter {
           type: 'user',
           message: {
             role: 'user',
-            content: instruction,
+            content: finalInstruction,
           },
         }
 
