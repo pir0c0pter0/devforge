@@ -129,11 +129,13 @@ router.get('/telegram-config', async (_req: Request, res: Response) => {
     const token = process.env['TELEGRAM_BOT_TOKEN'] || '';
     const allowedUsers = process.env['TELEGRAM_ALLOWED_USERS'] || '';
 
+    // SEC-M3: Only expose whether token exists and bot ID prefix, not partial token
+    const botIdPrefix = token ? token.split(':')[0] : '';
     res.json({
       success: true,
       data: {
         hasToken: !!token,
-        tokenMasked: token ? `${token.substring(0, 10)}...${token.substring(token.length - 5)}` : '',
+        botId: botIdPrefix,
         allowedUsers: allowedUsers,
       }
     });
@@ -176,38 +178,47 @@ router.post('/telegram-config', strictRateLimiter, async (req: Request, res: Res
       }
     }
 
-    // Find .env file path (backend/.env is 3 levels up from routes)
+    // SEC-H6: Only modify known Telegram-related env vars via line-by-line parsing
+    const ALLOWED_ENV_KEYS = ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_ALLOWED_USERS'] as const;
     const envPath = path.resolve(__dirname, '../../../.env');
 
-    let envContent = '';
+    let lines: string[] = [];
     if (fs.existsSync(envPath)) {
-      envContent = fs.readFileSync(envPath, 'utf-8');
+      lines = fs.readFileSync(envPath, 'utf-8').split('\n');
     }
 
-    // Update or add TELEGRAM_BOT_TOKEN
+    const updates: Record<string, string> = {};
     if (token !== undefined) {
-      if (envContent.includes('TELEGRAM_BOT_TOKEN=')) {
-        envContent = envContent.replace(/TELEGRAM_BOT_TOKEN=.*/g, `TELEGRAM_BOT_TOKEN=${token}`);
-      } else {
-        envContent += `\n# Telegram Bot Configuration\nTELEGRAM_BOT_TOKEN=${token}\n`;
-      }
-      // Update process.env for immediate effect
+      updates['TELEGRAM_BOT_TOKEN'] = token;
       process.env['TELEGRAM_BOT_TOKEN'] = token;
     }
-
-    // Update or add TELEGRAM_ALLOWED_USERS
     if (allowedUsers !== undefined) {
-      if (envContent.includes('TELEGRAM_ALLOWED_USERS=')) {
-        envContent = envContent.replace(/TELEGRAM_ALLOWED_USERS=.*/g, `TELEGRAM_ALLOWED_USERS=${allowedUsers}`);
-      } else {
-        envContent += `TELEGRAM_ALLOWED_USERS=${allowedUsers}\n`;
-      }
-      // Update process.env for immediate effect
+      updates['TELEGRAM_ALLOWED_USERS'] = allowedUsers;
       process.env['TELEGRAM_ALLOWED_USERS'] = allowedUsers;
     }
 
-    // Write .env file
-    fs.writeFileSync(envPath, envContent, 'utf-8');
+    // Update existing lines or track which keys still need to be added
+    const keysToAdd = new Set(Object.keys(updates));
+    const updatedLines = lines.map(line => {
+      const match = line.match(/^([A-Z_]+)=/);
+      if (match && match[1] && keysToAdd.has(match[1]) && (ALLOWED_ENV_KEYS as readonly string[]).includes(match[1])) {
+        keysToAdd.delete(match[1]);
+        return `${match[1]}=${updates[match[1]]}`;
+      }
+      return line;
+    });
+
+    // Append any keys that weren't found in existing file
+    for (const key of keysToAdd) {
+      if ((ALLOWED_ENV_KEYS as readonly string[]).includes(key)) {
+        if (key === 'TELEGRAM_BOT_TOKEN' && !updatedLines.some(l => l.includes('# Telegram'))) {
+          updatedLines.push('', '# Telegram Bot Configuration');
+        }
+        updatedLines.push(`${key}=${updates[key]}`);
+      }
+    }
+
+    fs.writeFileSync(envPath, updatedLines.join('\n'), 'utf-8');
 
     logger.info('Telegram configuration saved to .env file');
 

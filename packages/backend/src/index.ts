@@ -29,7 +29,7 @@ import {
   csrfValidationMiddleware,
   getCsrfToken,
 } from './middleware/csrf.middleware';
-import { authenticateJWT } from './middleware/auth.middleware';
+import { authenticateJWT, validateAuthConfig } from './middleware/auth.middleware';
 import healthRouter from './api/routes/health.routes';
 import { destroyAllQueues } from './services/claude-queue.service';
 import { stopAllWorkers } from './workers/claude.worker';
@@ -109,8 +109,19 @@ let io: ReturnType<typeof initializeWebSocket> | null = null;
 /**
  * Middleware
  */
+// SEC-H4: Enable CSP and security headers in all environments
 app.use(helmet({
-  contentSecurityPolicy: NODE_ENV === 'production',
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'blob:'],
+      connectSrc: ["'self'", 'ws:', 'wss:'],
+      frameSrc: ["'self'"],
+      fontSrc: ["'self'", 'data:'],
+    },
+  },
 }));
 
 // Security headers: deny dangerous browser APIs
@@ -291,10 +302,10 @@ app.use((req: Request, res: Response) => {
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   logger.error({ error: err, path: req.path, method: req.method }, 'Unhandled error');
 
+  // SEC-H5: Always return generic error messages to clients; details logged server-side
   res.status(500).json({
     success: false,
-    error: NODE_ENV === 'production' ? 'Internal server error' : err.message,
-    ...(NODE_ENV !== 'production' && { stack: err.stack }),
+    error: 'Internal server error',
   });
 });
 
@@ -397,6 +408,9 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
  */
 const startServer = async () => {
   try {
+    // SEC-C2: Validate auth configuration before starting
+    validateAuthConfig();
+
     // Initialize database
     logger.info('Initializing database');
     initializeDatabase();

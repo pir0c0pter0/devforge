@@ -1,11 +1,15 @@
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { z } from 'zod';
 import { dockerService } from './docker.service';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
+
+const emailSchema = z.string().email('Invalid email format');
 
 export interface ClaudeStatus {
   authenticated: boolean;
@@ -283,6 +287,12 @@ class SettingsService {
    * Generate SSH key
    */
   async generateSshKey(email: string): Promise<{ success: boolean; error?: string }> {
+    // SEC-C1: Validate email with Zod to prevent command injection
+    const parseResult = emailSchema.safeParse(email);
+    if (!parseResult.success) {
+      return { success: false, error: 'Invalid email format' };
+    }
+
     const homeDir = os.homedir();
     const sshDir = path.join(homeDir, '.ssh');
     const keyPath = path.join(sshDir, 'id_ed25519');
@@ -298,7 +308,8 @@ class SettingsService {
     }
 
     try {
-      await execAsync(`ssh-keygen -t ed25519 -C "${email}" -f "${keyPath}" -N ""`);
+      // SEC-C1: Use execFileAsync instead of execAsync to prevent shell injection
+      await execFileAsync('ssh-keygen', ['-t', 'ed25519', '-C', email, '-f', keyPath, '-N', '']);
       return { success: true };
     } catch (error) {
       return {

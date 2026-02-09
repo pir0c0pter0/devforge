@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { randomBytes } from 'crypto';
+import { randomBytes, timingSafeEqual as cryptoTimingSafeEqual } from 'crypto';
 import { logger } from '../utils/logger';
 
 /**
@@ -52,8 +52,9 @@ const CSRF_EXEMPT_PATHS = [
 /**
  * Check if a path is exempt from CSRF protection
  */
+// SEC-M5: Use exact match or prefix + '/' to prevent bypass via crafted paths
 const isExemptPath = (path: string): boolean => {
-  return CSRF_EXEMPT_PATHS.some(exemptPath => path === exemptPath || path.startsWith(exemptPath));
+  return CSRF_EXEMPT_PATHS.some(exemptPath => path === exemptPath || path.startsWith(exemptPath + '/'));
 };
 
 /**
@@ -162,20 +163,22 @@ export const csrfValidationMiddleware = (
 };
 
 /**
- * Timing-safe string comparison to prevent timing attacks
- * Compares two strings in constant time regardless of where they differ
+ * SEC-H1: Timing-safe string comparison using Node.js crypto module
+ * Prevents length oracle by padding both strings to the same length
  */
 const timingSafeEqual = (a: string, b: string): boolean => {
-  if (a.length !== b.length) {
-    return false;
-  }
+  const bufA = Buffer.from(a, 'utf-8');
+  const bufB = Buffer.from(b, 'utf-8');
 
-  let result = 0;
-  for (let i = 0; i < a.length; i++) {
-    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
+  // Pad to same length to prevent length oracle
+  const maxLen = Math.max(bufA.length, bufB.length);
+  const paddedA = Buffer.alloc(maxLen);
+  const paddedB = Buffer.alloc(maxLen);
+  bufA.copy(paddedA);
+  bufB.copy(paddedB);
 
-  return result === 0;
+  // Use Node.js built-in timing-safe comparison
+  return bufA.length === bufB.length && cryptoTimingSafeEqual(paddedA, paddedB);
 };
 
 /**

@@ -5,6 +5,7 @@ import { containerRepository } from '../../repositories/container.repository'
 import { apiLogger as logger } from '../../utils/logger'
 import { validateBody } from '../../utils/validation'
 import { strictRateLimiter } from '../../middleware/rate-limit'
+import { authenticateJWT } from '../../middleware/auth.middleware'
 
 const router: Router = Router()
 
@@ -77,6 +78,7 @@ router.post(
  */
 router.get(
   '/status',
+  authenticateJWT,
   async (_req: Request, res: Response): Promise<void> => {
     try {
       logger.debug('Getting Telegram bot status')
@@ -107,6 +109,7 @@ router.get(
  */
 router.post(
   '/send',
+  authenticateJWT,
   strictRateLimiter,
   validateBody(SendMessageBodySchema),
   async (req: Request, res: Response): Promise<void> => {
@@ -142,6 +145,7 @@ router.post(
  */
 router.post(
   '/broadcast',
+  authenticateJWT,
   strictRateLimiter,
   validateBody(z.object({
     type: z.enum([

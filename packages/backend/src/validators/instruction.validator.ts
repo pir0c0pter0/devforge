@@ -71,26 +71,12 @@ const DANGEROUS_PATTERNS = [
   /nmap/i,
   /masscan/i,
 
-  // Command substitution (CWE-78)
-  /\$\([^)]+\)/,  // $(command)
-  /`[^`]+`/,      // `command`
+  // SEC-H3: Removed broad metacharacter patterns (;, |, &&, ||, backticks, $(), heredocs)
+  // These block legitimate instructions like "install packages && run tests"
+  // Container isolation (CapDrop ALL, no-new-privileges, non-root) provides defense
 
-  // Shell metacharacters in dangerous contexts
-  /;\s*\w/,       // ; command
-  /\|\s*\w/,      // | command (pipe to another command)
-  /&&\s*\w/,      // && command
-  /\|\|\s*\w/,    // || command
-
-  // Process substitution
-  /<\([^)]+\)/,   // <(command)
-  />\([^)]+\)/,   // >(command)
-
-  // Null byte injection
+  // Null byte injection (always dangerous regardless of context)
   /\x00/,         // Null byte
-  /\\0/,          // Escaped null byte
-
-  // Here document exploitation
-  /<<[<-]?\s*\w+/,  // Heredoc
 ]
 
 /**

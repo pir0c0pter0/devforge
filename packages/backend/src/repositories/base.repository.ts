@@ -98,14 +98,27 @@ export abstract class BaseRepository<
   }
 
   /**
-   * Build ORDER BY clause
+   * Allowed columns for ORDER BY (override in subclasses to extend)
+   * SEC-M1: Whitelist prevents SQL injection via ORDER BY clause
+   */
+  protected readonly allowedOrderColumns: readonly string[] = [
+    'id', 'created_at', 'updated_at', 'name', 'status'
+  ];
+
+  /**
+   * Build ORDER BY clause with column whitelist validation
    */
   protected buildOrderClause(filters?: Filters): string {
     if (!filters?.orderBy) {
       return '';
     }
-    const direction = filters.orderDirection || 'ASC';
-    return `ORDER BY ${this.toSnakeCase(filters.orderBy)} ${direction}`;
+    const column = this.toSnakeCase(filters.orderBy);
+    // SEC-M1: Validate column is in whitelist to prevent SQL injection
+    if (!this.allowedOrderColumns.includes(column)) {
+      return '';
+    }
+    const direction = filters.orderDirection === 'DESC' ? 'DESC' : 'ASC';
+    return `ORDER BY ${column} ${direction}`;
   }
 
   /**

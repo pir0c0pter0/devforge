@@ -306,7 +306,8 @@ router.get(
 
       // Get container name for filename
       const container = containerRepository.findById(id);
-      const containerName = container?.name || id;
+      // SEC-M4: Sanitize container name to prevent header injection
+      const containerName = (container?.name || id).replace(/[^a-zA-Z0-9_-]/g, '_');
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const filename = `docker-logs-${containerName}-${timestamp}.${format}`;
 

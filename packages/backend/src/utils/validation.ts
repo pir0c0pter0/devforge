@@ -155,6 +155,15 @@ export class ValidationError extends Error {
 /**
  * Safe parse helper that returns result object
  */
+/**
+ * QA-H4: Validate containerId for WebSocket handlers
+ * Returns validated UUID string or null if invalid
+ */
+export const validateContainerId = (containerId: unknown): string | null => {
+  const result = z.string().uuid().safeParse(containerId);
+  return result.success ? result.data : null;
+};
+
 export const safeParse = <T extends z.ZodTypeAny>(
   schema: T,
   data: unknown

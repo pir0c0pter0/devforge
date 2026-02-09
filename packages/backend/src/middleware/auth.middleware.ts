@@ -10,6 +10,32 @@ const getJwtSecret = (): string | null => {
   return process.env['JWT_SECRET'] || null
 }
 
+/**
+ * SEC-C2: Validate JWT_SECRET is configured in production
+ * Call this at startup to prevent running without auth in production
+ */
+export const validateAuthConfig = (): void => {
+  const jwtSecret = getJwtSecret()
+  const nodeEnv = process.env['NODE_ENV'] || 'development'
+
+  if (!jwtSecret && nodeEnv === 'production') {
+    logger.error('CRITICAL: JWT_SECRET is not configured in production mode. Refusing to start.')
+    throw new Error('JWT_SECRET must be configured in production mode')
+  }
+
+  if (!jwtSecret) {
+    logger.warn('WARNING: JWT_SECRET not configured — auth disabled. Only localhost access will be allowed.')
+  }
+}
+
+/**
+ * Check if request originates from localhost
+ */
+const isLocalhost = (req: Request): boolean => {
+  const ip = req.ip || req.socket.remoteAddress || ''
+  return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1'
+}
+
 export interface AuthenticatedRequest extends Request {
   user?: {
     id: string
@@ -35,10 +61,19 @@ export const authenticateJWT = (
 ): void => {
   const jwtSecret = getJwtSecret()
 
-  // If JWT_SECRET is not configured, allow anonymous access (development mode)
+  // SEC-C2: If JWT_SECRET is not configured, only allow localhost access
   if (!jwtSecret) {
-    logger.debug('[Auth] JWT_SECRET not configured, allowing anonymous access')
-    next()
+    if (isLocalhost(req)) {
+      logger.debug('[Auth] JWT_SECRET not configured, allowing localhost access')
+      next()
+      return
+    }
+    logger.warn({ ip: req.ip, path: req.path }, '[Auth] Blocked non-localhost request — JWT_SECRET not configured')
+    res.status(403).json({
+      success: false,
+      error: 'Access denied. Authentication not configured for remote access.',
+      code: 'AUTH_NOT_CONFIGURED'
+    })
     return
   }
 
@@ -205,9 +240,9 @@ export const authenticateWebSocket = (
 ): { id: string; email?: string; role?: string } | null => {
   const jwtSecret = getJwtSecret()
 
-  // If JWT_SECRET is not configured, return null (auth disabled)
+  // SEC-C2: If JWT_SECRET is not configured, return anonymous marker (localhost only enforced at HTTP level)
   if (!jwtSecret) {
-    return null
+    return { id: 'anonymous', role: 'admin' }
   }
 
   try {

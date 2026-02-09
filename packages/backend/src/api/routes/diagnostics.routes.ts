@@ -5,6 +5,10 @@ import { logger } from '../../utils/logger';
 
 const router: RouterType = Router();
 
+// SEC-M2: Whitelist of valid diagnostic check names
+const VALID_CHECKS = ['docker', 'group', 'images', 'containers', 'redis', 'ssh', 'ports', 'disk'] as const;
+type ValidCheck = typeof VALID_CHECKS[number];
+
 /**
  * GET /api/diagnostics
  * Run all system diagnostics
@@ -35,10 +39,20 @@ router.get('/', async (_req: Request, res: Response) => {
 router.get('/:check', async (req: Request, res: Response) => {
   const { check } = req.params;
 
+  // SEC-M2: Validate check parameter against known whitelist before using in response
+  if (!check || !VALID_CHECKS.includes(check as ValidCheck)) {
+    res.status(400).json({
+      success: false,
+      error: 'Unknown diagnostic check',
+      availableChecks: [...VALID_CHECKS],
+    });
+    return;
+  }
+
   try {
     let result;
 
-    switch (check) {
+    switch (check as ValidCheck) {
       case 'docker':
         result = await diagnosticsService.checkDockerDaemon();
         break;
@@ -63,22 +77,6 @@ router.get('/:check', async (req: Request, res: Response) => {
       case 'disk':
         result = await diagnosticsService.checkDiskSpace();
         break;
-      default:
-        res.status(400).json({
-          success: false,
-          error: `Unknown check: ${check}`,
-          availableChecks: [
-            'docker',
-            'group',
-            'images',
-            'containers',
-            'redis',
-            'ssh',
-            'ports',
-            'disk',
-          ],
-        });
-        return;
     }
 
     res.json({
