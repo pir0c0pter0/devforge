@@ -5,6 +5,7 @@ import { claudeLogsService } from '../../services/claude-logs.service'
 import { containerService } from '../../services/container.service'
 import { cleanupSocketRateLimit } from '../../middleware/websocket-rate-limit'
 import { validateAndSanitize } from '../../validators/instruction.validator'
+import { validateContainerId } from '../../utils/validation'
 import type {
   ServerToClientEvents,
   ClientToServerEvents,
@@ -32,6 +33,23 @@ export function setupClaudeDaemonNamespace(io: Server<ClientToServerEvents, Serv
   // Forward events from daemon service to WebSocket clients
   claudeDaemonService.on('claude:event', ({ containerId, event }: { containerId: string; event: ClaudeEvent }) => {
     claudeDaemonNamespace?.to(`claude:${containerId}`).emit('claude:output' as any, event)
+  })
+
+  // Forward processing state events (backend as source of truth)
+  claudeDaemonService.on('instruction:processing:start', (data: { containerId: string; timestamp: Date }) => {
+    claudeDaemonNamespace?.to(`claude:${data.containerId}`).emit('instruction:processing:start' as any, data)
+  })
+
+  claudeDaemonService.on('instruction:processing:progress', (data: { containerId: string; stage: string; message?: string; timestamp: Date }) => {
+    claudeDaemonNamespace?.to(`claude:${data.containerId}`).emit('instruction:processing:progress' as any, data)
+  })
+
+  claudeDaemonService.on('instruction:processing:complete', (data: { containerId: string; success: boolean; durationMs: number; timestamp: Date }) => {
+    claudeDaemonNamespace?.to(`claude:${data.containerId}`).emit('instruction:processing:complete' as any, data)
+  })
+
+  claudeDaemonService.on('instruction:processing:error', (data: { containerId: string; error: string; timestamp: Date }) => {
+    claudeDaemonNamespace?.to(`claude:${data.containerId}`).emit('instruction:processing:error' as any, data)
   })
 
   // Forward log events from logs service to WebSocket clients
@@ -76,7 +94,13 @@ export function setupClaudeDaemonNamespace(io: Server<ClientToServerEvents, Serv
     let currentContainerId: string | null = null
 
     // Subscribe to container output
-    socket.on('output:subscribe', ({ containerId }: { containerId: string }) => {
+    socket.on('output:subscribe', ({ containerId: rawContainerId }: { containerId: string }) => {
+      // QA-H4: Validate containerId
+      const containerId = validateContainerId(rawContainerId)
+      if (!containerId) {
+        socket.emit('error', { message: 'Invalid container ID format' })
+        return
+      }
       currentContainerId = containerId
       socket.join(`claude:${containerId}`)
       subscriptions.add(containerId, socket.id)
@@ -92,7 +116,9 @@ export function setupClaudeDaemonNamespace(io: Server<ClientToServerEvents, Serv
     })
 
     // Unsubscribe from container output
-    socket.on('output:unsubscribe', ({ containerId }: { containerId: string }) => {
+    socket.on('output:unsubscribe', ({ containerId: rawContainerId }: { containerId: string }) => {
+      const containerId = validateContainerId(rawContainerId)
+      if (!containerId) return
       socket.leave(`claude:${containerId}`)
       subscriptions.remove(containerId, socket.id)
       if (currentContainerId === containerId) {
@@ -103,8 +129,14 @@ export function setupClaudeDaemonNamespace(io: Server<ClientToServerEvents, Serv
 
     // Send instruction to daemon
     // If cancelIfBusy is true, cancels any current instruction before sending
-    socket.on('instruction:send', async ({ containerId, instruction, cancelIfBusy }: { containerId: string; instruction: string; cancelIfBusy?: boolean }) => {
+    socket.on('instruction:send', async ({ containerId: rawContainerId, instruction, cancelIfBusy }: { containerId: string; instruction: string; cancelIfBusy?: boolean }) => {
       try {
+        // QA-H4: Validate containerId
+        const containerId = validateContainerId(rawContainerId)
+        if (!containerId) {
+          socket.emit('error' as any, { message: 'Invalid container ID format' })
+          return
+        }
         // Validate and sanitize instruction
         const safeInstruction = validateAndSanitize(instruction)
 

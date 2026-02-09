@@ -13,8 +13,6 @@ import type {
   TaskSubscription,
   TaskUnsubscription,
   TaskBatchSubscription,
-  DaemonState,
-  ClaudeEvent,
 } from '@devforge/shared'
 import { config } from '../config'
 import { createChildLogger } from '../utils/logger'
@@ -79,15 +77,24 @@ const createWebSocketAuthMiddleware = () => {
 const applyAuthMiddleware = (namespace: Namespace): void => {
   namespace.use(createWebSocketAuthMiddleware())
 }
-import { metricsService } from './metrics.service'
-import { containerRepository } from '../repositories'
-import { terminalService } from './terminal.service'
-import { claudeDaemonService } from './claude-daemon.service'
-import { containerService } from './container.service'
+
+// Import extracted namespace modules
+import {
+  setupMetricsNamespace as setupMetricsNamespaceModule,
+  emitContainerMetrics as emitContainerMetricsModule,
+} from '../websocket/namespaces'
+import {
+  setupTerminalNamespace as setupTerminalNamespaceModule,
+} from '../websocket/namespaces'
+import {
+  setupClaudeDaemonNamespace as setupClaudeDaemonNamespaceModule,
+  emitClaudeEvent as emitClaudeEventModule,
+} from '../websocket/namespaces'
+import {
+  setupDockerLogsNamespace as setupDockerLogsNamespaceModule,
+} from '../websocket/namespaces'
+
 import { healthMonitorService } from './health-monitor.service'
-import { claudeLogsService } from './claude-logs.service'
-import { setupDockerLogsNamespace as setupDockerLogsNamespaceModule } from '../websocket/namespaces'
-import type { ClaudeLogEntry } from '@devforge/shared'
 
 /**
  * Socket.io server instance
@@ -96,18 +103,9 @@ let io: Server<ClientToServerEvents, ServerToClientEvents> | null = null
 
 /**
  * Map of container subscriptions (containerId -> Set of socket IDs)
+ * Used by /queue, /logs namespaces
  */
 const subscriptions = new Map<string, Set<string>>()
-
-/**
- * Map of active metrics collection intervals (containerId -> intervalId)
- */
-const metricsIntervals = new Map<string, NodeJS.Timeout>()
-
-/**
- * Default metrics collection interval in milliseconds
- */
-const METRICS_INTERVAL_MS = 2000
 
 /**
  * Initialize Socket.io server
@@ -144,152 +142,24 @@ export const initializeWebSocket = (
   // Apply rate limiting middleware
   io.use(createWebSocketRateLimitMiddleware())
 
-  // Setup namespaces and event handlers (auth middleware applied to each)
-  setupMetricsNamespace()
+  // Setup extracted modular namespaces (pass io instance)
+  setupMetricsNamespaceModule(io)
+  setupTerminalNamespaceModule(io)
+  setupClaudeDaemonNamespaceModule(io)
+  setupDockerLogsNamespaceModule(io)
+
+  // Setup namespaces that remain in this file
   setupQueueNamespace()
   setupLogsNamespace()
-  setupDockerLogsNamespaceModule(io) // Use modular namespace with persistence
   setupCreationNamespace()
   setupTasksNamespace()
-  setupTerminalNamespace()
-  setupClaudeDaemonNamespace()
 
   // Initialize health monitor event emitter
-  healthMonitorService.setEventEmitter(emitClaudeEvent)
+  healthMonitorService.setEventEmitter(emitClaudeEventModule)
 
   logger.debug('[WebSocket] Server initialized successfully')
 
   return io
-}
-
-/**
- * Start metrics collection for a container
- */
-const startMetricsCollection = async (containerId: string): Promise<void> => {
-  // Already collecting for this container
-  if (metricsIntervals.has(containerId)) return
-
-  // Get container's dockerId from repository
-  const container = await containerRepository.findById(containerId)
-  if (!container || !container.dockerId) {
-    logger.warn(`[WebSocket] Cannot start metrics collection: container ${containerId} not found`)
-    return
-  }
-
-  const dockerId = container.dockerId
-
-  logger.debug(`[WebSocket] Starting metrics collection for container ${containerId}`)
-
-  // Collect and emit immediately
-  collectAndEmitMetrics(containerId, dockerId, container.diskLimit || 10240)
-
-  // Then set up interval
-  const intervalId = setInterval(() => {
-    collectAndEmitMetrics(containerId, dockerId, container.diskLimit || 10240)
-  }, METRICS_INTERVAL_MS)
-
-  metricsIntervals.set(containerId, intervalId)
-}
-
-/**
- * Stop metrics collection for a container
- */
-const stopMetricsCollection = (containerId: string): void => {
-  const intervalId = metricsIntervals.get(containerId)
-  if (intervalId) {
-    clearInterval(intervalId)
-    metricsIntervals.delete(containerId)
-    logger.debug(`[WebSocket] Stopped metrics collection for container ${containerId}`)
-  }
-}
-
-/**
- * Collect and emit metrics for a container
- */
-const collectAndEmitMetrics = async (
-  containerId: string,
-  dockerId: string,
-  diskLimitMB: number
-): Promise<void> => {
-  try {
-    const metrics = await metricsService.getContainerMetrics(dockerId)
-
-    // Apply disk limit from container config
-    if (diskLimitMB > 0) {
-      metrics.disk.limit = diskLimitMB
-      metrics.disk.percentage = Number(((metrics.disk.usage / diskLimitMB) * 100).toFixed(2))
-    }
-
-    // Update containerId to use our internal ID
-    metrics.containerId = containerId
-
-    emitContainerMetrics(containerId, metrics)
-  } catch (error) {
-    logger.error(`[WebSocket] Failed to collect metrics for ${containerId}:`, error)
-  }
-}
-
-/**
- * Setup /metrics namespace for real-time container metrics
- */
-const setupMetricsNamespace = (): void => {
-  if (!io) return
-
-  const metricsNamespace = io.of('/metrics')
-
-  // Apply authentication middleware to namespace
-  applyAuthMiddleware(metricsNamespace)
-
-  metricsNamespace.on('connection', (socket: AuthenticatedSocket) => {
-    logger.debug(`[WebSocket] Client connected to /metrics: ${socket.id}`)
-
-    socket.on('subscribe:container', async (containerId: string) => {
-      socket.join(`container:${containerId}`)
-      addSubscription(containerId, socket.id)
-      logger.debug(`[WebSocket] Client ${socket.id} subscribed to container ${containerId}`)
-
-      // Start metrics collection if this is the first subscriber
-      const subscribers = subscriptions.get(containerId)
-      if (subscribers && subscribers.size === 1) {
-        await startMetricsCollection(containerId)
-      }
-    })
-
-    socket.on('unsubscribe:container', (containerId: string) => {
-      socket.leave(`container:${containerId}`)
-      removeSubscription(containerId, socket.id)
-      logger.debug(`[WebSocket] Client ${socket.id} unsubscribed from container ${containerId}`)
-
-      // Stop metrics collection if no more subscribers
-      const subscribers = subscriptions.get(containerId)
-      if (!subscribers || subscribers.size === 0) {
-        stopMetricsCollection(containerId)
-      }
-    })
-
-    socket.on('disconnect', () => {
-      // Get containers this socket was subscribed to before cleanup
-      const subscribedContainers: string[] = []
-      for (const [containerId, sockets] of subscriptions.entries()) {
-        if (sockets.has(socket.id)) {
-          subscribedContainers.push(containerId)
-        }
-      }
-
-      cleanupSocketSubscriptions(socket.id)
-      cleanupSocketRateLimit(socket.id)
-
-      // Stop metrics collection for containers with no more subscribers
-      for (const containerId of subscribedContainers) {
-        const subscribers = subscriptions.get(containerId)
-        if (!subscribers || subscribers.size === 0) {
-          stopMetricsCollection(containerId)
-        }
-      }
-
-      logger.debug(`[WebSocket] Client disconnected from /metrics: ${socket.id}`)
-    })
-  })
 }
 
 /**
@@ -489,414 +359,13 @@ const setupTasksNamespace = (): void => {
 }
 
 /**
- * Map of terminal subscriptions (sessionId -> socket ID)
- */
-const terminalSubscriptions = new Map<string, string>()
-
-/**
- * Setup /terminal namespace for interactive container terminal
- */
-const setupTerminalNamespace = (): void => {
-  if (!io) return
-
-  const terminalNamespace = io.of('/terminal')
-
-  // Apply authentication middleware to namespace
-  applyAuthMiddleware(terminalNamespace)
-
-  terminalNamespace.on('connection', (socket: AuthenticatedSocket) => {
-    logger.debug(`[WebSocket] Client connected to /terminal: ${socket.id}`)
-
-    let currentSessionId: string | null = null
-
-    socket.on('terminal:connect', async (
-      data: { containerId: string; cols: number; rows: number },
-      callback: (response: { sessionId?: string; error?: string }) => void
-    ) => {
-      try {
-        const session = await terminalService.createSession(
-          data.containerId,
-          data.cols || 80,
-          data.rows || 24,
-          (output) => {
-            socket.emit('terminal:data', { sessionId: session.sessionId, data: output })
-          },
-          (exitCode) => {
-            socket.emit('terminal:close', { sessionId: session.sessionId, exitCode })
-            if (currentSessionId) {
-              terminalSubscriptions.delete(currentSessionId)
-            }
-          }
-        )
-
-        currentSessionId = session.sessionId
-        terminalSubscriptions.set(session.sessionId, socket.id)
-        socket.join(`terminal:${session.sessionId}`)
-
-        logger.debug(`[WebSocket] Terminal session ${session.sessionId} created for container ${data.containerId}`)
-
-        callback({ sessionId: session.sessionId })
-        socket.emit('terminal:ready', session)
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-        logger.error(`[WebSocket] Failed to create terminal session:`, error)
-        callback({ error: errorMessage })
-      }
-    })
-
-    socket.on('terminal:input', (data: { sessionId: string; data: string }) => {
-      if (data.sessionId !== currentSessionId) {
-        logger.warn(`[WebSocket] Invalid session ID for input: ${data.sessionId}`)
-        return
-      }
-      terminalService.write(data.sessionId, data.data)
-    })
-
-    socket.on('terminal:resize', async (
-      data: { sessionId: string; cols: number; rows: number },
-      callback?: (response: { success: boolean; error?: string }) => void
-    ) => {
-      try {
-        if (data.sessionId !== currentSessionId) {
-          throw new Error('Invalid session ID')
-        }
-        await terminalService.resize(data.sessionId, data.cols, data.rows)
-        callback?.({ success: true })
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-        logger.error(`[WebSocket] Failed to resize terminal:`, error)
-        callback?.({ success: false, error: errorMessage })
-      }
-    })
-
-    socket.on('terminal:disconnect', (sessionId: string) => {
-      if (sessionId === currentSessionId) {
-        terminalService.closeSession(sessionId, 0)
-        socket.leave(`terminal:${sessionId}`)
-        terminalSubscriptions.delete(sessionId)
-        currentSessionId = null
-        logger.debug(`[WebSocket] Terminal session ${sessionId} closed by client`)
-      }
-    })
-
-    socket.on('disconnect', () => {
-      if (currentSessionId) {
-        terminalService.closeSession(currentSessionId, 143)
-        terminalSubscriptions.delete(currentSessionId)
-        logger.debug(`[WebSocket] Client disconnected, closed terminal session ${currentSessionId}`)
-      }
-      cleanupSocketRateLimit(socket.id)
-      logger.debug(`[WebSocket] Client disconnected from /terminal: ${socket.id}`)
-    })
-  })
-}
-
-/**
- * Map of claude daemon subscriptions (containerId -> Set of socket IDs)
- */
-const claudeDaemonSubscriptions = new Map<string, Set<string>>()
-
-/**
- * Add claude daemon subscription tracking
- */
-const addClaudeDaemonSubscription = (containerId: string, socketId: string): void => {
-  if (!claudeDaemonSubscriptions.has(containerId)) {
-    claudeDaemonSubscriptions.set(containerId, new Set())
-  }
-  claudeDaemonSubscriptions.get(containerId)?.add(socketId)
-}
-
-/**
- * Remove claude daemon subscription tracking
- */
-const removeClaudeDaemonSubscription = (containerId: string, socketId: string): void => {
-  const subs = claudeDaemonSubscriptions.get(containerId)
-  if (subs) {
-    subs.delete(socketId)
-    if (subs.size === 0) {
-      claudeDaemonSubscriptions.delete(containerId)
-    }
-  }
-}
-
-/**
- * Cleanup all claude daemon subscriptions for a socket
- */
-const cleanupSocketClaudeDaemonSubscriptions = (socketId: string): void => {
-  for (const [containerId, sockets] of claudeDaemonSubscriptions.entries()) {
-    sockets.delete(socketId)
-    if (sockets.size === 0) {
-      claudeDaemonSubscriptions.delete(containerId)
-    }
-  }
-}
-
-/**
- * Setup /claude-daemon namespace for Claude Code daemon communication
- */
-const setupClaudeDaemonNamespace = (): void => {
-  if (!io) return
-
-  const claudeDaemonNamespace = io.of('/claude-daemon')
-
-  // Apply authentication middleware to namespace
-  applyAuthMiddleware(claudeDaemonNamespace)
-
-  // Forward events from daemon service to WebSocket clients
-  claudeDaemonService.on('claude:event', ({ containerId, event }: { containerId: string; event: ClaudeEvent }) => {
-    claudeDaemonNamespace.to(`claude:${containerId}`).emit('claude:output' as any, event)
-  })
-
-  // Forward processing state events (fix #9 - backend as source of truth)
-  claudeDaemonService.on('instruction:processing:start', (data: { containerId: string; timestamp: Date }) => {
-    claudeDaemonNamespace.to(`claude:${data.containerId}`).emit('instruction:processing:start' as any, data)
-  })
-
-  claudeDaemonService.on('instruction:processing:progress', (data: { containerId: string; stage: string; message?: string; timestamp: Date }) => {
-    claudeDaemonNamespace.to(`claude:${data.containerId}`).emit('instruction:processing:progress' as any, data)
-  })
-
-  claudeDaemonService.on('instruction:processing:complete', (data: { containerId: string; success: boolean; durationMs: number; timestamp: Date }) => {
-    claudeDaemonNamespace.to(`claude:${data.containerId}`).emit('instruction:processing:complete' as any, data)
-  })
-
-  claudeDaemonService.on('instruction:processing:error', (data: { containerId: string; error: string; timestamp: Date }) => {
-    claudeDaemonNamespace.to(`claude:${data.containerId}`).emit('instruction:processing:error' as any, data)
-  })
-
-  // Forward log events from logs service to WebSocket clients
-  claudeLogsService.on('log:new', ({ containerId, entry }: { containerId: string; entry: ClaudeLogEntry }) => {
-    claudeDaemonNamespace.to(`claude:${containerId}`).emit('claude:log' as any, entry)
-  })
-
-  claudeLogsService.on('log:batch', ({ containerId, entries }: { containerId: string; entries: ClaudeLogEntry[] }) => {
-    claudeDaemonNamespace.to(`claude:${containerId}`).emit('claude:logs:batch' as any, { containerId, logs: entries })
-  })
-
-  claudeLogsService.on('log:cleared', ({ containerId, count }: { containerId: string; count: number }) => {
-    claudeDaemonNamespace.to(`claude:${containerId}`).emit('claude:logs:cleared' as any, { containerId, count })
-  })
-
-  claudeDaemonService.on('daemon:started', ({ containerId, state }: { containerId: string; state: DaemonState }) => {
-    claudeDaemonNamespace.to(`claude:${containerId}`).emit('daemon:status' as any, state)
-  })
-
-  claudeDaemonService.on('daemon:stopped', ({ containerId }: { containerId: string }) => {
-    claudeDaemonNamespace.to(`claude:${containerId}`).emit('daemon:status' as any, {
-      containerId,
-      status: 'stopped',
-    })
-  })
-
-  claudeDaemonService.on('daemon:error', ({ containerId, error }: { containerId: string; error: string }) => {
-    claudeDaemonNamespace.to(`claude:${containerId}`).emit('daemon:error' as any, { error })
-  })
-
-  claudeDaemonNamespace.on('connection', (socket: AuthenticatedSocket) => {
-    logger.debug(`[WebSocket] Client connected to /claude-daemon: ${socket.id} (user: ${socket.user?.id || 'anonymous'})`)
-
-    let currentContainerId: string | null = null
-
-    // Subscribe to container output
-    socket.on('output:subscribe', ({ containerId }: { containerId: string }) => {
-      currentContainerId = containerId
-      socket.join(`claude:${containerId}`)
-      addClaudeDaemonSubscription(containerId, socket.id)
-      logger.debug(`[WebSocket] Client ${socket.id} subscribed to claude daemon ${containerId}`)
-
-      // Send current status
-      const status = claudeDaemonService.getStatus(containerId)
-      if (status) {
-        socket.emit('daemon:status' as any, status)
-      } else {
-        socket.emit('daemon:status' as any, { containerId, status: 'stopped', instructionCount: 0 })
-      }
-    })
-
-    // Unsubscribe from container output
-    socket.on('output:unsubscribe', ({ containerId }: { containerId: string }) => {
-      socket.leave(`claude:${containerId}`)
-      removeClaudeDaemonSubscription(containerId, socket.id)
-      decrementSubscriptionCount(socket.id)
-      if (currentContainerId === containerId) {
-        currentContainerId = null
-      }
-      logger.debug(`[WebSocket] Client ${socket.id} unsubscribed from claude daemon ${containerId}`)
-    })
-
-    // Send instruction to daemon
-    // If cancelIfBusy is true, cancels any current instruction before sending
-    socket.on('instruction:send', async ({ containerId, instruction, cancelIfBusy }: { containerId: string; instruction: string; cancelIfBusy?: boolean }) => {
-      try {
-        // Validate input
-        if (!instruction || typeof instruction !== 'string') {
-          socket.emit('error' as any, { message: 'Instrução inválida' })
-          return
-        }
-
-        if (instruction.length > 100000) {
-          socket.emit('error' as any, { message: 'Instrução muito longa (máx 100k caracteres)' })
-          return
-        }
-
-        await claudeDaemonService.sendInstruction(containerId, instruction, undefined, cancelIfBusy ?? false)
-
-        // Confirm receipt
-        socket.emit('instruction:received' as any, {
-          containerId,
-          timestamp: new Date(),
-        })
-      } catch (error) {
-        socket.emit('error' as any, {
-          message: error instanceof Error ? error.message : 'Falha ao enviar instrução',
-        })
-      }
-    })
-
-    // Cancel current instruction
-    socket.on('instruction:cancel', async ({ containerId }: { containerId: string }) => {
-      try {
-        const cancelled = await claudeDaemonService.cancelCurrentInstruction(containerId)
-        socket.emit('instruction:cancelled' as any, { containerId, cancelled })
-      } catch (error) {
-        socket.emit('error' as any, {
-          message: error instanceof Error ? error.message : 'Falha ao cancelar instrução',
-        })
-      }
-    })
-
-    // Start daemon
-    socket.on('daemon:start', async ({ containerId }: { containerId: string }) => {
-      try {
-        // Get container info
-        const container = await containerService.getById(containerId)
-        if (!container) {
-          socket.emit('error' as any, { message: 'Container não encontrado' })
-          return
-        }
-
-        if (container.status !== 'running') {
-          socket.emit('error' as any, { message: 'Container não está rodando' })
-          return
-        }
-
-        const state = await claudeDaemonService.startDaemon(containerId, container.dockerId)
-        socket.emit('daemon:status' as any, state)
-      } catch (error) {
-        socket.emit('error' as any, {
-          message: error instanceof Error ? error.message : 'Falha ao iniciar daemon',
-        })
-      }
-    })
-
-    // Stop daemon
-    socket.on('daemon:stop', async ({ containerId }: { containerId: string }) => {
-      try {
-        await claudeDaemonService.stopDaemon(containerId)
-        socket.emit('daemon:status' as any, { containerId, status: 'stopped', instructionCount: 0 })
-      } catch (error) {
-        socket.emit('error' as any, {
-          message: error instanceof Error ? error.message : 'Falha ao parar daemon',
-        })
-      }
-    })
-
-    // Get daemon status
-    socket.on('daemon:get-status', ({ containerId }: { containerId: string }) => {
-      const status = claudeDaemonService.getStatus(containerId)
-      socket.emit('daemon:status' as any, status || { containerId, status: 'stopped', instructionCount: 0 })
-    })
-
-    // Get logs history (request batch of recent logs)
-    socket.on('logs:get', ({ containerId, limit, since }: { containerId: string; limit?: number; since?: string }) => {
-      try {
-        const response = claudeLogsService.getLogs(containerId, {
-          limit: limit || 500,
-          since: since ? new Date(since) : undefined,
-        })
-        socket.emit('claude:logs:batch' as any, { containerId, logs: response.logs })
-      } catch (error) {
-        socket.emit('error' as any, {
-          message: error instanceof Error ? error.message : 'Falha ao obter logs',
-        })
-      }
-    })
-
-    // Get logs stats
-    socket.on('logs:stats', ({ containerId }: { containerId: string }) => {
-      try {
-        const stats = claudeLogsService.getStats(containerId)
-        socket.emit('claude:logs:stats' as any, stats)
-      } catch (error) {
-        socket.emit('error' as any, {
-          message: error instanceof Error ? error.message : 'Falha ao obter estatisticas',
-        })
-      }
-    })
-
-    // Clear logs
-    socket.on('logs:clear', ({ containerId }: { containerId: string }) => {
-      try {
-        const count = claudeLogsService.clearLogs(containerId)
-        socket.emit('claude:logs:cleared' as any, { containerId, count })
-      } catch (error) {
-        socket.emit('error' as any, {
-          message: error instanceof Error ? error.message : 'Falha ao limpar logs',
-        })
-      }
-    })
-
-    socket.on('disconnect', () => {
-      cleanupSocketClaudeDaemonSubscriptions(socket.id)
-      cleanupSocketRateLimit(socket.id)
-      cleanupSubscriptionCount(socket.id)
-      logger.debug(`[WebSocket] Client disconnected from /claude-daemon: ${socket.id}`)
-    })
-  })
-}
-
-/**
- * Map of subscription counts per socket (for tracking active subscriptions)
- */
-const socketSubscriptionCounts = new Map<string, number>()
-
-/**
- * Increment subscription count for a socket
- */
-function incrementSubscriptionCount(socketId: string): void {
-  const current = socketSubscriptionCounts.get(socketId) || 0
-  socketSubscriptionCounts.set(socketId, current + 1)
-}
-
-/**
- * Decrement subscription count for a socket
- */
-function decrementSubscriptionCount(socketId: string): void {
-  const current = socketSubscriptionCounts.get(socketId) || 0
-  if (current > 0) {
-    socketSubscriptionCounts.set(socketId, current - 1)
-  }
-  if (current <= 1) {
-    socketSubscriptionCounts.delete(socketId)
-  }
-}
-
-/**
- * Cleanup subscription count for a socket
- */
-function cleanupSubscriptionCount(socketId: string): void {
-  socketSubscriptionCounts.delete(socketId)
-}
-
-/**
- * Add subscription tracking
+ * Add subscription tracking (used by /queue, /logs namespaces)
  */
 const addSubscription = (containerId: string, socketId: string): void => {
   if (!subscriptions.has(containerId)) {
     subscriptions.set(containerId, new Set())
   }
   subscriptions.get(containerId)?.add(socketId)
-  incrementSubscriptionCount(socketId)
 }
 
 /**
@@ -906,7 +375,6 @@ const removeSubscription = (containerId: string, socketId: string): void => {
   const subs = subscriptions.get(containerId)
   if (subs) {
     subs.delete(socketId)
-    decrementSubscriptionCount(socketId)
     if (subs.size === 0) {
       subscriptions.delete(containerId)
     }
@@ -925,12 +393,15 @@ const cleanupSocketSubscriptions = (socketId: string): void => {
   }
 }
 
+// =====================================================================
+// Emit helpers
+// =====================================================================
+
 /**
- * Emit container metrics to subscribers
+ * Re-export emitContainerMetrics from extracted metrics namespace module
  */
 export const emitContainerMetrics = (containerId: string, metrics: ContainerMetrics): void => {
-  if (!io) return
-  io.of('/metrics').to(`container:${containerId}`).emit('container:metrics', metrics)
+  emitContainerMetricsModule(containerId, metrics)
 }
 
 /**
@@ -1045,16 +516,18 @@ export const emitTaskEvent = (taskId: string, payload: TaskEventPayload): void =
 }
 
 /**
- * Emit Claude daemon health event to subscribers
- * Used by health-monitor.service.ts to notify frontend of health status
+ * Re-export emitClaudeEvent from extracted claude-daemon namespace module
  */
 export const emitClaudeEvent = (
   containerId: string,
   event: Record<string, unknown>
 ): void => {
-  if (!io) return
-  io.of('/claude-daemon').to(`claude:${containerId}`).emit('health:event' as any, event)
+  emitClaudeEventModule(containerId, event)
 }
+
+// =====================================================================
+// Query helpers
+// =====================================================================
 
 /**
  * Get active task subscriptions count for a task
@@ -1075,14 +548,14 @@ export const getAllTaskSubscriptions = (): Map<string, number> => {
 }
 
 /**
- * Get active subscriptions for a container
+ * Get active subscriptions for a container (queue/logs namespaces)
  */
 export const getContainerSubscribers = (containerId: string): number => {
   return subscriptions.get(containerId)?.size ?? 0
 }
 
 /**
- * Get all active subscriptions
+ * Get all active subscriptions (queue/logs namespaces)
  */
 export const getAllSubscriptions = (): Map<string, number> => {
   const result = new Map<string, number>()
