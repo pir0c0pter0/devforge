@@ -11,16 +11,37 @@ import type {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
+/**
+ * Read CSRF token from cookie (set by backend's csrfCookieMiddleware)
+ */
+function getCsrfToken(): string | null {
+  if (typeof document === 'undefined') return null
+  const match = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/)
+  return match ? decodeURIComponent(match[1]) : null
+}
+
 class ApiClient {
   private async request<T>(
     endpoint: string,
     options?: RequestInit
   ): Promise<ApiResponse<T>> {
     try {
+      // Include CSRF token header for state-changing methods
+      const csrfHeaders: Record<string, string> = {}
+      const method = options?.method?.toUpperCase()
+      if (method && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+        const csrfToken = getCsrfToken()
+        if (csrfToken) {
+          csrfHeaders['x-csrf-token'] = csrfToken
+        }
+      }
+
       const response = await fetch(`${API_URL}${endpoint}`, {
         ...options,
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
+          ...csrfHeaders,
           ...options?.headers,
         },
       })
