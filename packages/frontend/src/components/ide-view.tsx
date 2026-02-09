@@ -1,9 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { AnimatedDots } from '@/components/ui/animated-dots'
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 interface IDEViewProps {
   vscodeUrl: string
@@ -11,95 +9,53 @@ interface IDEViewProps {
   containerId: string
 }
 
-const MIN_LOADING_TIME = 3000 // 3 seconds - avoid flash, reduced from 30s
-const MAX_LOADING_TIME = 30000 // 30 seconds timeout (VS Code confirmed ready during startup)
-const POLL_INTERVAL = 1000 // 1 second between health checks
+// After iframe onLoad fires, VS Code still needs time to bootstrap internally
+// (load JS bundles, initialize extensions, render the workbench).
+// We keep the overlay for this extra duration after onLoad.
+const POST_LOAD_RENDER_DELAY = 4000
+const MAX_LOADING_TIME = 30000 // 30s absolute timeout
 
-// Progressive loading messages based on elapsed time
 const getLoadingText = (elapsed: number): string => {
-  if (elapsed < 5000) return 'Connecting to VS Code'
-  if (elapsed < 15000) return 'Loading editor'
-  if (elapsed < 30000) return 'Initializing extensions'
-  if (elapsed < 45000) return 'Almost ready'
+  if (elapsed < 3000) return 'Connecting to VS Code'
+  if (elapsed < 8000) return 'Loading editor'
+  if (elapsed < 15000) return 'Initializing extensions'
+  if (elapsed < 25000) return 'Almost ready'
   return 'Still loading (this may take a moment)'
 }
 
-export function IDEView({ vscodeUrl, containerStatus, containerId }: IDEViewProps) {
-  const [isIframeLoading, setIsIframeLoading] = useState(true)
-  const [iframeLoaded, setIframeLoaded] = useState(false)
-  const [minTimeElapsed, setMinTimeElapsed] = useState(false)
-  const [isVSCodeReady, setIsVSCodeReady] = useState(false)
+export function IDEView({ vscodeUrl, containerStatus }: IDEViewProps) {
+  const [showOverlay, setShowOverlay] = useState(true)
   const [loadingText, setLoadingText] = useState('Connecting to VS Code')
-  const pollingRef = useRef<boolean>(true)
+  const iframeRef = useRef<HTMLIFrameElement>(null)
+  const mountTimeRef = useRef(Date.now())
 
-  // Minimum loading time to avoid flash
+  // When iframe onLoad fires, wait extra time for VS Code to render internally
+  const handleIframeLoad = useCallback(() => {
+    const elapsed = Date.now() - mountTimeRef.current
+    // At minimum wait POST_LOAD_RENDER_DELAY after onLoad, but never exceed MAX_LOADING_TIME total
+    const remaining = Math.min(
+      POST_LOAD_RENDER_DELAY,
+      Math.max(0, MAX_LOADING_TIME - elapsed)
+    )
+    setLoadingText('VS Code loading...')
+    setTimeout(() => setShowOverlay(false), remaining)
+  }, [])
+
+  // Absolute timeout — hide overlay even if onLoad never fires
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setMinTimeElapsed(true)
-    }, MIN_LOADING_TIME)
-
+    const timer = setTimeout(() => setShowOverlay(false), MAX_LOADING_TIME)
     return () => clearTimeout(timer)
   }, [])
 
-  // Real health check via API polling
+  // Progressive loading text
   useEffect(() => {
-    if (containerStatus !== 'running' || !containerId) {
-      return
-    }
-
-    pollingRef.current = true
-    const startTime = Date.now()
-    const abortController = new AbortController()
-
-    const checkHealth = async () => {
-      while (pollingRef.current && (Date.now() - startTime) < MAX_LOADING_TIME) {
-        try {
-          const response = await fetch(`${API_URL}/api/containers/${containerId}/vscode-health`, {
-            signal: abortController.signal,
-            credentials: 'include',
-          })
-          const data = await response.json()
-
-          if (data.success && data.data?.ready) {
-            setIsVSCodeReady(true)
-            setLoadingText('VS Code ready!')
-            return
-          }
-        } catch (error) {
-          // Exit on abort, continue polling on other errors
-          if (error instanceof Error && error.name === 'AbortError') {
-            return
-          }
-        }
-
-        // Update loading text based on elapsed time
-        const elapsed = Date.now() - startTime
-        setLoadingText(getLoadingText(elapsed))
-
-        await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL))
-      }
-
-      // Timeout - show anyway
-      if (pollingRef.current) {
-        setIsVSCodeReady(true)
-        setLoadingText('Loading complete')
-      }
-    }
-
-    checkHealth()
-
-    return () => {
-      pollingRef.current = false
-      abortController.abort()
-    }
-  }, [containerStatus, containerId])
-
-  // Hide loading only when all conditions are met
-  useEffect(() => {
-    if (iframeLoaded && minTimeElapsed && isVSCodeReady) {
-      setIsIframeLoading(false)
-    }
-  }, [iframeLoaded, minTimeElapsed, isVSCodeReady])
+    if (!showOverlay) return
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - mountTimeRef.current
+      setLoadingText(getLoadingText(elapsed))
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [showOverlay])
 
   if (containerStatus !== 'running') {
     return (
@@ -117,8 +73,8 @@ export function IDEView({ vscodeUrl, containerStatus, containerId }: IDEViewProp
 
   return (
     <div className="h-full relative bg-terminal-bg">
-      {/* Loading overlay */}
-      {isIframeLoading && (
+      {/* Loading overlay — hides after iframe onLoad + render delay or absolute timeout */}
+      {showOverlay && (
         <div className="absolute inset-0 flex items-center justify-center bg-terminal-bg z-10">
           <div className="text-center">
             <svg className="mx-auto h-16 w-16 text-blue-500 mb-4" viewBox="0 0 24 24" fill="currentColor">
@@ -129,10 +85,12 @@ export function IDEView({ vscodeUrl, containerStatus, containerId }: IDEViewProp
         </div>
       )}
       <iframe
+        ref={iframeRef}
         src={vscodeUrl}
         className="w-full h-full border-0"
         title="VS Code"
-        onLoad={() => setIframeLoaded(true)}
+        allow="clipboard-read; clipboard-write"
+        onLoad={handleIframeLoad}
       />
     </div>
   )
