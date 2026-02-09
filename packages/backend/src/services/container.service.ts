@@ -26,6 +26,7 @@ import { taskService } from './task.service';
 import { containerLifecycleService } from './container-lifecycle.service';
 import { getQueueStatus, getActiveQueues } from './claude-queue.service';
 import { sanitizeRepositoryUrl } from '../validators/repository.validator';
+import { usbDeviceService } from './usb-device.service';
 import * as path from 'path';
 import * as os from 'os';
 import { vscodeHealthService } from './vscode-health.service';
@@ -194,8 +195,18 @@ export class ContainerService {
         logger.info({ deviceCount: config.usbDevices.devices.length }, 'USB devices validated');
       }
 
+      // Detect host GIDs for USB device files (needed for GroupAdd in container)
+      const hasUsbDevices = config.usbDevices?.devices && config.usbDevices.devices.length > 0;
+      const deviceGids = hasUsbDevices
+        ? await usbDeviceService.getDeviceGids(config.usbDevices!.devices)
+        : [];
+
+      if (deviceGids.length > 0) {
+        logger.info({ deviceGids }, 'Detected host GIDs for USB devices');
+      }
+
       // Prepare resource limits
-      const hostConfig = this.prepareHostConfig(config);
+      const hostConfig = this.prepareHostConfig(config, deviceGids);
 
       // Create Docker container options
       const createOptions: ContainerCreateOptions = {
@@ -322,14 +333,45 @@ export class ContainerService {
         await this.installEmbeddedTools(dockerContainer.id, config.embeddedDev);
       }
 
-      // Configure USB device permissions
+      // Configure USB device permissions inside the container
       if (needsUsbSetup) {
-        logger.info({ dockerId: dockerContainer.id, deviceCount: config.usbDevices!.devices.length }, 'Configuring USB device permissions');
+        logger.info({ dockerId: dockerContainer.id, deviceCount: config.usbDevices!.devices.length, deviceGids }, 'Configuring USB device permissions');
+
+        // 1. Add developer to common device access groups (dialout, plugdev)
         await dockerService.executeCommand(
           dockerContainer.id,
-          ['usermod', '-a', '-G', 'dialout', 'developer'],
+          ['sh', '-c', 'getent group plugdev >/dev/null 2>&1 || groupadd plugdev; usermod -a -G dialout,plugdev developer'],
           { user: 'root' }
         );
+
+        // 2. Create groups matching host GIDs and add developer to them
+        // This is a fallback in case GroupAdd didn't propagate correctly
+        for (const gid of deviceGids) {
+          try {
+            await dockerService.executeCommand(
+              dockerContainer.id,
+              ['sh', '-c', `getent group ${gid} >/dev/null 2>&1 || groupadd -g ${gid} hostdev_${gid}; usermod -a -G ${gid} developer`],
+              { user: 'root' }
+            );
+          } catch (error) {
+            logger.warn({ dockerId: dockerContainer.id, gid, error }, 'Failed to add host device GID group');
+          }
+        }
+
+        // 3. chmod 666 each mapped device for guaranteed access
+        for (const devicePath of config.usbDevices!.devices) {
+          try {
+            await dockerService.executeCommand(
+              dockerContainer.id,
+              ['chmod', '666', devicePath],
+              { user: 'root' }
+            );
+          } catch (error) {
+            logger.warn({ dockerId: dockerContainer.id, devicePath, error }, 'Failed to chmod USB device (may not exist at path in container)');
+          }
+        }
+
+        logger.info({ dockerId: dockerContainer.id }, 'USB device permissions configured');
       }
 
       // Stop container after setup if it was started
@@ -1858,7 +1900,7 @@ export class ContainerService {
    * Note: ReadonlyRootfs not used because Claude Code needs to write to various
    * system directories during normal operation (npm cache, git operations, etc.)
    */
-  private prepareHostConfig(config: ContainerConfig): any {
+  private prepareHostConfig(config: ContainerConfig, deviceGids: number[] = []): any {
     // Determine if USB devices are requested
     const hasUsbDevices = config.usbDevices?.devices && config.usbDevices.devices.length > 0;
 
@@ -1874,12 +1916,12 @@ export class ContainerService {
     ];
 
     // Map USB devices to Docker HostConfig.Devices format
-    // Uses 'rw' permissions (read+write) - mknod not needed since Docker maps the device
+    // Uses 'rwm' permissions (read+write+mknod) for full device access
     const devices = hasUsbDevices
       ? config.usbDevices!.devices.map(devicePath => ({
           PathOnHost: devicePath,
           PathInContainer: devicePath,
-          CgroupPermissions: 'rw',
+          CgroupPermissions: 'rwm',
         }))
       : [];
 
@@ -1930,6 +1972,9 @@ export class ContainerService {
       },
       // USB/Serial device passthrough (empty array when no devices)
       ...(devices.length > 0 ? { Devices: devices } : {}),
+      // Add host device GIDs so container user can access mapped devices.
+      // Docker preserves host UID:GID on device nodes; GroupAdd grants membership.
+      ...(deviceGids.length > 0 ? { GroupAdd: deviceGids.map(String) } : {}),
     };
   }
 

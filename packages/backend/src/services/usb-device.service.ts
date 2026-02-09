@@ -190,6 +190,27 @@ class UsbDeviceService {
   }
 
   /**
+   * Get the group IDs (GIDs) of device files on the host.
+   * These GIDs are needed to grant the container user access to mapped devices,
+   * since Docker preserves host UID/GID on device nodes inside the container.
+   */
+  async getDeviceGids(devicePaths: string[]): Promise<number[]> {
+    const gids = new Set<number>();
+
+    for (const devicePath of devicePaths) {
+      try {
+        // fs.stat follows symlinks, so /dev/serial/by-id/* resolves correctly
+        const stat = await fs.stat(devicePath);
+        gids.add(stat.gid);
+      } catch (error) {
+        logger.warn({ devicePath, error }, 'Could not stat device for GID detection');
+      }
+    }
+
+    return Array.from(gids);
+  }
+
+  /**
    * Use udevadm to get detailed device information
    */
   private async enrichDeviceInfo(devicePath: string): Promise<UsbDeviceInfo> {

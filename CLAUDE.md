@@ -1,6 +1,6 @@
 # DevForge - Instruções Críticas
 
-## Versão Atual: 0.1.54-alpha
+## Versão Atual: 0.1.55-alpha
 
 ## Links
 
@@ -128,6 +128,14 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.55-alpha
+- Fix: USB device passthrough now correctly detects host GIDs and grants access
+- Fix: GroupAdd in Docker HostConfig passes actual device GIDs (e.g., 985/uucp on Arch)
+- Fix: chmod 666 on all mapped devices inside container as permission fallback
+- Fix: Creates host GID groups inside container and adds developer to them
+- Fix: CgroupPermissions upgraded to 'rwm' for full device access
+- Fix: Supports all USB port types (ttyUSB, ttyACM, serial/by-id, bus/usb)
 
 ### v0.1.54-alpha
 - Feat: Ralph Loop now sends completion summary message when finished
