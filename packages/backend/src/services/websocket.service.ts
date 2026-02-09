@@ -149,6 +149,12 @@ export const initializeWebSocket = (
   setupClaudeDaemonNamespaceModule(io)
   setupDockerLogsNamespaceModule(io)
 
+  // Apply auth middleware to extracted namespaces (io.use() only covers default namespace)
+  applyAuthMiddleware(io.of('/metrics'))
+  applyAuthMiddleware(io.of('/terminal'))
+  applyAuthMiddleware(io.of('/claude-daemon'))
+  applyAuthMiddleware(io.of('/docker-logs'))
+
   // Setup namespaces that remain in this file
   setupQueueNamespace()
   setupLogsNamespace()
