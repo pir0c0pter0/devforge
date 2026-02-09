@@ -11,6 +11,21 @@ export interface EmbeddedDevConfig {
   esp32?: boolean
 }
 
+export interface UsbDevice {
+  path: string
+  byIdPath?: string
+  description: string
+  vendorId?: string
+  productId?: string
+  manufacturer?: string
+  product?: string
+  serial?: string
+}
+
+export interface UsbDeviceConfig {
+  devices: string[]
+}
+
 export interface Container {
   id: string
   dockerId?: string
@@ -51,6 +66,7 @@ export interface CreateContainerRequest {
     diskGB: number
   }
   embeddedDev?: EmbeddedDevConfig
+  usbDevices?: UsbDeviceConfig
   taskId?: string
 }
 

@@ -18,6 +18,7 @@ import settingsRouter from './api/routes/settings.routes';
 import tasksRouter from './api/routes/tasks.routes';
 import claudeDaemonRouter from './api/routes/claude-daemon.routes';
 import telegramRouter from './api/routes/telegram.routes';
+import systemRouter from './api/routes/system.routes';
 import { initializeDatabase, closeDatabase, isDatabaseHealthy } from './database';
 import { runMigrations, getDatabaseStats } from './database/migrations';
 import {
@@ -225,6 +226,7 @@ app.use('/api/diagnostics', authenticateJWT, diagnosticsRouter);
 app.use('/api/settings', authenticateJWT, settingsRouter);
 app.use('/api/tasks', authenticateJWT, tasksRouter);
 app.use('/api/claude-daemon', authenticateJWT, claudeDaemonRouter);
+app.use('/api/system', authenticateJWT, systemRouter);
 
 // Log JWT authentication enabled
 logger.info('JWT authentication enabled on protected routes (disabled if JWT_SECRET not set)');

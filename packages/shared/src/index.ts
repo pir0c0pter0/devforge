@@ -224,6 +224,12 @@ export type {
   ClaudeSessionStats,
 } from './types/claude-sessions.types'
 
+// Export all USB device types
+export type {
+  UsbDevice,
+  UsbDeviceConfig,
+} from './types/usb-device.types'
+
 // Export all VS Code types
 export type {
   VSCodeStatus,

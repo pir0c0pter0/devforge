@@ -86,6 +86,12 @@ export const ContainerConfigSchema = z.object({
     .default(10240), // in MB
 
   embeddedDev: EmbeddedDevConfigSchema,
+
+  usbDevices: z.object({
+    devices: z.array(
+      z.string().regex(/^\/dev\/(ttyUSB\d+|ttyACM\d+|serial\/by-id\/[a-zA-Z0-9_\-.:]+)$/)
+    ).max(10).default([]),
+  }).optional(),
 }).refine(
   (data) => {
     // If repoType is 'clone', repoUrl must be provided

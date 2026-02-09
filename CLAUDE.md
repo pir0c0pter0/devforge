@@ -1,6 +1,6 @@
 # DevForge - Instruções Críticas
 
-## Versão Atual: 0.1.51-alpha
+## Versão Atual: 0.1.53-alpha
 
 ## Links
 
@@ -128,6 +128,16 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.53-alpha
+- Feat: USB/Serial device passthrough for containers (STM32, ESP32 firmware flashing)
+- Feat: New endpoint GET /api/system/usb-devices to scan host USB/serial devices
+- Feat: UsbDeviceService scans /dev/ttyUSB*, /dev/ttyACM*, /dev/serial/by-id/*
+- Feat: Device info enrichment via udevadm (vendor, product, serial)
+- Feat: "Scan Devices" button in container creation form with device checkboxes
+- Feat: Prefers stable /dev/serial/by-id/ paths when available
+- Security: Path allowlist regex, max 10 devices, MKNOD cap only when needed
+- Security: no-new-privileges remains active, CgroupPermissions rwm per device
 
 ### v0.1.39-alpha
 - Fix: Container creation failing with "Container is restarting" during git clone

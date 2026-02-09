@@ -158,6 +158,7 @@ export class ContainerService {
         config: {
           ...(taskId ? { taskId } : {}),
           ...(config.embeddedDev ? { embeddedDev: config.embeddedDev } : {}),
+          ...(config.usbDevices ? { usbDevices: config.usbDevices } : {}),
         },
       };
 
@@ -173,6 +174,25 @@ export class ContainerService {
 
       // Prepare volume mounts
       const volumes = await this.prepareVolumes(config);
+
+      // Validate USB device paths exist and are character devices
+      if (config.usbDevices?.devices && config.usbDevices.devices.length > 0) {
+        const fsModule = await import('fs/promises');
+        for (const devicePath of config.usbDevices.devices) {
+          try {
+            const stat = await fsModule.stat(devicePath);
+            if (!stat.isCharacterDevice()) {
+              throw new Error(`USB device path is not a character device: ${devicePath}`);
+            }
+          } catch (error) {
+            if (error instanceof Error && error.message.includes('not a character device')) {
+              throw error;
+            }
+            throw new Error(`USB device not found or inaccessible: ${devicePath}`);
+          }
+        }
+        logger.info({ deviceCount: config.usbDevices.devices.length }, 'USB devices validated');
+      }
 
       // Prepare resource limits
       const hostConfig = this.prepareHostConfig(config);
@@ -228,7 +248,8 @@ export class ContainerService {
       // Start container temporarily for setup operations
       const needsClone = config.repoType === 'clone' && config.repoUrl;
       const needsEmbeddedTools = config.embeddedDev?.stm32 || config.embeddedDev?.esp32;
-      const needsSetup = needsClone || needsEmbeddedTools;
+      const needsUsbSetup = config.usbDevices?.devices && config.usbDevices.devices.length > 0;
+      const needsSetup = needsClone || needsEmbeddedTools || needsUsbSetup;
       if (needsSetup) {
         // Update task progress - starting
         if (taskId) {
@@ -299,6 +320,16 @@ export class ContainerService {
         }
 
         await this.installEmbeddedTools(dockerContainer.id, config.embeddedDev);
+      }
+
+      // Configure USB device permissions
+      if (needsUsbSetup) {
+        logger.info({ dockerId: dockerContainer.id, deviceCount: config.usbDevices!.devices.length }, 'Configuring USB device permissions');
+        await dockerService.executeCommand(
+          dockerContainer.id,
+          ['usermod', '-a', '-G', 'dialout', 'developer'],
+          { user: 'root' }
+        );
       }
 
       // Stop container after setup if it was started
@@ -1828,6 +1859,30 @@ export class ContainerService {
    * system directories during normal operation (npm cache, git operations, etc.)
    */
   private prepareHostConfig(config: ContainerConfig): any {
+    // Determine if USB devices are requested
+    const hasUsbDevices = config.usbDevices?.devices && config.usbDevices.devices.length > 0;
+
+    // Base capabilities
+    const capAdd = [
+      'CHOWN',      // Required for npm/git operations to change file ownership
+      'DAC_OVERRIDE', // Required for file operations as developer user
+      'FOWNER',     // Required for npm install operations
+      'SETGID',     // Required for sudo operations
+      'SETUID',     // Required for sudo operations
+      'KILL',       // Required to kill child processes (Claude Code)
+      'NET_BIND_SERVICE', // Required for code-server on port 8080
+    ];
+
+    // Map USB devices to Docker HostConfig.Devices format
+    // Uses 'rw' permissions (read+write) - mknod not needed since Docker maps the device
+    const devices = hasUsbDevices
+      ? config.usbDevices!.devices.map(devicePath => ({
+          PathOnHost: devicePath,
+          PathInContainer: devicePath,
+          CgroupPermissions: 'rw',
+        }))
+      : [];
+
     return {
       // Resource limits (DoS prevention)
       Memory: config.memoryLimit * 1024 * 1024, // Convert MB to bytes
@@ -1838,15 +1893,7 @@ export class ContainerService {
       // Security: Drop ALL capabilities and add only what's needed
       // This follows the principle of least privilege
       CapDrop: ['ALL'],
-      CapAdd: [
-        'CHOWN',      // Required for npm/git operations to change file ownership
-        'DAC_OVERRIDE', // Required for file operations as developer user
-        'FOWNER',     // Required for npm install operations
-        'SETGID',     // Required for sudo operations
-        'SETUID',     // Required for sudo operations
-        'KILL',       // Required to kill child processes (Claude Code)
-        'NET_BIND_SERVICE', // Required for code-server on port 8080
-      ],
+      CapAdd: capAdd,
 
       // Security: Prevent privilege escalation
       // This blocks setuid binaries and capability escalation
@@ -1881,6 +1928,8 @@ export class ContainerService {
       PortBindings: {
         '8080/tcp': [{ HostPort: '0' }], // code-server - dynamic port allocation
       },
+      // USB/Serial device passthrough (empty array when no devices)
+      ...(devices.length > 0 ? { Devices: devices } : {}),
     };
   }
 

@@ -55,6 +55,8 @@ export interface ContainerConfig {
   diskLimit: string
   /** Embedded development configuration (STM32, ESP32) */
   embeddedDev?: EmbeddedDevConfig
+  /** USB/Serial device passthrough configuration */
+  usbDevices?: { devices: string[] }
 }
 
 /**

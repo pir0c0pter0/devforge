@@ -7,6 +7,7 @@ import type {
   JobDetails,
   ApiResponse,
   Task,
+  UsbDevice,
 } from './types'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -90,6 +91,7 @@ class ApiClient {
       memoryLimit: data.limits.memoryMB,
       diskLimit: data.limits.diskGB * 1024, // Convert GB to MB
       embeddedDev: data.embeddedDev,
+      usbDevices: data.usbDevices,
     }
     return this.request<{ taskId: string }>('/api/containers', {
       method: 'POST',
@@ -221,6 +223,11 @@ class ApiClient {
     return this.request<void>(`/api/tasks/${id}`, {
       method: 'DELETE',
     })
+  }
+
+  // USB Devices
+  async listUsbDevices(): Promise<ApiResponse<UsbDevice[]>> {
+    return this.request<UsbDevice[]>('/api/system/usb-devices')
   }
 
   // Ralph Loop
