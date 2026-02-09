@@ -30,6 +30,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { vscodeHealthService } from './vscode-health.service';
 import { VSCodeConfig, TaskProgressRanges } from '../config/vscode.config';
+import { ResourceDefaults, ProcessLimits } from '../config/resources.config';
 
 /**
  * Convert repository entity to service model
@@ -449,8 +450,8 @@ export class ContainerService {
         repoUrl: safeRepoUrl,
         sshKeyPath: options.sshKeyPath,
         cpuLimit: options.cpuLimit ?? template.defaultConfig.resources?.cpuLimit ?? 2,
-        memoryLimit: options.memoryLimit ?? template.defaultConfig.resources?.memoryLimit ?? 4096,
-        diskLimit: options.diskLimit ?? template.defaultConfig.resources?.diskLimit ?? 20480,
+        memoryLimit: options.memoryLimit ?? template.defaultConfig.resources?.memoryLimit ?? ResourceDefaults.MEMORY_MB,
+        diskLimit: options.diskLimit ?? template.defaultConfig.resources?.diskLimit ?? ResourceDefaults.TEMPLATE_DISK_MB,
       };
 
       const volumes = await this.prepareVolumes(config);
@@ -1289,7 +1290,7 @@ export class ContainerService {
 
             // Calculate disk percentage based on configured limit (not filesystem limit)
             // The df command returns host filesystem size, not container quota
-            const configuredDiskLimitMB = container.diskLimit ?? 10240;
+            const configuredDiskLimitMB = container.diskLimit ?? ResourceDefaults.DISK_MB;
             const diskUsageMB = fullMetrics.disk.usage; // This is actual usage in MB
             const diskPercentage = configuredDiskLimitMB > 0
               ? (diskUsageMB / configuredDiskLimitMB) * 100
@@ -1330,8 +1331,8 @@ export class ContainerService {
         // Default limits
         const limits = {
           cpuCores: container.cpuLimit ?? 2,
-          memoryMB: container.memoryLimit ?? 4096,
-          diskGB: Math.round((container.diskLimit ?? 20480) / 1024),
+          memoryMB: container.memoryLimit ?? ResourceDefaults.MEMORY_MB,
+          diskGB: Math.round((container.diskLimit ?? ResourceDefaults.TEMPLATE_DISK_MB) / 1024),
         };
 
         // Extract taskId from config if container is still creating
@@ -1401,7 +1402,7 @@ export class ContainerService {
         const fullMetrics = await metricsService.getContainerMetrics(container.dockerId);
 
         // Calculate disk percentage based on configured limit (not filesystem limit)
-        const configuredDiskLimitMB = container.diskLimit ?? 10240;
+        const configuredDiskLimitMB = container.diskLimit ?? ResourceDefaults.DISK_MB;
         const diskUsageMB = fullMetrics.disk.usage;
         const diskPercentage = configuredDiskLimitMB > 0
           ? (diskUsageMB / configuredDiskLimitMB) * 100
@@ -1441,8 +1442,8 @@ export class ContainerService {
 
     const limits = {
       cpuCores: container.cpuLimit ?? 2,
-      memoryMB: container.memoryLimit ?? 4096,
-      diskGB: Math.round((container.diskLimit ?? 20480) / 1024),
+      memoryMB: container.memoryLimit ?? ResourceDefaults.MEMORY_MB,
+      diskGB: Math.round((container.diskLimit ?? ResourceDefaults.TEMPLATE_DISK_MB) / 1024),
     };
 
     // Extract taskId from config if container is still creating
@@ -1670,14 +1671,13 @@ export class ContainerService {
     volumes.push(`${volumeName}:/workspace`);
 
     // Mount Claude credentials (for browser-based auth - Personal/Max/Pro accounts)
-    // This shares the host's authenticated session with containers
-    // Note: NOT read-only because Claude Code may need to refresh tokens
+    // SEC-H7: Read-only mount to prevent containers from modifying host credentials
     const claudeCredentials = path.join(homeDir, '.claude', '.credentials.json');
     const fs = await import('fs/promises');
     try {
       await fs.access(claudeCredentials);
-      volumes.push(`${claudeCredentials}:/home/developer/.claude/.credentials.json`);
-      logger.info('Claude credentials found, will mount for authentication');
+      volumes.push(`${claudeCredentials}:/home/developer/.claude/.credentials.json:ro`);
+      logger.info('Claude credentials found, will mount read-only for authentication');
     } catch {
       logger.warn('Claude credentials not found - run "claude" on host to authenticate first');
     }
@@ -1705,9 +1705,14 @@ export class ContainerService {
     }
 
     // Mount SSH keys if specific path provided
+    // SEC-M6: Validate path resolves within user's home directory
     if (config.sshKeyPath) {
-      const sshKeyPath = config.sshKeyPath.replace('~', homeDir);
-      volumes.push(`${sshKeyPath}:/home/developer/.ssh/id_rsa:ro`);
+      const sshKeyPath = path.resolve(config.sshKeyPath.replace('~', homeDir));
+      if (!sshKeyPath.startsWith(homeDir + path.sep)) {
+        logger.warn({ sshKeyPath, homeDir }, 'SSH key path traversal attempt blocked');
+      } else {
+        volumes.push(`${sshKeyPath}:/home/developer/.ssh/id_rsa:ro`);
+      }
     }
 
     return volumes;
@@ -1763,7 +1768,7 @@ export class ContainerService {
       // Security: Restrict ulimits to prevent resource exhaustion
       Ulimits: [
         { Name: 'nofile', Soft: 65536, Hard: 65536 },   // Open file descriptors
-        { Name: 'nproc', Soft: 4096, Hard: 8192 },      // Max processes
+        { Name: 'nproc', Soft: ProcessLimits.NPROC_SOFT, Hard: ProcessLimits.NPROC_HARD }, // Max processes
         { Name: 'core', Soft: 0, Hard: 0 },              // Disable core dumps (security)
       ],
 
@@ -2237,9 +2242,9 @@ EXT_EOF`],
               template: (labels['devforge.template'] || labels['claude-docker.template'] || 'claude') as any,
               mode: (labels['devforge.mode'] || labels['claude-docker.mode'] || 'interactive') as any,
               repoType: 'empty',
-              cpuLimit: 2,
+              cpuLimit: ResourceDefaults.CPU_CORES,
               memoryLimit: 2048,
-              diskLimit: 10240,
+              diskLimit: ResourceDefaults.DISK_MB,
             };
 
             const entity = containerRepository.create(createDto);

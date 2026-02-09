@@ -4,6 +4,7 @@ import { markdown } from '../formatters/markdown.formatter'
 import { containerRepository } from '../../repositories/container.repository'
 import { metricsService } from '../../services/metrics.service'
 import { createChildLogger } from '../../utils/logger'
+import { ResourceDefaults } from '../../config/resources.config'
 
 const logger = createChildLogger({ service: 'telegram', command: 'stats' })
 
@@ -82,7 +83,7 @@ export class StatsCommand extends BaseCommand {
 
       // Calcular percentuais de disco com limites do container
       const diskUsageMB = metrics.disk.usage
-      const diskLimitMB = container.diskLimit || 10240 // Default 10GB em MB
+      const diskLimitMB = container.diskLimit || ResourceDefaults.DISK_MB
       const diskPercent = diskLimitMB > 0 ? (diskUsageMB / diskLimitMB) * 100 : 0
 
       // Formatar resposta

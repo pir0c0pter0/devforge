@@ -3,11 +3,16 @@ import { SubscriptionManager } from '../../utils/subscription-manager'
 import { metricsService } from '../../services/metrics.service'
 import { containerRepository } from '../../repositories'
 import { cleanupSocketRateLimit } from '../../middleware/websocket-rate-limit'
+import { validateContainerId } from '../../utils/validation'
+import { createChildLogger } from '../../utils/logger'
+import { ResourceDefaults } from '../../config/resources.config'
 import type {
   ContainerMetrics,
   ServerToClientEvents,
   ClientToServerEvents,
 } from '@devforge/shared'
+
+const logger = createChildLogger({ namespace: 'metrics' })
 
 /**
  * Subscription manager for metrics namespace
@@ -39,20 +44,20 @@ const startMetricsCollection = async (containerId: string): Promise<void> => {
   // Get container's dockerId from repository
   const container = await containerRepository.findById(containerId)
   if (!container || !container.dockerId) {
-    console.warn(`[WebSocket] Cannot start metrics collection: container ${containerId} not found`)
+    logger.warn({ containerId }, 'Cannot start metrics collection: container not found')
     return
   }
 
   const dockerId = container.dockerId
 
-  console.info(`[WebSocket] Starting metrics collection for container ${containerId}`)
+  logger.info({ containerId }, 'Starting metrics collection for container')
 
   // Collect and emit immediately
-  collectAndEmitMetrics(containerId, dockerId, container.diskLimit || 10240)
+  collectAndEmitMetrics(containerId, dockerId, container.diskLimit || ResourceDefaults.DISK_MB)
 
   // Then set up interval
   const intervalId = setInterval(() => {
-    collectAndEmitMetrics(containerId, dockerId, container.diskLimit || 10240)
+    collectAndEmitMetrics(containerId, dockerId, container.diskLimit || ResourceDefaults.DISK_MB)
   }, METRICS_INTERVAL_MS)
 
   metricsIntervals.set(containerId, intervalId)
@@ -66,7 +71,7 @@ const stopMetricsCollection = (containerId: string): void => {
   if (intervalId) {
     clearInterval(intervalId)
     metricsIntervals.delete(containerId)
-    console.info(`[WebSocket] Stopped metrics collection for container ${containerId}`)
+    logger.info({ containerId }, 'Stopped metrics collection for container')
   }
 }
 
@@ -92,7 +97,7 @@ const collectAndEmitMetrics = async (
 
     emitContainerMetrics(containerId, metrics)
   } catch (error) {
-    console.error(`[WebSocket] Failed to collect metrics for ${containerId}:`, error)
+    logger.error({ containerId, err: error }, 'Failed to collect metrics')
   }
 }
 
@@ -103,12 +108,18 @@ export function setupMetricsNamespace(io: Server<ClientToServerEvents, ServerToC
   metricsNamespace = io.of('/metrics')
 
   metricsNamespace.on('connection', (socket: Socket) => {
-    console.info(`[WebSocket] Client connected to /metrics: ${socket.id}`)
+    logger.info({ socketId: socket.id }, 'Client connected to /metrics')
 
-    socket.on('subscribe:container', async (containerId: string) => {
+    socket.on('subscribe:container', async (rawContainerId: string) => {
+      // QA-H4: Validate containerId
+      const containerId = validateContainerId(rawContainerId)
+      if (!containerId) {
+        socket.emit('error', { message: 'Invalid container ID format' })
+        return
+      }
       socket.join(`container:${containerId}`)
       subscriptions.add(containerId, socket.id)
-      console.info(`[WebSocket] Client ${socket.id} subscribed to container ${containerId}`)
+      logger.info({ socketId: socket.id, containerId }, 'Client subscribed to metrics')
 
       // Start metrics collection if this is the first subscriber
       const subscriberCount = subscriptions.getCount(containerId)
@@ -117,10 +128,12 @@ export function setupMetricsNamespace(io: Server<ClientToServerEvents, ServerToC
       }
     })
 
-    socket.on('unsubscribe:container', (containerId: string) => {
+    socket.on('unsubscribe:container', (rawContainerId: string) => {
+      const containerId = validateContainerId(rawContainerId)
+      if (!containerId) return
       socket.leave(`container:${containerId}`)
       const isEmpty = subscriptions.remove(containerId, socket.id)
-      console.info(`[WebSocket] Client ${socket.id} unsubscribed from container ${containerId}`)
+      logger.info({ socketId: socket.id, containerId }, 'Client unsubscribed from metrics')
 
       // Stop metrics collection if no more subscribers
       if (isEmpty) {
@@ -136,7 +149,7 @@ export function setupMetricsNamespace(io: Server<ClientToServerEvents, ServerToC
       }
 
       cleanupSocketRateLimit(socket.id)
-      console.info(`[WebSocket] Client disconnected from /metrics: ${socket.id}`)
+      logger.info({ socketId: socket.id }, 'Client disconnected from /metrics')
     })
   })
 }
