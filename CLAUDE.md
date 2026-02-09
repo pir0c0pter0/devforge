@@ -1,6 +1,6 @@
 # DevForge - Instruções Críticas
 
-## Versão Atual: 0.1.50-alpha
+## Versão Atual: 0.1.51-alpha
 
 ## Links
 

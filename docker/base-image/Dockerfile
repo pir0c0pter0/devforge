@@ -39,7 +39,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PNPM_HOME=/usr/local/share/pnpm \
     PATH=/usr/local/share/pnpm:/usr/local/go/bin:/home/developer/.cargo/bin:/home/developer/go/bin:$PATH \
     SHELL=/bin/zsh \
-    CODE_SERVER_VERSION=4.23.1 \
+    CODE_SERVER_VERSION=4.108.2 \
     GOPATH=/home/developer/go \
     GOROOT=/usr/local/go \
     CARGO_HOME=/home/developer/.cargo \
@@ -119,7 +119,7 @@ RUN curl -fsSL https://code-server.dev/install.sh | sh -s -- --version=${CODE_SE
 # Fix CSP: allow data: and https: fonts (Codicon icon font uses data: URIs)
 # Without this, VS Code renders a blank white screen in browsers that enforce CSP strictly
 RUN sed -i "s/font-src 'self' blob:/font-src 'self' blob: data: https:/g" \
-    /usr/lib/code-server/lib/vscode/out/vs/server/node/server.main.js
+    /usr/lib/code-server/lib/vscode/out/server-main.js
 
 # Copy Go from builder stage
 COPY --from=builder /tmp/go /usr/local/go

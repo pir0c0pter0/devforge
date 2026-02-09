@@ -13,7 +13,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PNPM_HOME=/usr/local/share/pnpm \
     PATH=/usr/local/share/pnpm:$PATH \
     SHELL=/bin/zsh \
-    CODE_SERVER_VERSION=4.23.1
+    CODE_SERVER_VERSION=4.108.2
 
 # Install system dependencies and tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -50,7 +50,7 @@ RUN curl -fsSL https://code-server.dev/install.sh | sh -s -- --version=${CODE_SE
 # Fix CSP: allow data: and https: fonts (Codicon icon font uses data: URIs)
 # Without this, VS Code renders a blank white screen in browsers that enforce CSP strictly
 RUN sed -i "s/font-src 'self' blob:/font-src 'self' blob: data: https:/g" \
-    /usr/lib/code-server/lib/vscode/out/vs/server/node/server.main.js
+    /usr/lib/code-server/lib/vscode/out/server-main.js
 
 # Create non-root user with sudo privileges
 # Delete existing node user first to avoid UID conflicts
