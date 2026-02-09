@@ -1131,9 +1131,8 @@ router.get(
 
       logger.debug({ containerId, sessionId }, 'Getting session details');
 
-      // For 'current' session, delegate to /sessions/current endpoint logic
+      // For 'current' session, use current session detection logic
       if (sessionId === 'current') {
-        // Re-use the current session logic
         const recentMessages = claudeMessagesRepository.findAll({
           containerId,
           orderBy: 'created_at',
@@ -1146,29 +1145,15 @@ router.get(
           return;
         }
 
-        const SESSION_GAP_MS = 30 * 60 * 1000;
-        const filteredMessages = [];
-        const mostRecent = recentMessages[0];
-        if (!mostRecent) {
-          res.status(404).json(errorResponse('No messages found', 404));
+        const currentSessionMessages = findCurrentSessionMessages(recentMessages);
+
+        if (!currentSessionMessages || currentSessionMessages.length === 0) {
+          res.status(404).json(errorResponse('No messages in session', 404));
           return;
         }
 
-        let previousTime = mostRecent.timestamp.getTime();
-
-        for (const msg of recentMessages) {
-          const msgTime = msg.timestamp.getTime();
-          const gap = previousTime - msgTime;
-
-          if (gap > SESSION_GAP_MS) break;
-
-          filteredMessages.push(msg);
-          previousTime = msgTime;
-        }
-
-        const chronologicalMessages = filteredMessages.reverse();
-        const firstMsg = chronologicalMessages[0];
-        const lastMsg = chronologicalMessages[chronologicalMessages.length - 1];
+        const firstMsg = currentSessionMessages[0];
+        const lastMsg = currentSessionMessages[currentSessionMessages.length - 1];
 
         if (!firstMsg || !lastMsg) {
           res.status(404).json(errorResponse('No messages in session', 404));
@@ -1180,22 +1165,15 @@ router.get(
           containerId,
           startedAt: firstMsg.timestamp,
           lastMessageAt: lastMsg.timestamp,
-          messageCount: chronologicalMessages.length,
-          messages: chronologicalMessages.map(msg => ({
-            id: msg.id,
-            type: msg.type,
-            content: msg.content,
-            timestamp: msg.timestamp.toISOString(),
-            toolName: msg.toolName,
-            toolInput: msg.toolInput,
-          })),
+          messageCount: currentSessionMessages.length,
+          messages: currentSessionMessages.map(formatMessageForApi),
         };
 
         res.json(successResponse(session));
         return;
       }
 
-      // For historical sessions, reconstruct based on all messages using same logic as /sessions
+      // For historical sessions, group all messages and find the requested session
       const allMessages = claudeMessagesRepository.findAll({
         containerId,
         orderBy: 'created_at',
@@ -1207,55 +1185,7 @@ router.get(
         return;
       }
 
-      // Group messages into sessions (30min gap = new session)
-      const SESSION_GAP_MS = 30 * 60 * 1000;
-      type MessageType = typeof allMessages[number];
-      const sessions: Array<{
-        id: string;
-        containerId: string;
-        startedAt: Date;
-        lastMessageAt: Date;
-        messageCount: number;
-        messages: MessageType[];
-      }> = [];
-
-      let currentSession: typeof sessions[0] | null = null;
-      let sessionCounter = 1;
-
-      for (const message of allMessages) {
-        const messageTime = message.timestamp.getTime();
-
-        if (
-          !currentSession ||
-          messageTime - currentSession.lastMessageAt.getTime() > SESSION_GAP_MS
-        ) {
-          if (currentSession) {
-            sessions.push(currentSession);
-          }
-
-          const currentSessionId = `session-${containerId.substring(0, 8)}-${sessionCounter}`;
-          sessionCounter++;
-
-          currentSession = {
-            id: currentSessionId,
-            containerId,
-            startedAt: message.timestamp,
-            lastMessageAt: message.timestamp,
-            messageCount: 1,
-            messages: [message],
-          };
-        } else {
-          currentSession.lastMessageAt = message.timestamp;
-          currentSession.messageCount++;
-          currentSession.messages.push(message);
-        }
-      }
-
-      if (currentSession) {
-        sessions.push(currentSession);
-      }
-
-      // Find the requested session
+      const sessions = groupMessagesIntoSessions(allMessages, containerId);
       const requestedSession = sessions.find(s => s.id === sessionId);
 
       if (!requestedSession) {
@@ -1269,14 +1199,7 @@ router.get(
         startedAt: requestedSession.startedAt.toISOString(),
         lastMessageAt: requestedSession.lastMessageAt.toISOString(),
         messageCount: requestedSession.messageCount,
-        messages: requestedSession.messages.map(msg => ({
-          id: msg.id,
-          type: msg.type,
-          content: msg.content,
-          timestamp: msg.timestamp.toISOString(),
-          toolName: msg.toolName,
-          toolInput: msg.toolInput,
-        })),
+        messages: requestedSession.messages.map(formatMessageForApi),
       };
 
       logger.info({ containerId, sessionId, messageCount: session.messageCount }, 'Historical session retrieved');

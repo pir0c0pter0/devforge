@@ -2,8 +2,192 @@ import { randomUUID } from 'crypto'
 import { createChildLogger } from '../utils/logger'
 import { getDatabase } from '../database'
 import type Database from 'better-sqlite3'
+import type { ClaudeMessageEntity } from '../repositories/claude-messages.repository'
 
 const logger = createChildLogger({ service: 'claude-sessions' })
+
+/**
+ * Session gap threshold: 30 minutes of inactivity = new session
+ */
+export const SESSION_GAP_MS = 30 * 60 * 1000
+
+/**
+ * Session summary (without full messages) - used by /sessions list endpoint
+ */
+export interface GroupedSessionSummary {
+  readonly id: string
+  readonly containerId: string
+  readonly startedAt: Date
+  readonly lastMessageAt: Date
+  readonly messageCount: number
+  readonly firstMessage?: string
+}
+
+/**
+ * Session with full messages - used by /sessions/:id endpoint
+ */
+export interface GroupedSessionWithMessages {
+  readonly id: string
+  readonly containerId: string
+  readonly startedAt: Date
+  readonly lastMessageAt: Date
+  readonly messageCount: number
+  readonly firstMessage?: string
+  readonly messages: readonly ClaudeMessageEntity[]
+}
+
+/**
+ * API-formatted message (serialized for JSON response)
+ */
+export interface ApiFormattedMessage {
+  readonly id: string
+  readonly type: string
+  readonly content: string
+  readonly timestamp: string
+  readonly toolName?: string
+  readonly toolInput?: unknown
+}
+
+/**
+ * Format a ClaudeMessageEntity for API responses
+ */
+export function formatMessageForApi(msg: ClaudeMessageEntity): ApiFormattedMessage {
+  return {
+    id: msg.id,
+    type: msg.type,
+    content: msg.content,
+    timestamp: msg.timestamp.toISOString(),
+    toolName: msg.toolName,
+    toolInput: msg.toolInput,
+  }
+}
+
+/**
+ * Group messages into sessions based on time gaps.
+ * Messages MUST be sorted in ascending chronological order (oldest first).
+ *
+ * Returns sessions with full messages attached.
+ */
+export function groupMessagesIntoSessions(
+  messages: readonly ClaudeMessageEntity[],
+  containerId: string
+): readonly GroupedSessionWithMessages[] {
+  const sessions: GroupedSessionWithMessages[] = []
+
+  let currentMessages: ClaudeMessageEntity[] = []
+  let currentStart: Date | null = null
+  let currentEnd: Date | null = null
+  let currentFirstMessage: string | undefined
+  let sessionCounter = 1
+
+  for (const message of messages) {
+    const messageTime = message.timestamp.getTime()
+
+    if (
+      currentEnd === null ||
+      messageTime - currentEnd.getTime() > SESSION_GAP_MS
+    ) {
+      // Flush previous session
+      if (currentStart !== null && currentEnd !== null) {
+        const sessionId = `session-${containerId.substring(0, 8)}-${sessionCounter}`
+        sessionCounter++
+
+        sessions.push({
+          id: sessionId,
+          containerId,
+          startedAt: currentStart,
+          lastMessageAt: currentEnd,
+          messageCount: currentMessages.length,
+          firstMessage: currentFirstMessage,
+          messages: currentMessages,
+        })
+      }
+
+      // Start new session
+      currentMessages = [message]
+      currentStart = message.timestamp
+      currentEnd = message.timestamp
+      currentFirstMessage = message.type === 'user' ? message.content.substring(0, 100) : undefined
+    } else {
+      // Continue current session
+      currentMessages.push(message)
+      currentEnd = message.timestamp
+
+      if (!currentFirstMessage && message.type === 'user') {
+        currentFirstMessage = message.content.substring(0, 100)
+      }
+    }
+  }
+
+  // Flush last session
+  if (currentStart !== null && currentEnd !== null) {
+    const sessionId = `session-${containerId.substring(0, 8)}-${sessionCounter}`
+
+    sessions.push({
+      id: sessionId,
+      containerId,
+      startedAt: currentStart,
+      lastMessageAt: currentEnd,
+      messageCount: currentMessages.length,
+      firstMessage: currentFirstMessage,
+      messages: currentMessages,
+    })
+  }
+
+  return sessions
+}
+
+/**
+ * Extract session summaries (without messages) from grouped sessions
+ */
+export function toSessionSummaries(
+  sessions: readonly GroupedSessionWithMessages[]
+): readonly GroupedSessionSummary[] {
+  return sessions.map(({ messages: _messages, ...summary }) => summary)
+}
+
+/**
+ * Find the current (most recent) session from messages sorted DESC.
+ * Returns the messages belonging to the current session in chronological order,
+ * or null if no messages exist or the most recent message is older than SESSION_GAP_MS.
+ */
+export function findCurrentSessionMessages(
+  messagesDesc: readonly ClaudeMessageEntity[]
+): readonly ClaudeMessageEntity[] | null {
+  if (messagesDesc.length === 0) {
+    return null
+  }
+
+  const mostRecent = messagesDesc[0]
+  if (!mostRecent) {
+    return null
+  }
+
+  const timeSinceLastMessage = Date.now() - mostRecent.timestamp.getTime()
+
+  if (timeSinceLastMessage > SESSION_GAP_MS) {
+    return null // Session is stale
+  }
+
+  // Walk backwards through DESC-sorted messages to find session boundary
+  const sessionMessages: ClaudeMessageEntity[] = []
+  let previousTime = mostRecent.timestamp.getTime()
+
+  for (const msg of messagesDesc) {
+    const msgTime = msg.timestamp.getTime()
+    const gap = previousTime - msgTime
+
+    if (gap > SESSION_GAP_MS) {
+      break // Session boundary found
+    }
+
+    sessionMessages.push(msg)
+    previousTime = msgTime
+  }
+
+  // Reverse to chronological order
+  return sessionMessages.reverse()
+}
 
 /**
  * Sessão de conversa Claude
