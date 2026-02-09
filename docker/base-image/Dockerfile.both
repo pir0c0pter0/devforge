@@ -57,12 +57,9 @@ RUN sed -i "s/font-src 'self' blob:/font-src 'self' blob: data: https:/g" \
 # Create stub files for vsda (Visual Studio Debug Adapter)
 # These are proprietary Microsoft files that code-server doesn't include
 # Creating empty stubs prevents 404 errors in browser console
-RUN VSCODE_DIR=$(find /usr/lib/code-server/lib/vscode -maxdepth 0 2>/dev/null || echo "/usr/lib/code-server/lib/vscode") && \
-    if [ -d "$VSCODE_DIR" ]; then \
-        mkdir -p "$VSCODE_DIR/out" && \
-        echo "// vsda stub - proprietary MS debug adapter not available in code-server" > "$VSCODE_DIR/out/vsda.js" && \
-        echo "" | base64 -d > "$VSCODE_DIR/out/vsda_bg.wasm" 2>/dev/null || touch "$VSCODE_DIR/out/vsda_bg.wasm"; \
-    fi
+RUN mkdir -p /usr/lib/code-server/lib/vscode/node_modules/vsda/rust/web && \
+    echo "// vsda stub - proprietary MS module not available in code-server" > /usr/lib/code-server/lib/vscode/node_modules/vsda/rust/web/vsda.js && \
+    touch /usr/lib/code-server/lib/vscode/node_modules/vsda/rust/web/vsda_bg.wasm
 
 # Create non-root user with sudo privileges
 # Delete existing node user first to avoid UID conflicts
