@@ -76,13 +76,34 @@ export interface UseClaudeSessionsReturn {
 }
 
 /**
+ * Determines session active status based on last message timestamp.
+ * A session is considered active if the last message was within the last 30 minutes.
+ */
+function isSessionActive(lastMessageAt: Date): boolean {
+  const SESSION_GAP_MS = 30 * 60 * 1000
+  return Date.now() - lastMessageAt.getTime() < SESSION_GAP_MS
+}
+
+/**
+ * Generates a human-readable title from the first message or a fallback.
+ */
+function generateSessionTitle(firstMessage: string | undefined, startedAt: Date): string {
+  if (firstMessage) {
+    const trimmed = firstMessage.length > 60
+      ? firstMessage.substring(0, 57) + '...'
+      : firstMessage
+    return trimmed
+  }
+  return `Session ${startedAt.toLocaleDateString()} ${startedAt.toLocaleTimeString()}`
+}
+
+/**
  * Hook for managing Claude conversation sessions
  *
- * NOTE: This hook is currently a wrapper around the messages API.
- * When the backend implements proper session management (/api/claude-daemon/:containerId/sessions),
- * this hook will be updated to use those endpoints while maintaining the same interface.
- *
- * For now, it treats the entire message history as a single "default" session.
+ * Uses the backend sessions API:
+ * - GET /api/claude-daemon/:containerId/sessions (list sessions grouped by 30-min gaps)
+ * - GET /api/claude-daemon/:containerId/sessions/:sessionId (get session with messages)
+ * - POST /api/claude-daemon/:containerId/sessions (create session boundary)
  */
 export function useClaudeSessions(options: UseClaudeSessionsOptions): UseClaudeSessionsReturn {
   const { containerId, pageSize = 20, autoLoad = true } = options
@@ -110,9 +131,8 @@ export function useClaudeSessions(options: UseClaudeSessionsOptions): UseClaudeS
   /**
    * Fetch sessions for the container
    *
-   * NOTE: Since there's no session API yet, this creates a mock session
-   * from the messages API. When the backend implements sessions, this will
-   * call GET /api/claude-daemon/:containerId/sessions?page=X&limit=Y
+   * Calls GET /api/claude-daemon/:containerId/sessions?limit=N
+   * Backend returns sessions grouped by 30-min message gaps, most recent first.
    */
   const fetchSessions = useCallback(
     async (page: number = 1) => {
@@ -128,31 +148,35 @@ export function useClaudeSessions(options: UseClaudeSessionsOptions): UseClaudeS
         setLoading(true)
         setError(null)
 
-        // TODO: Replace with actual sessions API when available
-        // const response = await apiClient.getSessions(containerId, { page, limit: pageSize })
-
-        // For now, fetch messages to create a mock session
-        const response = await apiClient.getChatMessages(containerId, { limit: 1 })
+        const response = await apiClient.getClaudeSessions(containerId, { limit: pageSize })
 
         if (!response.success) {
           throw new Error(response.error || 'Failed to fetch sessions')
         }
 
-        // Create a mock "default" session from messages
-        const mockSession: ConversationSession = {
-          id: 'default',
-          containerId,
-          title: 'Chat History',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          messageCount: response.data?.total || 0,
-          lastMessage: response.data?.messages?.[0]?.content,
-          isActive: true,
-        }
+        const backendSessions = response.data?.sessions ?? []
+        const total = response.data?.total ?? 0
 
-        setSessions([mockSession])
+        // Map backend session format to frontend ConversationSession type
+        const mappedSessions: ConversationSession[] = backendSessions.map((session, index) => {
+          const startedAt = new Date(session.startedAt)
+          const lastMessageAt = new Date(session.lastMessageAt)
+
+          return {
+            id: session.id,
+            containerId: session.containerId,
+            title: generateSessionTitle(session.firstMessage, startedAt),
+            createdAt: startedAt,
+            updatedAt: lastMessageAt,
+            messageCount: session.messageCount,
+            lastMessage: session.firstMessage,
+            isActive: index === 0 && isSessionActive(lastMessageAt),
+          }
+        })
+
+        setSessions(mappedSessions)
         setCurrentPage(page)
-        setHasMore(false) // Only one session for now
+        setHasMore(mappedSessions.length < total)
         hasInitialLoadRef.current = true
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to fetch sessions'
@@ -169,8 +193,8 @@ export function useClaudeSessions(options: UseClaudeSessionsOptions): UseClaudeS
   /**
    * Load a specific session with its messages
    *
-   * When the backend implements sessions, this will call:
-   * GET /api/claude-daemon/:containerId/sessions/:sessionId/messages
+   * Calls GET /api/claude-daemon/:containerId/sessions/:sessionId
+   * Backend returns the session object with a messages array.
    */
   const loadSession = useCallback(
     async (sessionId: string) => {
@@ -183,29 +207,26 @@ export function useClaudeSessions(options: UseClaudeSessionsOptions): UseClaudeS
         setLoading(true)
         setError(null)
 
-        // TODO: Replace with actual session messages API when available
-        // const response = await apiClient.getSessionMessages(containerId, sessionId, { limit: 500 })
-
-        // For now, load all messages for the container
-        const response = await apiClient.getChatMessages(containerId, { limit: 500 })
+        const response = await apiClient.getClaudeSessionMessages(containerId, sessionId)
 
         if (!response.success) {
           throw new Error(response.error || 'Failed to load session')
         }
 
-        const messages: ClaudeMessage[] = response.data?.messages.map(msg => ({
+        const sessionData = response.data
+        const rawMessages = sessionData?.messages ?? []
+
+        const messages: ClaudeMessage[] = rawMessages.map(msg => ({
           id: msg.id,
-          type: msg.type,
+          type: msg.type as ClaudeMessage['type'],
           content: msg.content,
           timestamp: new Date(msg.timestamp),
           toolName: msg.toolName,
           toolInput: msg.toolInput,
-        })) || []
+        }))
 
         setCurrentMessages(messages)
         setCurrentSessionId(sessionId)
-
-        console.log('[useClaudeSessions] Loaded session:', sessionId, 'with', messages.length, 'messages')
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to load session'
         setError(errorMessage)
@@ -220,8 +241,8 @@ export function useClaudeSessions(options: UseClaudeSessionsOptions): UseClaudeS
   /**
    * Create a new session
    *
-   * When the backend implements sessions, this will call:
-   * POST /api/claude-daemon/:containerId/sessions
+   * Calls POST /api/claude-daemon/:containerId/sessions
+   * Backend creates a system message as session boundary marker.
    */
   const createSession = useCallback(
     async (_title?: string): Promise<ConversationSession | null> => {
@@ -234,14 +255,34 @@ export function useClaudeSessions(options: UseClaudeSessionsOptions): UseClaudeS
         setLoading(true)
         setError(null)
 
-        // TODO: Replace with actual session creation API when available
-        // const response = await apiClient.createSession(containerId, { title })
+        const response = await apiClient.createClaudeSession(containerId)
 
-        // For now, return null and log a warning
-        console.warn('[useClaudeSessions] Session creation not implemented yet. Backend API pending.')
-        setError('Session creation not implemented yet')
+        if (!response.success) {
+          throw new Error(response.error || 'Failed to create session')
+        }
 
-        return null
+        const sessionData = response.data
+        if (!sessionData) {
+          throw new Error('No session data returned from backend')
+        }
+
+        const startedAt = new Date(sessionData.startedAt)
+        const lastMessageAt = new Date(sessionData.lastMessageAt)
+
+        const newSession: ConversationSession = {
+          id: sessionData.id,
+          containerId: sessionData.containerId,
+          title: _title || `Session ${startedAt.toLocaleDateString()} ${startedAt.toLocaleTimeString()}`,
+          createdAt: startedAt,
+          updatedAt: lastMessageAt,
+          messageCount: sessionData.messageCount,
+          isActive: true,
+        }
+
+        // Prepend to sessions list (most recent first)
+        setSessions(prev => [newSession, ...prev])
+
+        return newSession
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to create session'
         setError(errorMessage)
@@ -257,8 +298,9 @@ export function useClaudeSessions(options: UseClaudeSessionsOptions): UseClaudeS
   /**
    * Delete a session
    *
-   * When the backend implements sessions, this will call:
-   * DELETE /api/claude-daemon/:containerId/sessions/:sessionId
+   * NOTE: The backend does not currently have a DELETE /sessions/:sessionId endpoint.
+   * Sessions are computed dynamically from message time gaps, so deletion would require
+   * deleting the underlying messages. This remains unimplemented until backend support is added.
    */
   const deleteSession = useCallback(
     async (_sessionId: string): Promise<boolean> => {
@@ -271,12 +313,10 @@ export function useClaudeSessions(options: UseClaudeSessionsOptions): UseClaudeS
         setLoading(true)
         setError(null)
 
-        // TODO: Replace with actual session deletion API when available
-        // const response = await apiClient.deleteSession(containerId, sessionId)
-
-        // For now, return false and log a warning
-        console.warn('[useClaudeSessions] Session deletion not implemented yet. Backend API pending.')
-        setError('Session deletion not implemented yet')
+        // TODO: Backend does not support session deletion yet.
+        // Sessions are computed dynamically from messages grouped by 30-min gaps.
+        // A DELETE endpoint would need to remove the underlying messages.
+        setError('Session deletion is not supported by the backend')
 
         return false
       } catch (err) {

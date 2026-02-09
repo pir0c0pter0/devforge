@@ -20,6 +20,12 @@ import {
 import { apiLogger as logger } from '../../utils/logger';
 import { validateBody, validateParams } from '../../utils/validation';
 import { strictRateLimiter } from '../../middleware/rate-limit';
+import {
+  groupMessagesIntoSessions,
+  toSessionSummaries,
+  findCurrentSessionMessages,
+  formatMessageForApi,
+} from '../../services/claude-sessions.service';
 
 const router: Router = Router();
 
@@ -973,71 +979,20 @@ router.get(
 
       logger.debug({ containerId, limit }, 'Listing conversation sessions');
 
-      // Get all messages for container ordered by time
+      // Get all messages for container ordered by time (ASC for grouping)
       const allMessages = claudeMessagesRepository.findAll({
         containerId,
         orderBy: 'created_at',
         orderDirection: 'ASC',
       });
 
-      // Group messages into sessions (30min gap = new session)
-      const SESSION_GAP_MS = 30 * 60 * 1000; // 30 minutes
-      const sessions: Array<{
-        id: string;
-        containerId: string;
-        startedAt: Date;
-        lastMessageAt: Date;
-        messageCount: number;
-        firstMessage?: string;
-      }> = [];
-
-      let currentSession: typeof sessions[0] | null = null;
-      let sessionCounter = 1;
-
-      for (const message of allMessages) {
-        const messageTime = message.timestamp.getTime();
-
-        // Check if we need to start a new session
-        if (
-          !currentSession ||
-          messageTime - currentSession.lastMessageAt.getTime() > SESSION_GAP_MS
-        ) {
-          // Save previous session
-          if (currentSession) {
-            sessions.push(currentSession);
-          }
-
-          // Start new session
-          const sessionId = `session-${containerId.substring(0, 8)}-${sessionCounter}`;
-          sessionCounter++;
-
-          currentSession = {
-            id: sessionId,
-            containerId,
-            startedAt: message.timestamp,
-            lastMessageAt: message.timestamp,
-            messageCount: 1,
-            firstMessage: message.type === 'user' ? message.content.substring(0, 100) : undefined,
-          };
-        } else {
-          // Add to current session
-          currentSession.lastMessageAt = message.timestamp;
-          currentSession.messageCount++;
-
-          // Set firstMessage if not set and this is a user message
-          if (!currentSession.firstMessage && message.type === 'user') {
-            currentSession.firstMessage = message.content.substring(0, 100);
-          }
-        }
-      }
-
-      // Don't forget the last session
-      if (currentSession) {
-        sessions.push(currentSession);
-      }
+      // Group messages into sessions using centralized logic
+      const groupedSessions = groupMessagesIntoSessions(allMessages, containerId);
+      const sessions = toSessionSummaries(groupedSessions);
 
       // Reverse to get most recent first, then apply limit
-      const limitedSessions = sessions.reverse().slice(0, limit);
+      const reversedSessions = [...sessions].reverse();
+      const limitedSessions = reversedSessions.slice(0, limit);
 
       logger.info({ containerId, totalSessions: sessions.length, returned: limitedSessions.length }, 'Sessions listed');
 
@@ -1075,7 +1030,7 @@ router.get(
 
       logger.debug({ containerId }, 'Getting current session');
 
-      // Get most recent messages
+      // Get most recent messages (DESC order for current session detection)
       const recentMessages = claudeMessagesRepository.findAll({
         containerId,
         orderBy: 'created_at',
@@ -1100,19 +1055,12 @@ router.get(
         return;
       }
 
-      // Check if most recent message is within session window (30min)
-      const SESSION_GAP_MS = 30 * 60 * 1000;
-      const mostRecent = recentMessages[0];
-      if (!mostRecent) {
-        res.status(500).json(errorResponse('Unexpected error: no messages found', 500));
-        return;
-      }
+      // Find current session messages using centralized logic
+      const currentSessionMessages = findCurrentSessionMessages(recentMessages);
 
-      const timeSinceLastMessage = Date.now() - mostRecent.timestamp.getTime();
-
-      if (timeSinceLastMessage > SESSION_GAP_MS) {
+      if (!currentSessionMessages) {
         // Last session is stale, create new one
-        const sessionCounter = Math.floor(Date.now() / 1000); // Use timestamp for uniqueness
+        const sessionCounter = Math.floor(Date.now() / 1000);
         const sessionId = `session-${containerId.substring(0, 8)}-${sessionCounter}`;
         const session = {
           id: sessionId,
@@ -1123,60 +1071,32 @@ router.get(
           messages: [],
         };
 
-        logger.info({ containerId, sessionId, timeSinceLastMessage }, 'Last session stale, created new session');
+        logger.info({ containerId, sessionId }, 'Last session stale, created new session');
         res.json(successResponse(session));
         return;
       }
 
-      // Find all messages in current session (reverse chronologically until gap > 30min)
-      const sessionMessages = [...recentMessages]; // Create mutable copy
-      const filteredMessages = [];
-      let previousTime = mostRecent.timestamp.getTime();
-
-      for (const msg of sessionMessages) {
-        const msgTime = msg.timestamp.getTime();
-        const gap = previousTime - msgTime;
-
-        if (gap > SESSION_GAP_MS) {
-          break; // Session boundary found
-        }
-
-        filteredMessages.push(msg);
-        previousTime = msgTime;
-      }
-
-      // Reverse to get chronological order
-      const chronologicalMessages = filteredMessages.reverse();
-
-      if (chronologicalMessages.length === 0) {
+      if (currentSessionMessages.length === 0) {
         res.status(500).json(errorResponse('Unexpected error: no messages in session', 500));
         return;
       }
 
-      // Create session object
-      const sessionId = `session-${containerId.substring(0, 8)}-current`;
-      const firstMsg = chronologicalMessages[0];
-      const lastMsg = chronologicalMessages[chronologicalMessages.length - 1];
+      const firstMsg = currentSessionMessages[0];
+      const lastMsg = currentSessionMessages[currentSessionMessages.length - 1];
 
       if (!firstMsg || !lastMsg) {
         res.status(500).json(errorResponse('Unexpected error: invalid session messages', 500));
         return;
       }
 
+      const sessionId = `session-${containerId.substring(0, 8)}-current`;
       const session = {
         id: sessionId,
         containerId,
         startedAt: firstMsg.timestamp,
         lastMessageAt: lastMsg.timestamp,
-        messageCount: chronologicalMessages.length,
-        messages: chronologicalMessages.map(msg => ({
-          id: msg.id,
-          type: msg.type,
-          content: msg.content,
-          timestamp: msg.timestamp.toISOString(),
-          toolName: msg.toolName,
-          toolInput: msg.toolInput,
-        })),
+        messageCount: currentSessionMessages.length,
+        messages: currentSessionMessages.map(formatMessageForApi),
       };
 
       logger.info({ containerId, sessionId, messageCount: session.messageCount }, 'Returned current session');

@@ -345,6 +345,19 @@ class ApiClient {
   }>> {
     return this.request(`/api/claude-daemon/${containerId}/sessions/${sessionId}`)
   }
+
+  async createClaudeSession(containerId: string): Promise<ApiResponse<{
+    id: string
+    containerId: string
+    startedAt: string
+    lastMessageAt: string
+    messageCount: number
+    createdExplicitly: boolean
+  }>> {
+    return this.request(`/api/claude-daemon/${containerId}/sessions`, {
+      method: 'POST',
+    })
+  }
 }
 
 export const apiClient = new ApiClient()
