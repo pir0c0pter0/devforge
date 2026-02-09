@@ -116,6 +116,11 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
 # Install code-server
 RUN curl -fsSL https://code-server.dev/install.sh | sh -s -- --version=${CODE_SERVER_VERSION}
 
+# Fix CSP: allow data: and https: fonts (Codicon icon font uses data: URIs)
+# Without this, VS Code renders a blank white screen in browsers that enforce CSP strictly
+RUN sed -i "s/font-src 'self' blob:/font-src 'self' blob: data: https:/g" \
+    /usr/lib/code-server/lib/vscode/out/vs/server/node/server.main.js
+
 # Copy Go from builder stage
 COPY --from=builder /tmp/go /usr/local/go
 

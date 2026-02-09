@@ -135,7 +135,7 @@ export function IDEView({ vscodeUrl, containerStatus, containerId }: IDEViewProp
   }
 
   return (
-    <div className="h-full relative" style={{ backgroundColor: '#1e1e1e' }}>
+    <div className="relative" style={{ backgroundColor: '#1e1e1e', width: '100%', height: '100%' }}>
       {overlayPhase !== 'hidden' && (
         <div
           className="absolute inset-0 flex items-center justify-center z-10"
@@ -157,10 +157,10 @@ export function IDEView({ vscodeUrl, containerStatus, containerId }: IDEViewProp
       <iframe
         ref={iframeRef}
         src={vscodeUrl}
-        className="w-full h-full border-0"
         title="VS Code"
         allow="clipboard-read; clipboard-write"
         onLoad={handleIframeLoad}
+        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
       />
     </div>
   )
