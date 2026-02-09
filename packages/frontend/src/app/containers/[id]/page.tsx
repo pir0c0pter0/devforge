@@ -220,6 +220,10 @@ export default function ContainerDetailPage() {
 
       if (response.success && response.data) {
         setContainerBase(response.data)
+        // Auto-set VS Code URL if available from backend (pre-loaded during container start)
+        if (response.data.vscodeUrl && !vscodeUrl) {
+          setVscodeUrl(response.data.vscodeUrl)
+        }
       } else {
         setError(response.error || t.containerDetail.containerNotFound)
       }

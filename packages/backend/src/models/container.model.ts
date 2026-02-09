@@ -202,6 +202,7 @@ export const ContainerListItemSchema = z.object({
   activeAgents: z.number(),
   queueLength: z.number(),
   taskId: z.string().optional(), // Task ID for tracking creation progress
+  vscodeUrl: z.string().optional(), // Pre-resolved VS Code URL for instant IDE loading
 });
 
 export type ContainerListItem = z.infer<typeof ContainerListItemSchema>;

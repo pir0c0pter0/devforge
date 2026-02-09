@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { AnimatedDots } from '@/components/ui/animated-dots'
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
 interface IDEViewProps {
   vscodeUrl: string
   containerStatus: string
@@ -10,7 +12,7 @@ interface IDEViewProps {
 }
 
 const MIN_LOADING_TIME = 3000 // 3 seconds - avoid flash, reduced from 30s
-const MAX_LOADING_TIME = 60000 // 60 seconds timeout
+const MAX_LOADING_TIME = 30000 // 30 seconds timeout (VS Code confirmed ready during startup)
 const POLL_INTERVAL = 1000 // 1 second between health checks
 
 // Progressive loading messages based on elapsed time
@@ -52,8 +54,9 @@ export function IDEView({ vscodeUrl, containerStatus, containerId }: IDEViewProp
     const checkHealth = async () => {
       while (pollingRef.current && (Date.now() - startTime) < MAX_LOADING_TIME) {
         try {
-          const response = await fetch(`/api/containers/${containerId}/vscode-health`, {
-            signal: abortController.signal
+          const response = await fetch(`${API_URL}/api/containers/${containerId}/vscode-health`, {
+            signal: abortController.signal,
+            credentials: 'include',
           })
           const data = await response.json()
 
@@ -129,7 +132,6 @@ export function IDEView({ vscodeUrl, containerStatus, containerId }: IDEViewProp
         src={vscodeUrl}
         className="w-full h-full border-0"
         title="VS Code"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
         onLoad={() => setIframeLoaded(true)}
       />
     </div>

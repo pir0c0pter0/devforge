@@ -87,6 +87,16 @@ const sanitizeContainerName = (name: string): string => {
 };
 
 /**
+ * Build VS Code URL from stored port
+ */
+const buildVscodeUrl = (vscodePort: number | undefined): string | undefined => {
+  if (!vscodePort) return undefined;
+  const hostname = process.env['VSCODE_HOST'] || 'localhost';
+  const protocol = process.env['VSCODE_SECURE'] === 'true' ? 'https' : 'http';
+  return `${protocol}://${hostname}:${vscodePort}/?folder=/workspace`;
+};
+
+/**
  * Business logic layer for container management
  */
 export class ContainerService {
@@ -954,6 +964,18 @@ export class ContainerService {
 
       taskService.setProgress(taskId, vscodeEndProgress, 'VS Code pronto!');
 
+      // Save VS Code host port to DB for instant URL resolution
+      try {
+        const portInfo = await dockerService.getContainerPort(container.dockerId, 8080);
+        if (portInfo) {
+          const hostPort = parseInt(portInfo.hostPort, 10);
+          containerRepository.update(containerId, { vscodePort: hostPort });
+          logger.info({ containerId, vscodePort: hostPort }, 'VS Code port saved to DB');
+        }
+      } catch (portError) {
+        logger.warn({ error: portError, containerId }, 'Failed to save VS Code port (non-critical)');
+      }
+
       // Step 5: Auto-start Claude environment
       taskService.setProgress(taskId, 65, 'Iniciando ambiente Claude Code...');
       try {
@@ -1352,6 +1374,10 @@ export class ContainerService {
           }
         }
 
+        const vscodeUrl = container.status === 'running'
+          ? buildVscodeUrl(entity.vscodePort)
+          : undefined;
+
         items.push({
           id: container.id,
           dockerId: container.dockerId,
@@ -1365,6 +1391,7 @@ export class ContainerService {
           activeAgents: activeAgentsCount,
           queueLength,
           taskId,
+          vscodeUrl,
         });
       }
 
@@ -1463,6 +1490,10 @@ export class ContainerService {
       }
     }
 
+    const vscodeUrl = container.status === 'running'
+      ? buildVscodeUrl(entity.vscodePort)
+      : undefined;
+
     return {
       id: container.id,
       dockerId: container.dockerId,
@@ -1476,6 +1507,7 @@ export class ContainerService {
       activeAgents: activeAgentsCount,
       queueLength,
       taskId,
+      vscodeUrl,
     };
   }
 
