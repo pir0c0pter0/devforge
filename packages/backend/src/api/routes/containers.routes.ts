@@ -852,17 +852,10 @@ router.get(
         return;
       }
 
-      // Always do a fresh check with heartbeat data
-      const heartbeat = await vscodeHealthService.getHeartbeat(container.dockerId!);
-
-      // A heartbeat <30s old means the browser workbench is actively running
-      const heartbeatFresh = heartbeat.lastHeartbeat !== null &&
-        (Date.now() - heartbeat.lastHeartbeat) < 30000;
+      const isReady = await vscodeHealthService.checkHealth(container.dockerId!);
 
       res.json(successResponse({
-        ready: heartbeat.alive,
-        workbenchActive: heartbeatFresh,
-        lastHeartbeat: heartbeat.lastHeartbeat,
+        ready: isReady,
         containerId: id,
         timestamp: new Date().toISOString()
       }));

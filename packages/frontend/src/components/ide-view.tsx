@@ -12,10 +12,10 @@ interface IDEViewProps {
 }
 
 const FADE_DURATION = 1500
-const MAX_LOADING_TIME = 60000
+const MAX_LOADING_TIME = 30000
 const POLL_INTERVAL = 2000
-// After workbench heartbeat confirmed, extra delay for UI to finish painting
-const POST_READY_DELAY = 5000
+// After health + iframe load confirmed, short delay for workbench JS to paint
+const POST_READY_DELAY = 2000
 
 const getLoadingText = (phase: string, elapsed: number): string => {
   if (phase === 'polling') {
@@ -50,9 +50,9 @@ export function IDEView({ vscodeUrl, containerStatus, containerId }: IDEViewProp
     iframeLoadedRef.current = true
   }, [])
 
-  // Poll backend health API (no CORS issues — goes through our API at port 8000).
-  // Backend execs `curl /healthz` inside the container and returns the heartbeat.
-  // A fresh heartbeat means the browser workbench JS has loaded.
+  // Poll backend health API until code-server HTTP is responding.
+  // Backend execs `curl /healthz` inside the container and returns { ready: true }.
+  // Then wait for iframe onLoad + short delay for workbench JS to paint.
   useEffect(() => {
     if (containerStatus !== 'running' || !containerId) return
 
@@ -70,12 +70,11 @@ export function IDEView({ vscodeUrl, containerStatus, containerId }: IDEViewProp
             const json = await resp.json()
             const data = json.data ?? json
 
-            // workbenchActive = heartbeat is < 30s old (browser client is alive)
-            if (data.workbenchActive) {
+            if (data.ready) {
               pollPhaseRef.current = 'rendering'
               setLoadingText('Rendering editor')
 
-              // Wait for iframe onLoad + extra time for the 11MB JS to finish executing
+              // Wait for iframe onLoad (HTML delivered by browser)
               const waitStart = Date.now()
               while (!iframeLoadedRef.current && (Date.now() - waitStart) < 10000) {
                 await new Promise(r => setTimeout(r, 500))
