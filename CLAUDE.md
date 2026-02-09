@@ -1,6 +1,6 @@
 # DevForge - Instruções Críticas
 
-## Versão Atual: 0.1.53-alpha
+## Versão Atual: 0.1.54-alpha
 
 ## Links
 
@@ -128,6 +128,12 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.54-alpha
+- Feat: Ralph Loop now sends completion summary message when finished
+- Feat: Ralph Mode prompt instructs Claude to provide structured summary of changes
+- Feat: System message in chat shows duration and success/failure status
+- Fix: Ralph Loop no longer silently stops without user feedback
 
 ### v0.1.53-alpha
 - Feat: USB/Serial device passthrough for containers (STM32, ESP32 firmware flashing)

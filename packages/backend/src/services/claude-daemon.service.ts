@@ -546,7 +546,7 @@ class ClaudeDaemonService extends EventEmitter {
         // Ralph Loop: wrap instruction if enabled
         const ralphLoopEnabled = containerEntity?.config?.['ralphLoop'] === true
         const finalInstruction = ralphLoopEnabled
-          ? `[RALPH MODE] You MUST work iteratively and autonomously until the task is FULLY complete. Do NOT stop to ask questions or for confirmation. Keep coding, testing, fixing, and improving until EVERYTHING is done and verified. Do not give partial answers - finish the entire task.\n\n${instruction}`
+          ? `[RALPH MODE] You MUST work iteratively and autonomously until the task is FULLY complete. Do NOT stop to ask questions or for confirmation. Keep coding, testing, fixing, and improving until EVERYTHING is done and verified. Do not give partial answers - finish the entire task.\n\nIMPORTANT: When you have completed ALL work, you MUST end your response with a brief completion summary. Use this format:\n\n## Ralph Loop - Completed\n- **What was done**: (list main changes/actions)\n- **Files modified**: (list key files)\n- **Status**: (success/partial/issues found)\n\n${instruction}`
           : instruction
         if (ralphLoopEnabled) {
           logger.debug({ containerId }, 'Ralph Loop enabled - instruction wrapped')
@@ -775,6 +775,7 @@ class ClaudeDaemonService extends EventEmitter {
             containerId,
             success: exitCode === 0,
             durationMs: duration,
+            ralphLoop: ralphLoopEnabled,
             timestamp: new Date(),
           })
 

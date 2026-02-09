@@ -527,8 +527,26 @@ export function useClaudeDaemon(options: UseClaudeDaemonOptions): UseClaudeDaemo
       }))
     }
 
-    const handleProcessingComplete = () => {
+    const handleProcessingComplete = (data: { success: boolean; durationMs: number; ralphLoop?: boolean }) => {
       setProcessingState({ isProcessing: false, stage: 'idle' })
+
+      // Show completion system message when Ralph Loop finishes
+      if (data.ralphLoop) {
+        const messageId = getNextMessageId(containerId)
+        const durationStr = data.durationMs < 1000
+          ? `${data.durationMs}ms`
+          : data.durationMs < 60000
+            ? `${(data.durationMs / 1000).toFixed(1)}s`
+            : `${(data.durationMs / 60000).toFixed(1)}min`
+        const statusStr = data.success ? 'Concluido com sucesso' : 'Finalizado com erros'
+        const completeMessage: ClaudeMessage = {
+          id: messageId,
+          type: 'system',
+          content: `Ralph Loop ${statusStr} (${durationStr})`,
+          timestamp: new Date(),
+        }
+        addMessage(containerId, completeMessage)
+      }
     }
 
     const handleProcessingError = () => {
