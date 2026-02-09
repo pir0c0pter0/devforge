@@ -852,27 +852,18 @@ router.get(
         return;
       }
 
-      // Verificar cache primeiro
-      const cachedStatus = vscodeHealthService.getStatus(id);
-      if (cachedStatus && cachedStatus.ready &&
-          (Date.now() - cachedStatus.lastCheck.getTime()) < 10000) {
-        res.json(successResponse({
-          ready: true,
-          containerId: id,
-          cached: true,
-          lastCheck: cachedStatus.lastCheck
-        }));
-        return;
-      }
+      // Always do a fresh check with heartbeat data
+      const heartbeat = await vscodeHealthService.getHeartbeat(container.dockerId!);
 
-      // Health check real
-      const isReady = await vscodeHealthService.checkHealth(container.dockerId!);
+      // A heartbeat <30s old means the browser workbench is actively running
+      const heartbeatFresh = heartbeat.lastHeartbeat !== null &&
+        (Date.now() - heartbeat.lastHeartbeat) < 30000;
 
       res.json(successResponse({
-        ready: isReady,
+        ready: heartbeat.alive,
+        workbenchActive: heartbeatFresh,
+        lastHeartbeat: heartbeat.lastHeartbeat,
         containerId: id,
-        dockerId: container.dockerId,
-        cached: false,
         timestamp: new Date().toISOString()
       }));
 

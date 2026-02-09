@@ -44,6 +44,34 @@ class VSCodeHealthService {
     }
   }
 
+  /**
+   * Get full healthz response including heartbeat timestamp.
+   * The heartbeat is updated by the browser client, so a recent heartbeat
+   * means the workbench JS has loaded and is actively running.
+   */
+  async getHeartbeat(dockerId: string): Promise<{ alive: boolean; lastHeartbeat: number | null }> {
+    try {
+      const result = await dockerService.executeCommand(
+        dockerId,
+        ['curl', '-sf', this.HEALTH_ENDPOINT],
+        { user: 'developer' }
+      );
+
+      if (result.exitCode !== 0) {
+        return { alive: false, lastHeartbeat: null };
+      }
+
+      const data = JSON.parse(result.stdout.trim());
+      return {
+        alive: data.status === 'alive',
+        lastHeartbeat: data.lastHeartbeat ?? null,
+      };
+    } catch (error) {
+      logger.debug({ dockerId, error }, 'VS Code heartbeat check failed');
+      return { alive: false, lastHeartbeat: null };
+    }
+  }
+
   async waitUntilReady(
     dockerId: string,
     containerId: string,

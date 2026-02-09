@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { AnimatedDots } from '@/components/ui/animated-dots'
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
 interface IDEViewProps {
   vscodeUrl: string
   containerStatus: string
@@ -11,38 +13,31 @@ interface IDEViewProps {
 
 const FADE_DURATION = 1500
 const MAX_LOADING_TIME = 60000
-const POLL_INTERVAL = 1500
-// Extra delay after workbench heartbeat detected — lets the UI finish painting
-const POST_HEARTBEAT_DELAY = 3000
+const POLL_INTERVAL = 2000
+// After workbench heartbeat confirmed, extra delay for UI to finish painting
+const POST_READY_DELAY = 5000
 
-const getLoadingText = (elapsed: number): string => {
-  if (elapsed < 3000) return 'Connecting to VS Code'
-  if (elapsed < 8000) return 'Downloading editor'
-  if (elapsed < 15000) return 'Initializing workbench'
-  if (elapsed < 25000) return 'Loading extensions'
-  if (elapsed < 40000) return 'Almost ready'
-  return 'Finalizing...'
-}
-
-/**
- * Extract base URL from VS Code URL (e.g. "http://host:port/?folder=..." -> "http://host:port")
- */
-const getBaseUrl = (url: string): string => {
-  try {
-    const parsed = new URL(url)
-    return `${parsed.protocol}//${parsed.host}`
-  } catch {
-    return url.split('?')[0]
+const getLoadingText = (phase: string, elapsed: number): string => {
+  if (phase === 'polling') {
+    if (elapsed < 5000) return 'Connecting to VS Code'
+    if (elapsed < 12000) return 'Downloading editor (11 MB)'
+    if (elapsed < 20000) return 'Initializing workbench'
+    if (elapsed < 35000) return 'Loading extensions'
+    return 'Almost ready'
   }
+  if (phase === 'rendering') return 'Rendering editor'
+  return 'VS Code ready!'
 }
 
-export function IDEView({ vscodeUrl, containerStatus }: IDEViewProps) {
+export function IDEView({ vscodeUrl, containerStatus, containerId }: IDEViewProps) {
   const [overlayPhase, setOverlayPhase] = useState<'visible' | 'fading' | 'hidden'>('visible')
   const [loadingText, setLoadingText] = useState('Connecting to VS Code')
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const mountTimeRef = useRef(Date.now())
   const fadeStartedRef = useRef(false)
   const pollingRef = useRef(true)
+  const iframeLoadedRef = useRef(false)
+  const pollPhaseRef = useRef<string>('polling')
 
   const startFade = useCallback(() => {
     if (fadeStartedRef.current) return
@@ -51,39 +46,44 @@ export function IDEView({ vscodeUrl, containerStatus }: IDEViewProps) {
     setTimeout(() => setOverlayPhase('hidden'), FADE_DURATION)
   }, [])
 
-  // Poll code-server /healthz directly from the browser.
-  // The heartbeat is only updated once the workbench JS has loaded and executed,
-  // making it a reliable indicator that VS Code has actually rendered.
+  const handleIframeLoad = useCallback(() => {
+    iframeLoadedRef.current = true
+  }, [])
+
+  // Poll backend health API (no CORS issues — goes through our API at port 8000).
+  // Backend execs `curl /healthz` inside the container and returns the heartbeat.
+  // A fresh heartbeat means the browser workbench JS has loaded.
   useEffect(() => {
-    if (containerStatus !== 'running' || !vscodeUrl) return
+    if (containerStatus !== 'running' || !containerId) return
 
     pollingRef.current = true
-    const baseUrl = getBaseUrl(vscodeUrl)
     const abortController = new AbortController()
 
     const poll = async () => {
-      // Wait a moment before first poll (let the iframe start loading)
-      await new Promise(r => setTimeout(r, 2000))
-
       while (pollingRef.current && (Date.now() - mountTimeRef.current) < MAX_LOADING_TIME) {
         try {
-          const resp = await fetch(`${baseUrl}/healthz`, {
-            signal: abortController.signal,
-            // no credentials — code-server has auth:none
-          })
+          const resp = await fetch(
+            `${API_URL}/api/containers/${containerId}/vscode-health`,
+            { signal: abortController.signal, credentials: 'include' }
+          )
           if (resp.ok) {
-            const data = await resp.json()
-            // code-server returns { status: "alive", lastHeartbeat: <timestamp> }
-            // A recent heartbeat (<30s) means the workbench is actively running
-            if (data.status === 'alive' && data.lastHeartbeat) {
-              const heartbeatAge = Date.now() - data.lastHeartbeat
-              if (heartbeatAge < 30000) {
-                setLoadingText('VS Code ready!')
-                // Wait a bit more for the UI to finish painting after heartbeat
-                await new Promise(r => setTimeout(r, POST_HEARTBEAT_DELAY))
-                startFade()
-                return
+            const json = await resp.json()
+            const data = json.data ?? json
+
+            // workbenchActive = heartbeat is < 30s old (browser client is alive)
+            if (data.workbenchActive) {
+              pollPhaseRef.current = 'rendering'
+              setLoadingText('Rendering editor')
+
+              // Wait for iframe onLoad + extra time for the 11MB JS to finish executing
+              const waitStart = Date.now()
+              while (!iframeLoadedRef.current && (Date.now() - waitStart) < 10000) {
+                await new Promise(r => setTimeout(r, 500))
               }
+
+              await new Promise(r => setTimeout(r, POST_READY_DELAY))
+              startFade()
+              return
             }
           }
         } catch (err) {
@@ -103,7 +103,7 @@ export function IDEView({ vscodeUrl, containerStatus }: IDEViewProps) {
       pollingRef.current = false
       abortController.abort()
     }
-  }, [containerStatus, vscodeUrl, startFade])
+  }, [containerStatus, containerId, startFade])
 
   // Absolute safety timeout
   useEffect(() => {
@@ -116,7 +116,7 @@ export function IDEView({ vscodeUrl, containerStatus }: IDEViewProps) {
     if (overlayPhase === 'hidden') return
     const interval = setInterval(() => {
       const elapsed = Date.now() - mountTimeRef.current
-      setLoadingText(getLoadingText(elapsed))
+      setLoadingText(getLoadingText(pollPhaseRef.current, elapsed))
     }, 1000)
     return () => clearInterval(interval)
   }, [overlayPhase])
@@ -161,6 +161,7 @@ export function IDEView({ vscodeUrl, containerStatus }: IDEViewProps) {
         className="w-full h-full border-0"
         title="VS Code"
         allow="clipboard-read; clipboard-write"
+        onLoad={handleIframeLoad}
       />
     </div>
   )
