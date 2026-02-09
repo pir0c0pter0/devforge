@@ -6,6 +6,7 @@ import { containerService } from '../../services/container.service'
 import { cleanupSocketRateLimit } from '../../middleware/websocket-rate-limit'
 import { validateAndSanitize } from '../../validators/instruction.validator'
 import { validateContainerId } from '../../utils/validation'
+import { createChildLogger } from '../../utils/logger'
 import type {
   ServerToClientEvents,
   ClientToServerEvents,
@@ -13,6 +14,8 @@ import type {
   ClaudeEvent,
   ClaudeLogEntry,
 } from '@devforge/shared'
+
+const logger = createChildLogger({ namespace: 'claude-daemon' })
 
 /**
  * Subscription manager for claude daemon namespace
@@ -81,11 +84,11 @@ export function setupClaudeDaemonNamespace(io: Server<ClientToServerEvents, Serv
   })
 
   claudeDaemonNamespace.on('connection', (socket: Socket) => {
-    console.info(`[WebSocket] Client connected to /claude-daemon: ${socket.id}`)
+    logger.info({ socketId: socket.id }, 'Client connected to /claude-daemon')
 
     // Require authentication for daemon operations
     if (!socket.data.user) {
-      console.warn(`[WebSocket] Unauthenticated access attempt to /claude-daemon: ${socket.id}`)
+      logger.warn({ socketId: socket.id }, 'Unauthenticated access attempt to /claude-daemon')
       socket.emit('error', { message: 'Authentication required' })
       socket.disconnect(true)
       return
@@ -104,7 +107,7 @@ export function setupClaudeDaemonNamespace(io: Server<ClientToServerEvents, Serv
       currentContainerId = containerId
       socket.join(`claude:${containerId}`)
       subscriptions.add(containerId, socket.id)
-      console.info(`[WebSocket] Client ${socket.id} subscribed to claude daemon ${containerId}`)
+      logger.info({ socketId: socket.id, containerId }, 'Client subscribed to claude daemon')
 
       // Send current status
       const status = claudeDaemonService.getStatus(containerId)
@@ -124,7 +127,7 @@ export function setupClaudeDaemonNamespace(io: Server<ClientToServerEvents, Serv
       if (currentContainerId === containerId) {
         currentContainerId = null
       }
-      console.info(`[WebSocket] Client ${socket.id} unsubscribed from claude daemon ${containerId}`)
+      logger.info({ socketId: socket.id, containerId }, 'Client unsubscribed from claude daemon')
     })
 
     // Send instruction to daemon
@@ -250,7 +253,7 @@ export function setupClaudeDaemonNamespace(io: Server<ClientToServerEvents, Serv
     socket.on('disconnect', () => {
       subscriptions.cleanupSocket(socket.id)
       cleanupSocketRateLimit(socket.id)
-      console.info(`[WebSocket] Client disconnected from /claude-daemon: ${socket.id}`)
+      logger.info({ socketId: socket.id }, 'Client disconnected from /claude-daemon')
     })
   })
 }

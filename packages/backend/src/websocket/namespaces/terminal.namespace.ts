@@ -1,10 +1,14 @@
 import { Server, Socket } from 'socket.io'
 import { terminalService } from '../../services/terminal.service'
 import { cleanupSocketRateLimit } from '../../middleware/websocket-rate-limit'
+import { validateContainerId } from '../../utils/validation'
+import { createChildLogger } from '../../utils/logger'
 import type {
   ServerToClientEvents,
   ClientToServerEvents,
 } from '@devforge/shared'
+
+const logger = createChildLogger({ namespace: 'terminal' })
 
 /**
  * Map of terminal subscriptions (sessionId -> socket ID)
@@ -23,11 +27,11 @@ export function setupTerminalNamespace(io: Server<ClientToServerEvents, ServerTo
   terminalNamespace = io.of('/terminal')
 
   terminalNamespace.on('connection', (socket: Socket) => {
-    console.info(`[WebSocket] Client connected to /terminal: ${socket.id}`)
+    logger.info({ socketId: socket.id }, 'Client connected to /terminal')
 
     // Require authentication for terminal operations
     if (!socket.data.user) {
-      console.warn(`[WebSocket] Unauthenticated access attempt to /terminal: ${socket.id}`)
+      logger.warn({ socketId: socket.id }, 'Unauthenticated access attempt to /terminal')
       socket.emit('error', { message: 'Authentication required' })
       socket.disconnect(true)
       return
@@ -40,8 +44,14 @@ export function setupTerminalNamespace(io: Server<ClientToServerEvents, ServerTo
       callback: (response: { sessionId?: string; error?: string }) => void
     ) => {
       try {
+        // QA-H4: Validate containerId
+        const validatedContainerId = validateContainerId(data.containerId)
+        if (!validatedContainerId) {
+          callback({ error: 'Invalid container ID format' })
+          return
+        }
         const session = await terminalService.createSession(
-          data.containerId,
+          validatedContainerId,
           data.cols || 80,
           data.rows || 24,
           (output) => {
@@ -59,20 +69,20 @@ export function setupTerminalNamespace(io: Server<ClientToServerEvents, ServerTo
         terminalSubscriptions.set(session.sessionId, socket.id)
         socket.join(`terminal:${session.sessionId}`)
 
-        console.info(`[WebSocket] Terminal session ${session.sessionId} created for container ${data.containerId}`)
+        logger.info({ sessionId: session.sessionId, containerId: data.containerId }, 'Terminal session created')
 
         callback({ sessionId: session.sessionId })
         socket.emit('terminal:ready', session)
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-        console.error(`[WebSocket] Failed to create terminal session:`, error)
+        logger.error({ err: error }, 'Failed to create terminal session')
         callback({ error: errorMessage })
       }
     })
 
     socket.on('terminal:input', (data: { sessionId: string; data: string }) => {
       if (data.sessionId !== currentSessionId) {
-        console.warn(`[WebSocket] Invalid session ID for input: ${data.sessionId}`)
+        logger.warn({ sessionId: data.sessionId }, 'Invalid session ID for input')
         return
       }
       terminalService.write(data.sessionId, data.data)
@@ -90,7 +100,7 @@ export function setupTerminalNamespace(io: Server<ClientToServerEvents, ServerTo
         callback?.({ success: true })
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-        console.error(`[WebSocket] Failed to resize terminal:`, error)
+        logger.error({ err: error }, 'Failed to resize terminal')
         callback?.({ success: false, error: errorMessage })
       }
     })
@@ -101,7 +111,7 @@ export function setupTerminalNamespace(io: Server<ClientToServerEvents, ServerTo
         socket.leave(`terminal:${sessionId}`)
         terminalSubscriptions.delete(sessionId)
         currentSessionId = null
-        console.info(`[WebSocket] Terminal session ${sessionId} closed by client`)
+        logger.info({ sessionId }, 'Terminal session closed by client')
       }
     })
 
@@ -109,10 +119,10 @@ export function setupTerminalNamespace(io: Server<ClientToServerEvents, ServerTo
       if (currentSessionId) {
         terminalService.closeSession(currentSessionId, 143)
         terminalSubscriptions.delete(currentSessionId)
-        console.info(`[WebSocket] Client disconnected, closed terminal session ${currentSessionId}`)
+        logger.info({ sessionId: currentSessionId }, 'Client disconnected, closed terminal session')
       }
       cleanupSocketRateLimit(socket.id)
-      console.info(`[WebSocket] Client disconnected from /terminal: ${socket.id}`)
+      logger.info({ socketId: socket.id }, 'Client disconnected from /terminal')
     })
   })
 }
