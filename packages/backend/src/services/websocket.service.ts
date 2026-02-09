@@ -50,7 +50,8 @@ const createWebSocketAuthMiddleware = () => {
         logger.warn(`[WebSocket] Connection rejected: no token provided (socket: ${socket.id})`)
         return next(new Error('Authentication required'))
       }
-      // Auth disabled - allow anonymous connections
+      // Auth disabled - allow anonymous connections with anonymous user marker
+      socket.data.user = { id: 'anonymous', role: 'admin' }
       logger.debug(`[WebSocket] Anonymous connection allowed (JWT_SECRET not configured)`)
       return next()
     }
@@ -63,8 +64,8 @@ const createWebSocketAuthMiddleware = () => {
       return next(new Error('Invalid or expired token'))
     }
 
-    // Attach user data to socket
-    (socket as AuthenticatedSocket).user = user
+    // Attach user data to socket.data (used by namespace handlers)
+    socket.data.user = user
     logger.debug({ userId: user.id }, `[WebSocket] Authenticated connection: ${socket.id}`)
 
     next()

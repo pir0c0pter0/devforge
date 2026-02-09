@@ -122,6 +122,10 @@ app.use(helmet({
       fontSrc: ["'self'", 'data:'],
     },
   },
+  // Backend is API-only; disable X-Frame-Options to avoid interfering with frontend iframes
+  frameguard: false,
+  // Disable COEP to allow cross-origin resources (VS Code iframe, etc.)
+  crossOriginEmbedderPolicy: false,
 }));
 
 // Security headers: deny dangerous browser APIs
