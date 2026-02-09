@@ -727,9 +727,27 @@ class ClaudeSessionsService {
 }
 
 /**
- * Singleton instance do ClaudeSessionsService
+ * Lazy singleton instance do ClaudeSessionsService
+ * Initialized on first access to avoid calling getDatabase() before initializeDatabase()
  */
-export const claudeSessionsService = new ClaudeSessionsService()
+let _instance: ClaudeSessionsService | null = null
+
+export function getClaudeSessionsService(): ClaudeSessionsService {
+  if (!_instance) {
+    _instance = new ClaudeSessionsService()
+  }
+  return _instance
+}
+
+/**
+ * Backward-compatible named export (lazy proxy)
+ * @deprecated Use getClaudeSessionsService() instead
+ */
+export const claudeSessionsService = new Proxy({} as ClaudeSessionsService, {
+  get(_target, prop) {
+    return (getClaudeSessionsService() as any)[prop]
+  },
+})
 
 /**
  * Export da classe para testes
