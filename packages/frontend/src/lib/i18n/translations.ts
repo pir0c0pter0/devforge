@@ -299,6 +299,13 @@ export const translations = {
         waitingAgents: 'Aguardando agentes finalizarem...',
         finalizing: 'Finalizando...',
       },
+      busyDialog: {
+        title: 'Claude está processando...',
+        cancelAndSend: 'Cancelar e enviar',
+        addToQueue: 'Colocar na fila',
+        queued: 'Na fila',
+        removeFromQueue: 'Remover da fila',
+      },
     },
 
     // Templates Page
@@ -981,6 +988,13 @@ export const translations = {
         processing: 'Claude is thinking...',
         waitingAgents: 'Waiting for agents to finish...',
         finalizing: 'Finalizing...',
+      },
+      busyDialog: {
+        title: 'Claude is processing...',
+        cancelAndSend: 'Cancel and send',
+        addToQueue: 'Add to queue',
+        queued: 'Queued',
+        removeFromQueue: 'Remove from queue',
       },
     },
 

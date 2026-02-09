@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, KeyboardEvent } from 'react'
 import clsx from 'clsx'
-import { Bot, Play, Square, Send, Loader2, Trash2, MessageSquareText, X } from 'lucide-react'
+import { Bot, Play, Square, Send, Loader2, Trash2, MessageSquareText, X, ListPlus, XCircle } from 'lucide-react'
 import { useClaudeDaemon, ClaudeMessage } from '@/hooks/use-claude-daemon'
 import { useClaudeChatStore } from '@/stores/claude-chat.store'
 import { apiClient } from '@/lib/api-client'
@@ -42,6 +42,8 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
   const [currentSessionId, setCurrentSessionId] = useState<string | undefined>(undefined)
   const [pendingContext, setPendingContext] = useState<string | null>(null)
   const [ralphLoop, setRalphLoop] = useState(false)
+  const [busyDialogMessage, setBusyDialogMessage] = useState<string | null>(null)
+  const [queuedInstruction, setQueuedInstruction] = useState<string | null>(null)
   const { setMessages } = useClaudeChatStore()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -95,21 +97,64 @@ export function ClaudeChat({ containerId }: ClaudeChatProps) {
     }
   }, [selectedSkillIndex, showSkillSuggestions])
 
+  // Auto-send queued instruction when processing finishes
+  useEffect(() => {
+    if (!isLoading && queuedInstruction) {
+      const instruction = queuedInstruction
+      setQueuedInstruction(null)
+      sendInstruction(instruction)
+    }
+  }, [isLoading, queuedInstruction, sendInstruction])
+
+  const buildInstruction = useCallback((trimmedInput: string): string => {
+    if (pendingContext) {
+      setPendingContext(null)
+      return pendingContext + trimmedInput
+    }
+    return trimmedInput
+  }, [pendingContext])
+
   const handleSend = useCallback(() => {
     const trimmedInput = inputValue.trim()
-    if (!trimmedInput || isLoading || daemonStatus?.status !== 'running') return
+    if (!trimmedInput || daemonStatus?.status !== 'running') return
 
-    // If there's pending context from a selected session, prepend it
-    let instruction = trimmedInput
-    if (pendingContext) {
-      instruction = pendingContext + trimmedInput
-      setPendingContext(null) // Clear context after sending
+    // If Claude is processing, show busy dialog instead of sending
+    if (isLoading) {
+      setBusyDialogMessage(trimmedInput)
+      return
     }
 
+    const instruction = buildInstruction(trimmedInput)
     sendInstruction(instruction)
     setInputValue('')
     setShowSkillSuggestions(false)
-  }, [inputValue, isLoading, daemonStatus, sendInstruction, pendingContext])
+  }, [inputValue, isLoading, daemonStatus, sendInstruction, buildInstruction])
+
+  const handleCancelAndSend = useCallback(() => {
+    if (!busyDialogMessage) return
+    const instruction = buildInstruction(busyDialogMessage)
+    cancelInstruction()
+    // Small delay to let cancel propagate before sending new instruction
+    setTimeout(() => {
+      sendInstruction(instruction)
+    }, 300)
+    setInputValue('')
+    setBusyDialogMessage(null)
+    setShowSkillSuggestions(false)
+  }, [busyDialogMessage, buildInstruction, cancelInstruction, sendInstruction])
+
+  const handleQueueMessage = useCallback(() => {
+    if (!busyDialogMessage) return
+    const instruction = buildInstruction(busyDialogMessage)
+    setQueuedInstruction(instruction)
+    setInputValue('')
+    setBusyDialogMessage(null)
+    setShowSkillSuggestions(false)
+  }, [busyDialogMessage, buildInstruction])
+
+  const handleDismissBusyDialog = useCallback(() => {
+    setBusyDialogMessage(null)
+  }, [])
 
   const handleSelectSkill = useCallback((skill: ClaudeSkill) => {
     setInputValue(skill.name + ' ')
@@ -252,7 +297,7 @@ ${contextParts.join('\n\n')}
 
   const isDaemonRunning = daemonStatus?.status === 'running'
   const isDaemonTransitioning = daemonStatus?.status === 'starting' || daemonStatus?.status === 'stopping'
-  const canSend = isDaemonRunning && !isLoading && inputValue.trim().length > 0
+  const canSend = isDaemonRunning && inputValue.trim().length > 0
 
   return (
     <div className="flex flex-col h-full bg-terminal-bg rounded-lg border border-terminal-border overflow-hidden">
@@ -357,6 +402,62 @@ ${contextParts.join('\n\n')}
 
       {/* Input area */}
       <div className="border-t border-terminal-border p-3 bg-terminal-bg">
+        {/* Busy dialog - when user sends while Claude is processing */}
+        {busyDialogMessage && (
+          <div className="mb-2 p-3 bg-terminal-bgLight border border-terminal-cyan/30 rounded-lg animate-fade-in">
+            <div className="flex items-start gap-2 mb-2">
+              <Bot className="w-4 h-4 text-terminal-cyan flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-terminal-text font-medium">
+                  {t.claudeChat.busyDialog.title}
+                </p>
+                <p className="text-xs text-terminal-textMuted mt-0.5 truncate">
+                  &ldquo;{busyDialogMessage}&rdquo;
+                </p>
+              </div>
+              <button
+                onClick={handleDismissBusyDialog}
+                className="text-terminal-textMuted hover:text-terminal-text p-0.5 rounded"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="flex gap-2 ml-6">
+              <button
+                onClick={handleCancelAndSend}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded bg-terminal-cyan/20 text-terminal-cyan hover:bg-terminal-cyan/30 transition-colors"
+              >
+                <XCircle className="w-3.5 h-3.5" />
+                {t.claudeChat.busyDialog.cancelAndSend}
+              </button>
+              <button
+                onClick={handleQueueMessage}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded bg-terminal-border text-terminal-text hover:bg-terminal-border/80 transition-colors"
+              >
+                <ListPlus className="w-3.5 h-3.5" />
+                {t.claudeChat.busyDialog.addToQueue}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Queued instruction indicator */}
+        {queuedInstruction && (
+          <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-terminal-purple/10 border border-terminal-purple/30 rounded-lg">
+            <ListPlus className="w-4 h-4 text-terminal-purple flex-shrink-0" />
+            <span className="text-xs text-terminal-purple flex-1 truncate">
+              {t.claudeChat.busyDialog.queued}: &ldquo;{queuedInstruction.length > 60 ? queuedInstruction.substring(0, 60) + '...' : queuedInstruction}&rdquo;
+            </span>
+            <button
+              onClick={() => setQueuedInstruction(null)}
+              className="text-terminal-purple/70 hover:text-terminal-purple p-1 rounded"
+              title={t.claudeChat.busyDialog.removeFromQueue}
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+
         {/* Skill suggestions - above input */}
         {showSkillSuggestions && filteredSkills.length > 0 && (
           <div
@@ -456,11 +557,7 @@ ${contextParts.join('\n\n')}
                 : 'bg-terminal-border text-terminal-textMuted cursor-not-allowed'
             )}
           >
-            {isLoading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Send className="w-5 h-5" />
-            )}
+            <Send className="w-5 h-5" />
           </button>
         </div>
 

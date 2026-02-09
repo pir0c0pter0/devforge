@@ -1,6 +1,6 @@
 # DevForge - Instruções Críticas
 
-## Versão Atual: 0.1.55-alpha
+## Versão Atual: 0.1.56-alpha
 
 ## Links
 
@@ -128,6 +128,13 @@ Arquivo: `packages/frontend/src/lib/version.ts`
 ---
 
 ## Histórico Recente
+
+### v0.1.56-alpha
+- Feat: Send button stays enabled while Claude is processing
+- Feat: Busy dialog asks user to cancel current processing or queue message
+- Feat: Queued messages auto-send when Claude finishes processing
+- Feat: Visual indicator for queued instruction with cancel option
+- UX: No more blocked input while Claude thinks
 
 ### v0.1.55-alpha
 - Fix: USB device passthrough now correctly detects host GIDs and grants access
