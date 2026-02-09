@@ -89,7 +89,7 @@ export const ContainerConfigSchema = z.object({
 
   usbDevices: z.object({
     devices: z.array(
-      z.string().regex(/^\/dev\/(ttyUSB\d+|ttyACM\d+|serial\/by-id\/[a-zA-Z0-9_\-.:]+)$/)
+      z.string().regex(/^\/dev\/(ttyUSB\d+|ttyACM\d+|serial\/by-id\/[a-zA-Z0-9_\-.:]+|bus\/usb\/\d{3}\/\d{3})$/)
     ).max(10).default([]),
   }).optional(),
 }).refine(
