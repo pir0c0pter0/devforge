@@ -366,7 +366,7 @@ ${contextParts.join('\n\n')}
       </div>
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 relative">
+      <div className="flex-1 overflow-y-auto p-4 space-y-1 relative">
         {messages.length === 0 && !isLoading ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <Bot className="w-12 h-12 text-terminal-textMuted mb-3" />

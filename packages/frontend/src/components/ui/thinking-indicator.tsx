@@ -98,38 +98,30 @@ export function ThinkingIndicator({
     )
   }
 
-  // Enhanced variant (fix #9) - shows stage, elapsed time, and cancel button
+  // Enhanced variant (fix #9) - terminal-style with stage, elapsed time, and cancel
   if (variant === 'enhanced') {
     const displayText = stage && stage !== 'idle' ? stageMessages[stage] : text
     const showCancel = elapsed > 30 && onCancel
 
     return (
-      <div className="flex items-center gap-3 p-3 bg-terminal-bg/50 border border-terminal-border rounded-lg">
-        <Bot className="h-5 w-5 animate-pulse text-terminal-cyan" />
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-medium text-terminal-text">
-              {displayText}
-            </p>
-            <div className="thinking-wave">
-              <span className="thinking-wave-dot" style={{ animationDelay: '0ms' }} />
-              <span className="thinking-wave-dot" style={{ animationDelay: '150ms' }} />
-              <span className="thinking-wave-dot" style={{ animationDelay: '300ms' }} />
-            </div>
-          </div>
-          {startedAt && (
-            <p className="text-xs text-terminal-textMuted">
-              ⏱️ {formatDuration(elapsed)}
-            </p>
-          )}
+      <div className="flex items-center gap-2 font-mono text-sm text-terminal-textMuted">
+        <span className="text-terminal-cyan select-none">⏳</span>
+        <span>{displayText}</span>
+        <div className="thinking-wave">
+          <span className="thinking-wave-dot" style={{ animationDelay: '0ms' }} />
+          <span className="thinking-wave-dot" style={{ animationDelay: '150ms' }} />
+          <span className="thinking-wave-dot" style={{ animationDelay: '300ms' }} />
         </div>
+        {startedAt && (
+          <span className="text-xs text-terminal-textMuted/60">({formatDuration(elapsed)})</span>
+        )}
         {showCancel && (
           <button
             onClick={onCancel}
-            className="p-1.5 rounded hover:bg-terminal-border transition-colors text-terminal-textMuted hover:text-terminal-text"
+            className="ml-1 p-1 rounded hover:bg-terminal-border transition-colors text-terminal-textMuted hover:text-terminal-text"
             title="Cancel"
           >
-            <X className="h-4 w-4" />
+            <X className="h-3.5 w-3.5" />
           </button>
         )}
       </div>
